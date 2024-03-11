@@ -1,14 +1,11 @@
-[tool.poetry]
-name = "topcat"
-version = "0.1.0"
-description = ""
-authors = ["Josha Inglis <joshainglis@gmail.com>"]
-readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.12"
+[tool.maturin]
+python-source = "python"
+module-name = "topcat"
+bindings = "bin"
+manifest-path = "Cargo.toml"
+strip = true
 
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
