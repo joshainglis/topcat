@@ -1,0 +1,40 @@
+[package]
+name = "topcat"
+version = "0.1.0"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+authors = ["josha@jci.dev", ]
+
+description = "A tool for concatenating files in topological order"
+documentation = "https://docs.rs/topcat/"
+repository = "https://github.com/joshainglis/topcat"
+
+keywords = ["topological", "concatenation", "file", "dependency", "graph"]
+categories = [
+    "command-line-utilities",
+    "development-tools",
+    "filesystem",
+    "template-engine",
+]
+
+rust-version = "1.71.0"
+edition = "2021"
+
+[package.metadata.release]
+no-dev-version = true
+
+[profile.release]
+
+[profile.bench]
+debug = true
+
+[dependencies]
+petgraph = "0.6.4"
+glob = "0.3.1"
+regex = "1.10.3"
+structopt = "0.3.26"
+log = "0.4.21"
+env_logger = "0.11.3"
+
+[dev-dependencies]
+tempfile = "3.10.1"
