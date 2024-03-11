@@ -9,3 +9,39 @@ strip = true
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
+
+[project]
+name = "topcat"
+version = "0.1.0"
+description = "A tool for concatenating files in topological order"
+authors = [{ name = "Josha Inglis", email = "joshainglis@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.7"
+license = "MIT"
+keywords = [
+    "file",
+    "dependency",
+    "topological",
+    "graph",
+    "concatenation",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Repository = "https://github.com/joshainglis/topcat"
