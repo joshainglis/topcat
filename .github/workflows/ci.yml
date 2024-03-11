@@ -2,9 +2,9 @@ name: Cargo Build & Test
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,16 +16,13 @@ jobs:
     strategy:
       matrix:
         include:
-        - rust: 1.64.0  # MSRV
-        - rust: stable
-          features: unstable quickcheck rayon
-          test_all: --all
-        - rust: beta
-          test_all: --all
-        - rust: nightly
-          features: unstable quickcheck rayon
-          test_all: --all
-          bench: true
+          - rust: 1.64.0  # MSRV
+          - rust: stable
+            test_all: --all
+          - rust: beta
+            test_all: --all
+          - rust: nightly
+            test_all: --all
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -35,17 +32,10 @@ jobs:
           override: true
       - name: Build
         run: |
-          cargo build --verbose --no-default-features
-          cargo build --verbose --features "${{ matrix.features }}"
+          cargo build --verbose
       - name: Tests
         run: |
-          cargo test --verbose --no-default-features
-          cargo test ${{ matrix.test_all }} --verbose --features "${{ matrix.features }}"
-      - name: Build benchmarks
-        if: ${{ matrix.bench }}
-        run: |
-          cargo bench --verbose --no-run
-          cargo bench --verbose --no-run --all-features
+          cargo test --verbose
 
   rustfmt:
     runs-on: ubuntu-latest

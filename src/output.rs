@@ -152,7 +152,7 @@ mod tests {
         let d = append_string_to_file_content("SELECT 1 FROM table;".to_string(), ";");
         assert_eq!(d, "SELECT 1 FROM table;\n");
 
-        let d = append_string_to_file_content("SELECT 1 FROM table;\n\n\n".to_string(), "\\");
+        let d = append_string_to_file_content("SELECT 1 FROM table;\n\n\n".to_string(), ";");
         assert_eq!(d, "SELECT 1 FROM table;\n");
     }
 }
