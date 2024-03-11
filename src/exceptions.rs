@@ -1,6 +1,6 @@
-use std::{fmt, io};
 use std::error::Error;
 use std::path::PathBuf;
+use std::{fmt, io};
 
 #[derive(Debug)]
 pub enum TopCatError {
