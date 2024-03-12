@@ -1,6 +1,6 @@
+use std::{fs, io};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::{fs, io};
 
 use glob::glob;
 use log::error;
@@ -83,15 +83,24 @@ mod tests {
     #[test]
     fn test_glob_files() {
         // Create a temporary directory for testing
-        let temp_dir = tempdir().unwrap();
+        let temp_dir = match tempdir() {
+            Ok(x) => x,
+            Err(_) => panic!("Failed to create temporary directory"),
+        };
         let temp_path = temp_dir.path();
 
         // Create files matching the glob pattern within the temporary directory
         let file1_path = temp_path.join("file1.txt");
-        fs::write(&file1_path, "Test file 1").unwrap();
+        match fs::write(&file1_path, "Test file 1") {
+            Ok(x) => x,
+            Err(_) => panic!("Failed to write file1.txt"),
+        };
 
         let file2_path = temp_path.join("file2.txt");
-        fs::write(&file2_path, "Test file 2").unwrap();
+        match fs::write(&file2_path, "Test file 2") {
+            Ok(x) => x,
+            Err(_) => panic!("Failed to write file2.txt"),
+        };
 
         // Create a glob pattern that matches the files
         let glob_pattern = format!("{}/*.txt", temp_path.display());

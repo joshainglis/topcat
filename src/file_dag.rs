@@ -7,7 +7,7 @@ use petgraph::dot::{Config, Dot};
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 
-use crate::exceptions::TopCatError;
+use crate::exceptions::{FileNodeError, TopCatError};
 use crate::file_node::FileNode;
 use crate::io_utils;
 use crate::stable_topo::StableTopo;
@@ -78,9 +78,10 @@ impl TCGraph {
             }
         }
 
+        debug!("include: {:?}", self.include);
+        debug!("exclude: {:?}", self.exclude);
         for file in files {
             let path = &file;
-            debug!("include: {:?}", self.include);
             if let Some(ref include) = self.include {
                 if !include.is_empty() && include.contains(path) {
                     debug!("Excluding file as it isn't in the include set: {:?}", path);
@@ -96,13 +97,33 @@ impl TCGraph {
             let file_node = match FileNode::from_file(&self.comment_str, &path) {
                 Ok(f) => f,
                 Err(e) => {
-                    error!("Error: {}", e);
+                    match e {
+                        FileNodeError::NoNameDefined(p) => {
+                            info!("Ignoring {:?}: No name defined in file header", p);
+                        }
+                        FileNodeError::InvalidPath(p) => {
+                            error!("Ignoring {:?}: Invalid path", p);
+                        }
+                        FileNodeError::TooManyNames(p, s) => {
+                            return Err(TopCatError::InvalidFileHeader(
+                                p,
+                                format!("Too many names declared: {}", s.join(", ")),
+                            ));
+                        }
+                    }
                     continue;
                 }
             };
-            // println!("Got a name: {:?}", file_node.name);
             if self.name_map.contains_key(&file_node.name) {
-                let other_path = self.name_map.get(&file_node.name).unwrap().path.clone();
+                let other_path = match self.name_map.get(&file_node.name) {
+                    Some(f) => f.path.clone(),
+                    None => {
+                        return Err(TopCatError::UnknownError(format!(
+                            "FileNode with name {} not found",
+                            file_node.name
+                        )))
+                    }
+                };
                 return Err(TopCatError::NameClash(
                     file_node.name,
                     file_node.path,
@@ -146,7 +167,15 @@ impl TCGraph {
                         dep.clone(),
                     ));
                 }
-                let dep_node = self.name_map.get(dep).unwrap();
+                let dep_node = match self.name_map.get(dep) {
+                    Some(x) => x,
+                    None => {
+                        return Err(TopCatError::UnknownError(format!(
+                            "FileNode with name {} not found",
+                            dep
+                        )))
+                    }
+                };
                 if file_node.prepend {
                     if !dep_node.prepend {
                         return Err(TopCatError::InvalidDependency(
@@ -155,15 +184,51 @@ impl TCGraph {
                         ));
                     }
                     self.prepend_graph.add_edge(
-                        self.prepend_index_map.get(dep).unwrap().clone(),
-                        self.prepend_index_map.get(&file_node.name).unwrap().clone(),
+                        match self.prepend_index_map.get(dep) {
+                            Some(x) => x,
+                            None => {
+                                return Err(TopCatError::UnknownError(format!(
+                                    "FileNode with name {} not found",
+                                    dep
+                                )))
+                            }
+                        }
+                        .clone(),
+                        match self.prepend_index_map.get(&file_node.name) {
+                            Some(x) => x,
+                            None => {
+                                return Err(TopCatError::UnknownError(format!(
+                                    "FileNode with name {} not found",
+                                    file_node.name
+                                )))
+                            }
+                        }
+                        .clone(),
                         (),
                     );
                 } else if file_node.append {
                     if dep_node.append {
                         self.append_graph.add_edge(
-                            self.append_index_map.get(dep).unwrap().clone(),
-                            self.append_index_map.get(&file_node.name).unwrap().clone(),
+                            match self.append_index_map.get(dep) {
+                                Some(x) => x,
+                                None => {
+                                    return Err(TopCatError::UnknownError(format!(
+                                        "FileNode with name {} not found",
+                                        dep
+                                    )))
+                                }
+                            }
+                            .clone(),
+                            match self.append_index_map.get(&file_node.name) {
+                                Some(x) => x,
+                                None => {
+                                    return Err(TopCatError::UnknownError(format!(
+                                        "FileNode with name {} not found",
+                                        file_node.name
+                                    )))
+                                }
+                            }
+                            .clone(),
                             (),
                         );
                     }
@@ -177,8 +242,26 @@ impl TCGraph {
                         continue;
                     }
                     self.normal_graph.add_edge(
-                        self.normal_index_map.get(dep).unwrap().clone(),
-                        self.normal_index_map.get(&file_node.name).unwrap().clone(),
+                        match self.normal_index_map.get(dep) {
+                            Some(x) => x,
+                            None => {
+                                return Err(TopCatError::UnknownError(format!(
+                                    "FileNode with name {} not found",
+                                    dep
+                                )))
+                            }
+                        }
+                        .clone(),
+                        match self.normal_index_map.get(&file_node.name) {
+                            Some(x) => x,
+                            None => {
+                                return Err(TopCatError::UnknownError(format!(
+                                    "FileNode with name {} not found",
+                                    file_node.name
+                                )))
+                            }
+                        }
+                        .clone(),
                         (),
                     );
                 }
@@ -247,17 +330,26 @@ impl TCGraph {
         let mut append_topo = StableTopo::new(&self.append_graph);
         let mut sorted_files = Vec::new();
         while let Some(node) = prepend_topo.next() {
-            let file_node = self.prepend_graph.node_weight(node).unwrap();
+            let file_node = match self.prepend_graph.node_weight(node) {
+                Some(x) => x,
+                None => return Err(TopCatError::UnknownError("Node not found".to_string())),
+            };
             debug!("Prepend node: {:?}", file_node.name);
             sorted_files.push(file_node.path.clone());
         }
         while let Some(node) = normal_topo.next() {
-            let file_node = self.normal_graph.node_weight(node).unwrap();
+            let file_node = match self.normal_graph.node_weight(node) {
+                Some(x) => x,
+                None => return Err(TopCatError::UnknownError("Node not found".to_string())),
+            };
             debug!("Normal node: {:?}", file_node.name);
             sorted_files.push(file_node.path.clone());
         }
         while let Some(node) = append_topo.next() {
-            let file_node = self.append_graph.node_weight(node).unwrap();
+            let file_node = match self.append_graph.node_weight(node) {
+                Some(x) => x,
+                None => return Err(TopCatError::UnknownError("Node not found".to_string())),
+            };
             debug!("Append node: {:?}", file_node.name);
             sorted_files.push(file_node.path.clone());
         }
