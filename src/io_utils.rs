@@ -1,6 +1,6 @@
-use std::{fs, io};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 use glob::glob;
 use log::error;
