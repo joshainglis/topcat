@@ -7,7 +7,7 @@ use std::io;
 use std::io::BufRead;
 use std::path::PathBuf;
 
-use crate::exceptions::TopCatError;
+use crate::exceptions::FileNodeError;
 
 fn get_file_headers(path: &PathBuf, comment_str: &str) -> Vec<String> {
     let file = match File::open(&path) {
@@ -20,11 +20,14 @@ fn get_file_headers(path: &PathBuf, comment_str: &str) -> Vec<String> {
     let file_data: Vec<_> = reader
         .lines()
         .take_while(|x| {
-            let x = x.as_ref().unwrap();
+            let x = match x.as_ref() {
+                Ok(x) => x,
+                Err(_) => return false,
+            };
             x.starts_with(comment_str) || x.is_empty()
         })
         .collect::<io::Result<_>>()
-        .unwrap();
+        .unwrap_or_else(|_| vec![]);
 
     // remove any empty lines from the vector and return
     file_data
@@ -108,7 +111,7 @@ impl FileNode {
             })
             .collect()
     }
-    pub fn from_file(comment_str: &str, path: &PathBuf) -> Result<FileNode, TopCatError> {
+    pub fn from_file(comment_str: &str, path: &PathBuf) -> Result<FileNode, FileNodeError> {
         let file_data = get_file_headers(&path, comment_str);
         let name_str = format!("{} name:", comment_str);
         let dep_str = format!("{} requires:", comment_str);
@@ -130,7 +133,7 @@ impl FileNode {
                     name = line[name_str.len()..].trim().to_string();
                 } else {
                     // raise an error that a file has more than one name declared
-                    return Err(TopCatError::TooManyNames(
+                    return Err(FileNodeError::TooManyNames(
                         path.clone(),
                         vec![name, line[name_str.len()..].trim().to_string()],
                     ));
@@ -160,7 +163,7 @@ impl FileNode {
             }
         }
         if name.is_empty() {
-            return Err(TopCatError::NoNameDefined(path.clone()));
+            return Err(FileNodeError::NoNameDefined(path.clone()));
         }
         Ok(FileNode::new(
             name,

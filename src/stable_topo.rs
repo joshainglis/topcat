@@ -94,10 +94,14 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         // Sort the `tovisit` vector based on the node weights
         self.tovisit.sort_unstable_by(|a, b| {
-            self.graph
-                .node_weight(*a)
-                .unwrap()
-                .cmp(self.graph.node_weight(*b).unwrap())
+            match self.graph.node_weight(*a) {
+                Some(x) => x,
+                None => panic!("Node not found in graph: {:?}", a),
+            }
+            .cmp(match self.graph.node_weight(*b) {
+                Some(x) => x,
+                None => panic!("Node not found in graph: {:?}", b),
+            })
         });
 
         // Take an unvisited element and find which of its neighbors are next
@@ -119,10 +123,14 @@ where
             }
             // Sort the neighbors based on the node index
             neighbors.sort_unstable_by(|a, b| {
-                self.graph
-                    .node_weight(*a)
-                    .unwrap()
-                    .cmp(self.graph.node_weight(*b).unwrap())
+                match self.graph.node_weight(*a) {
+                    Some(x) => x,
+                    None => panic!("Node not found in graph: {:?}", a),
+                }
+                .cmp(match self.graph.node_weight(*b) {
+                    Some(x) => x,
+                    None => panic!("Node not found in graph: {:?}", b),
+                })
             });
             self.tovisit.extend(neighbors);
             return Some(nix);
