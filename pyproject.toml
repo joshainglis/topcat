@@ -12,7 +12,7 @@ build-backend = "maturin"
 
 [project]
 name = "topcat"
-version = "0.1.1"
+version = "0.1.2"
 description = "A tool for concatenating files in topological order"
 authors = [{ name = "Josha Inglis", email = "joshainglis@gmail.com" }]
 readme = "README.md"

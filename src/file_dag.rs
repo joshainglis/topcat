@@ -1,16 +1,19 @@
+use graph_cycles::Cycles;
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::path::PathBuf;
 
-use log::{debug, error, info};
+use log::{debug, info, trace};
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
+use petgraph::{Directed, Graph};
 
 use crate::exceptions::{FileNodeError, TopCatError};
 use crate::file_node::FileNode;
-use crate::io_utils;
 use crate::stable_topo::StableTopo;
+use crate::{config, io_utils};
 
 /// The `TCGraphType` enum represents the different types of graph modifications.
 ///
@@ -27,12 +30,253 @@ pub enum TCGraphType {
     Append,
 }
 
+impl TCGraphType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            TCGraphType::Normal => "normal",
+            TCGraphType::Prepend => "prepend",
+            TCGraphType::Append => "append",
+        }
+    }
+}
+
+fn string_slice_to_array<T: Hash + Eq + Clone>(option: Option<&[T]>) -> Option<HashSet<T>> {
+    match option {
+        Some(arr) => Some(arr.iter().cloned().collect()),
+        None => None,
+    }
+}
+
+fn collect_files(
+    file_dirs: &[PathBuf],
+    include_hidden: bool,
+) -> Result<HashSet<PathBuf>, TopCatError> {
+    let mut files = HashSet::new();
+    for dir in file_dirs {
+        for f in io_utils::walk_dir(dir, include_hidden)? {
+            files.insert(f);
+        }
+    }
+    Ok(files)
+}
+
+fn filter_files<'a>(
+    files: &'a HashSet<PathBuf>,
+    include_file_set: &'a Option<HashSet<PathBuf>>,
+    exclude_file_set: &'a Option<HashSet<PathBuf>>,
+    include_extensions: &'a Option<HashSet<String>>,
+    exclude_extensions: &'a Option<HashSet<String>>,
+) -> impl Iterator<Item = &'a PathBuf> + 'a {
+    debug!("files: {:?}", files);
+    debug!("include files: {:?}", include_file_set);
+    debug!("exclude files: {:?}", exclude_file_set);
+    debug!("include extensions: {:?}", include_extensions);
+    debug!("exclude extensions: {:?}", exclude_extensions);
+    files.iter().filter(move |path| {
+        trace!("checking filters for path: {:?}", path);
+        if let Some(ref include) = include_extensions {
+            if !include.is_empty() {
+                let ext = match path.extension() {
+                    Some(e) => e.to_string_lossy().to_lowercase(),
+                    None => return false,
+                };
+                if !include.contains(&ext) {
+                    debug!(
+                        "Excluding file {:?} as its extension {:?} isn't in the include set: {:?}",
+                        path, ext, include
+                    );
+                    return false;
+                }
+            }
+        }
+        if let Some(ref exclude) = exclude_extensions {
+            if !exclude.is_empty() {
+                let ext = match path.extension() {
+                    Some(e) => e.to_string_lossy().to_lowercase(),
+                    None => return false,
+                };
+                if exclude.contains(&ext) {
+                    debug!(
+                        "Excluding file {:?} as its extension '{:?}' is in the exclude set: {:?}",
+                        path, ext, exclude
+                    );
+                    return false;
+                }
+            }
+        }
+        if let Some(ref include) = include_file_set {
+            if !include.is_empty() && !include.contains::<PathBuf>(&*path) {
+                debug!("Excluding file as it isn't in the include set: {:?}", path);
+                return false;
+            }
+        }
+        if let Some(ref exclude) = exclude_file_set {
+            if !exclude.is_empty() && exclude.contains::<PathBuf>(&*path) {
+                debug!("Excluding file as it is in the exclude set: {:?}", path);
+                return false;
+            }
+        }
+        true
+    })
+}
+
+fn handle_file_node_error(e: FileNodeError) -> Result<(), TopCatError> {
+    return match e {
+        FileNodeError::NoNameDefined(p) => {
+            info!("Ignoring {:?}: No name defined in file header", p);
+            Ok(())
+        }
+        FileNodeError::TooManyNames(p, s) => Err(TopCatError::InvalidFileHeader(
+            p,
+            format!("Too many names declared: {}", s.join(", ")),
+        )),
+    };
+}
+
+fn add_nodes_to_graphs(
+    prepend_graph: &mut Graph<FileNode, (), Directed>,
+    append_graph: &mut Graph<FileNode, (), Directed>,
+    normal_graph: &mut Graph<FileNode, (), Directed>,
+    prepend_index_map: &mut HashMap<String, NodeIndex>,
+    append_index_map: &mut HashMap<String, NodeIndex>,
+    normal_index_map: &mut HashMap<String, NodeIndex>,
+    name_map: &HashMap<String, FileNode>,
+) {
+    for file_node in name_map.values() {
+        let idx: NodeIndex;
+        if file_node.prepend {
+            idx = prepend_graph.add_node(file_node.clone());
+            prepend_index_map.insert(file_node.name.clone(), idx);
+        } else if file_node.append {
+            idx = append_graph.add_node(file_node.clone());
+            append_index_map.insert(file_node.name.clone(), idx);
+        } else {
+            idx = normal_graph.add_node(file_node.clone());
+            normal_index_map.insert(file_node.name.clone(), idx);
+        }
+    }
+}
+
+fn validate_dependencies(
+    name_map: &HashMap<String, FileNode>,
+    prepend_graph: &mut Graph<FileNode, (), Directed>,
+    append_graph: &mut Graph<FileNode, (), Directed>,
+    normal_graph: &mut Graph<FileNode, (), Directed>,
+    prepend_index_map: &HashMap<String, NodeIndex>,
+    append_index_map: &HashMap<String, NodeIndex>,
+    normal_index_map: &HashMap<String, NodeIndex>,
+) -> Result<(), TopCatError> {
+    for file_node in name_map.values() {
+        for ensure in &file_node.ensure_exists {
+            if !name_map.contains_key(ensure) {
+                return Err(TopCatError::MissingExist(
+                    file_node.name.clone(),
+                    ensure.clone(),
+                ));
+            }
+        }
+
+        for dep in &file_node.deps {
+            let dep_node = name_map.get(dep).ok_or_else(|| {
+                TopCatError::MissingDependency(file_node.name.clone(), dep.clone())
+            })?;
+
+            if file_node.prepend {
+                if !dep_node.prepend {
+                    return Err(TopCatError::InvalidDependency(
+                        file_node.name.clone(),
+                        dep.clone(),
+                    ));
+                }
+                prepend_graph.add_edge(
+                    *prepend_index_map.get(dep).unwrap(),
+                    *prepend_index_map.get(&file_node.name).unwrap(),
+                    (),
+                );
+            } else if file_node.append {
+                if dep_node.append {
+                    append_graph.add_edge(
+                        *append_index_map.get(dep).unwrap(),
+                        *append_index_map.get(&file_node.name).unwrap(),
+                        (),
+                    );
+                }
+            } else {
+                if dep_node.append {
+                    return Err(TopCatError::InvalidDependency(
+                        file_node.name.clone(),
+                        dep.clone(),
+                    ));
+                } else if !dep_node.prepend {
+                    normal_graph.add_edge(
+                        *normal_index_map.get(dep).unwrap(),
+                        *normal_index_map.get(&file_node.name).unwrap(),
+                        (),
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn extract_cycle_nodes(
+    cycle: Vec<NodeIndex>,
+    graph: &Graph<FileNode, (), Directed>,
+) -> Vec<FileNode> {
+    cycle
+        .iter()
+        .map(|n| graph.node_weight(*n).unwrap().clone())
+        .collect()
+}
+
+fn convert_cycle_indexes_to_cycle_nodes(
+    cycles: Vec<Vec<NodeIndex>>,
+    graph: &Graph<FileNode, (), Directed>,
+) -> Vec<Vec<FileNode>> {
+    cycles
+        .iter()
+        .map(|c| extract_cycle_nodes(c.clone(), graph))
+        .collect()
+}
+fn check_cyclic_dependencies(
+    normal_graph: &Graph<FileNode, (), Directed>,
+    prepend_graph: &Graph<FileNode, (), Directed>,
+    append_graph: &Graph<FileNode, (), Directed>,
+) -> Result<(), TopCatError> {
+    let mut cycles: Vec<Vec<FileNode>> = Vec::new();
+    if is_cyclic_directed(prepend_graph) {
+        cycles.extend(convert_cycle_indexes_to_cycle_nodes(
+            prepend_graph.cycles(),
+            prepend_graph,
+        ));
+    }
+    if is_cyclic_directed(normal_graph) {
+        cycles.extend(convert_cycle_indexes_to_cycle_nodes(
+            normal_graph.cycles(),
+            normal_graph,
+        ));
+    }
+    if is_cyclic_directed(append_graph) {
+        cycles.extend(convert_cycle_indexes_to_cycle_nodes(
+            append_graph.cycles(),
+            append_graph,
+        ));
+    }
+    if !cycles.is_empty() {
+        return Err(TopCatError::CyclicDependency(cycles));
+    }
+    Ok(())
+}
+
 /// Represents a graph structure for a set of files and their dependencies.
 pub struct TCGraph {
     pub comment_str: String,
     pub file_dirs: Vec<PathBuf>,
-    pub exclude: Option<HashSet<PathBuf>>,
-    pub include: Option<HashSet<PathBuf>>,
+    pub exclude_globs: Option<HashSet<PathBuf>>,
+    pub include_globs: Option<HashSet<PathBuf>>,
+    pub include_extensions: Option<HashSet<String>>,
+    pub exclude_extensions: Option<HashSet<String>>,
     normal_graph: DiGraph<FileNode, ()>,
     prepend_graph: DiGraph<FileNode, ()>,
     append_graph: DiGraph<FileNode, ()>,
@@ -41,23 +285,29 @@ pub struct TCGraph {
     normal_index_map: HashMap<String, NodeIndex>,
     prepend_index_map: HashMap<String, NodeIndex>,
     append_index_map: HashMap<String, NodeIndex>,
+    include_hidden: bool,
     graph_is_built: bool,
 }
 
 impl TCGraph {
-    pub fn new(
-        comment_str: String,
-        file_dirs: Vec<PathBuf>,
-        exclude: Option<&[String]>,
-        include: Option<&[String]>,
-    ) -> TCGraph {
-        let exclude = exclude.map(|patterns| io_utils::glob_files(patterns).unwrap_or_default());
-        let include = include.map(|patterns| io_utils::glob_files(patterns).unwrap_or_default());
+    pub fn new(config: &config::Config) -> TCGraph {
+        let include_globs = config
+            .include_globs
+            .map(|patterns| io_utils::glob_files(patterns).unwrap_or_default());
+        let exclude_globs = config
+            .exclude_globs
+            .map(|patterns| io_utils::glob_files(patterns).unwrap_or_default());
+        let include_extensions: Option<HashSet<String>> =
+            string_slice_to_array(config.include_extensions);
+        let exclude_extensions: Option<HashSet<String>> =
+            string_slice_to_array(config.exclude_extensions);
         TCGraph {
-            comment_str,
-            file_dirs,
-            exclude,
-            include,
+            comment_str: config.comment_str.clone(),
+            file_dirs: config.input_dirs.clone(),
+            exclude_globs,
+            include_globs,
+            include_extensions,
+            exclude_extensions,
             normal_graph: DiGraph::new(),
             prepend_graph: DiGraph::new(),
             append_graph: DiGraph::new(),
@@ -66,219 +316,69 @@ impl TCGraph {
             normal_index_map: HashMap::new(),
             prepend_index_map: HashMap::new(),
             append_index_map: HashMap::new(),
+            include_hidden: config.include_hidden,
             graph_is_built: false,
         }
     }
+
     pub fn build_graph(&mut self) -> Result<(), TopCatError> {
-        let mut files: HashSet<PathBuf> = HashSet::new();
+        debug!("include globs: {:?}", self.include_globs);
+        debug!("exclude globs: {:?}", self.exclude_globs);
+        debug!("include extensions: {:?}", self.include_extensions);
+        debug!("exclude extensions: {:?}", self.exclude_extensions);
 
-        for dir in self.file_dirs.iter() {
-            for f in io_utils::walk_dir(&dir)? {
-                files.insert(f);
-            }
-        }
+        let files = collect_files(&self.file_dirs, self.include_hidden)?;
+        let filtered_files = filter_files(
+            &files,
+            &self.include_globs,
+            &self.exclude_globs,
+            &self.include_extensions,
+            &self.exclude_extensions,
+        );
 
-        debug!("include: {:?}", self.include);
-        debug!("exclude: {:?}", self.exclude);
-        for file in files {
-            let path = &file;
-            if let Some(ref include) = self.include {
-                if !include.is_empty() && include.contains(path) {
-                    debug!("Excluding file as it isn't in the include set: {:?}", path);
-                    continue;
-                }
-            }
-            if let Some(ref exclude) = self.exclude {
-                if !exclude.is_empty() && exclude.contains(path) {
-                    debug!("Excluding file as it is in the exclude set: {:?}", path);
-                    continue;
-                }
-            }
-            let file_node = match FileNode::from_file(&self.comment_str, &path) {
+        for file in filtered_files {
+            let file_node = match FileNode::from_file(&self.comment_str, &file) {
                 Ok(f) => f,
                 Err(e) => {
-                    match e {
-                        FileNodeError::NoNameDefined(p) => {
-                            info!("Ignoring {:?}: No name defined in file header", p);
-                        }
-                        FileNodeError::InvalidPath(p) => {
-                            error!("Ignoring {:?}: Invalid path", p);
-                        }
-                        FileNodeError::TooManyNames(p, s) => {
-                            return Err(TopCatError::InvalidFileHeader(
-                                p,
-                                format!("Too many names declared: {}", s.join(", ")),
-                            ));
-                        }
-                    }
+                    handle_file_node_error(e)?;
                     continue;
                 }
             };
-            if self.name_map.contains_key(&file_node.name) {
-                let other_path = match self.name_map.get(&file_node.name) {
-                    Some(f) => f.path.clone(),
-                    None => {
-                        return Err(TopCatError::UnknownError(format!(
-                            "FileNode with name {} not found",
-                            file_node.name
-                        )))
-                    }
-                };
+
+            if let Some(other_path) = self.name_map.get(&file_node.name) {
                 return Err(TopCatError::NameClash(
                     file_node.name,
                     file_node.path,
-                    other_path,
+                    other_path.path.clone(),
                 ));
             }
+
             self.name_map
                 .insert(file_node.name.clone(), file_node.clone());
-            self.path_map
-                .insert(file_node.path.clone(), file_node.clone());
+            self.path_map.insert(file_node.path.clone(), file_node);
         }
 
-        for file_node in self.name_map.values() {
-            let idx: NodeIndex;
-            if file_node.prepend {
-                idx = self.prepend_graph.add_node((file_node).clone());
-                self.prepend_index_map.insert(file_node.name.clone(), idx);
-            } else if file_node.append {
-                idx = self.append_graph.add_node((file_node).clone());
-                self.append_index_map.insert(file_node.name.clone(), idx);
-            } else {
-                idx = self.normal_graph.add_node((file_node).clone());
-                self.normal_index_map.insert(file_node.name.clone(), idx);
-            }
-        }
+        add_nodes_to_graphs(
+            &mut self.prepend_graph,
+            &mut self.append_graph,
+            &mut self.normal_graph,
+            &mut self.prepend_index_map,
+            &mut self.append_index_map,
+            &mut self.normal_index_map,
+            &self.name_map,
+        );
 
-        for file_node in self.name_map.values() {
-            for ensure in &file_node.ensure_exists {
-                if !self.name_map.contains_key(ensure) {
-                    return Err(TopCatError::MissingExist(
-                        file_node.name.clone(),
-                        ensure.clone(),
-                    ));
-                }
-            }
+        validate_dependencies(
+            &self.name_map,
+            &mut self.prepend_graph,
+            &mut self.append_graph,
+            &mut self.normal_graph,
+            &self.prepend_index_map,
+            &self.append_index_map,
+            &self.normal_index_map,
+        )?;
 
-            for dep in &file_node.deps {
-                if !self.name_map.contains_key(dep) {
-                    return Err(TopCatError::MissingDependency(
-                        file_node.name.clone(),
-                        dep.clone(),
-                    ));
-                }
-                let dep_node = match self.name_map.get(dep) {
-                    Some(x) => x,
-                    None => {
-                        return Err(TopCatError::UnknownError(format!(
-                            "FileNode with name {} not found",
-                            dep
-                        )))
-                    }
-                };
-                if file_node.prepend {
-                    if !dep_node.prepend {
-                        return Err(TopCatError::InvalidDependency(
-                            file_node.name.clone(),
-                            dep.clone(),
-                        ));
-                    }
-                    self.prepend_graph.add_edge(
-                        match self.prepend_index_map.get(dep) {
-                            Some(x) => x,
-                            None => {
-                                return Err(TopCatError::UnknownError(format!(
-                                    "FileNode with name {} not found",
-                                    dep
-                                )))
-                            }
-                        }
-                        .clone(),
-                        match self.prepend_index_map.get(&file_node.name) {
-                            Some(x) => x,
-                            None => {
-                                return Err(TopCatError::UnknownError(format!(
-                                    "FileNode with name {} not found",
-                                    file_node.name
-                                )))
-                            }
-                        }
-                        .clone(),
-                        (),
-                    );
-                } else if file_node.append {
-                    if dep_node.append {
-                        self.append_graph.add_edge(
-                            match self.append_index_map.get(dep) {
-                                Some(x) => x,
-                                None => {
-                                    return Err(TopCatError::UnknownError(format!(
-                                        "FileNode with name {} not found",
-                                        dep
-                                    )))
-                                }
-                            }
-                            .clone(),
-                            match self.append_index_map.get(&file_node.name) {
-                                Some(x) => x,
-                                None => {
-                                    return Err(TopCatError::UnknownError(format!(
-                                        "FileNode with name {} not found",
-                                        file_node.name
-                                    )))
-                                }
-                            }
-                            .clone(),
-                            (),
-                        );
-                    }
-                } else {
-                    if dep_node.append {
-                        return Err(TopCatError::InvalidDependency(
-                            file_node.name.clone(),
-                            dep.clone(),
-                        ));
-                    } else if dep_node.prepend {
-                        continue;
-                    }
-                    self.normal_graph.add_edge(
-                        match self.normal_index_map.get(dep) {
-                            Some(x) => x,
-                            None => {
-                                return Err(TopCatError::UnknownError(format!(
-                                    "FileNode with name {} not found",
-                                    dep
-                                )))
-                            }
-                        }
-                        .clone(),
-                        match self.normal_index_map.get(&file_node.name) {
-                            Some(x) => x,
-                            None => {
-                                return Err(TopCatError::UnknownError(format!(
-                                    "FileNode with name {} not found",
-                                    file_node.name
-                                )))
-                            }
-                        }
-                        .clone(),
-                        (),
-                    );
-                }
-            }
-        }
-
-        if is_cyclic_directed(&self.normal_graph) {
-            return Err(TopCatError::CyclicDependency(
-                "dependency graph".to_string(),
-            ));
-        }
-        if is_cyclic_directed(&self.prepend_graph) {
-            return Err(TopCatError::CyclicDependency("prepend graph".to_string()));
-        }
-        if is_cyclic_directed(&self.append_graph) {
-            return Err(TopCatError::CyclicDependency("append graph".to_string()));
-        }
+        check_cyclic_dependencies(&self.normal_graph, &self.prepend_graph, &self.append_graph)?;
 
         self.graph_is_built = true;
         Ok(())
@@ -310,48 +410,37 @@ impl TCGraph {
             return Err(TopCatError::GraphMissing);
         }
         info!("Getting sorted files");
-        debug!(
-            "Prepend graph: {:?} nodes and {:?} edges",
-            self.prepend_graph.node_count(),
-            self.prepend_graph.edge_count()
-        );
-        debug!(
-            "Normal graph: {:?} nodes and {:?} edges",
-            self.normal_graph.node_count(),
-            self.normal_graph.edge_count()
-        );
-        debug!(
-            "Append graph: {:?} nodes and {:?} edges",
-            self.append_graph.node_count(),
-            self.append_graph.edge_count()
-        );
-        let mut normal_topo = StableTopo::new(&self.normal_graph);
-        let mut prepend_topo = StableTopo::new(&self.prepend_graph);
-        let mut append_topo = StableTopo::new(&self.append_graph);
         let mut sorted_files = Vec::new();
-        while let Some(node) = prepend_topo.next() {
-            let file_node = match self.prepend_graph.node_weight(node) {
-                Some(x) => x,
-                None => return Err(TopCatError::UnknownError("Node not found".to_string())),
+
+        for graph_type in [
+            TCGraphType::Prepend,
+            TCGraphType::Normal,
+            TCGraphType::Append,
+        ]
+        .iter()
+        {
+            let graph = match graph_type {
+                TCGraphType::Prepend => &self.prepend_graph,
+                TCGraphType::Normal => &self.normal_graph,
+                TCGraphType::Append => &self.append_graph,
             };
-            debug!("Prepend node: {:?}", file_node.name);
-            sorted_files.push(file_node.path.clone());
-        }
-        while let Some(node) = normal_topo.next() {
-            let file_node = match self.normal_graph.node_weight(node) {
-                Some(x) => x,
-                None => return Err(TopCatError::UnknownError("Node not found".to_string())),
-            };
-            debug!("Normal node: {:?}", file_node.name);
-            sorted_files.push(file_node.path.clone());
-        }
-        while let Some(node) = append_topo.next() {
-            let file_node = match self.append_graph.node_weight(node) {
-                Some(x) => x,
-                None => return Err(TopCatError::UnknownError("Node not found".to_string())),
-            };
-            debug!("Append node: {:?}", file_node.name);
-            sorted_files.push(file_node.path.clone());
+
+            debug!(
+                "{} graph: {:?} nodes and {:?} edges",
+                graph_type.as_str(),
+                graph.node_count(),
+                graph.edge_count()
+            );
+
+            let mut topo = StableTopo::new(graph);
+            while let Some(node) = topo.next() {
+                let file_node = match graph.node_weight(node) {
+                    Some(x) => x,
+                    None => return Err(TopCatError::UnknownError("Node not found".to_string())),
+                };
+                trace!("{} node: {:?}", graph_type.as_str(), file_node.name);
+                sorted_files.push(file_node.path.clone());
+            }
         }
         Ok(sorted_files)
     }
