@@ -1,0 +1,114 @@
+{
+  "nodes": {
+    "crane": {
+      "locked": {
+        "lastModified": 1738652123,
+        "narHash": "sha256-zdZek5FXK/k95J0vnLF0AMnYuZl4AjARq83blKuJBYY=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "c7e015a5fcefb070778c7d91734768680188a9cd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
+    "flakelight": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1738586370,
+        "narHash": "sha256-oNDm2sfLm9jdfOskRq2ABn85gwXusbsHEOC181peno4=",
+        "owner": "nix-community",
+        "repo": "flakelight",
+        "rev": "d05bcabfc1efb84a7d8689de6e50b84d7f23b427",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "flakelight",
+        "type": "github"
+      }
+    },
+    "flakelight-rust": {
+      "inputs": {
+        "crane": "crane",
+        "flakelight": "flakelight_2"
+      },
+      "locked": {
+        "lastModified": 1738672886,
+        "narHash": "sha256-YLRn2bceMuePfimgfqfic4jce3b/GqDfB2vbrNFuRlg=",
+        "owner": "accelbread",
+        "repo": "flakelight-rust",
+        "rev": "fda5c9b4a7f3d78cf21e5f1010d6a3f16ad946e1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "accelbread",
+        "repo": "flakelight-rust",
+        "type": "github"
+      }
+    },
+    "flakelight_2": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2"
+      },
+      "locked": {
+        "lastModified": 1738586370,
+        "narHash": "sha256-oNDm2sfLm9jdfOskRq2ABn85gwXusbsHEOC181peno4=",
+        "owner": "nix-community",
+        "repo": "flakelight",
+        "rev": "d05bcabfc1efb84a7d8689de6e50b84d7f23b427",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "flakelight",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1738410390,
+        "narHash": "sha256-xvTo0Aw0+veek7hvEVLzErmJyQkEcRk6PSR4zsRQFEc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "3a228057f5b619feb3186e986dbe76278d707b6e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1738410390,
+        "narHash": "sha256-xvTo0Aw0+veek7hvEVLzErmJyQkEcRk6PSR4zsRQFEc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "3a228057f5b619feb3186e986dbe76278d707b6e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "flakelight": "flakelight",
+        "flakelight-rust": "flakelight-rust"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
