@@ -188,67 +188,6 @@ jobs:
             *.tar.gz
             *.sha256
 
-  linux-cross:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform:
-          - target: aarch64-unknown-linux-gnu
-            arch: aarch64
-          - target: armv7-unknown-linux-gnueabihf
-            arch: armv7
-          - target: s390x-unknown-linux-gnu
-            arch: s390x
-          - target: powerpc64le-unknown-linux-gnu
-            arch: ppc64le
-          - target: powerpc64-unknown-linux-gnu
-            arch: ppc64
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          manylinux: auto
-          args: --release --locked --out dist
-      - uses: uraimo/run-on-arch-action@v2
-        if: matrix.platform.arch != 'ppc64'
-        name: Test wheel
-        with:
-          arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
-          githubToken: ${{ github.token }}
-          install: |
-            apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip
-            pip3 install -U pip
-          run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            topcat --help
-      - name: "Upload wheels"
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-${{ matrix.platform.target }}
-          path: dist
-      - name: "Archive binary"
-        run: |
-          ARCHIVE_FILE=topcat-${{ inputs.tag }}-${{ matrix.platform.target }}.tar.gz
-          tar czvf $ARCHIVE_FILE -C target/${{ matrix.platform.target }}/release topcat
-          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
-      - name: "Upload binary"
-        uses: actions/upload-artifact@v4
-        with:
-          name: binaries-${{ matrix.platform.target }}
-          path: |
-            *.tar.gz
-            *.sha256
-
   musllinux:
     runs-on: ubuntu-latest
     strategy:
@@ -391,7 +330,6 @@ jobs:
       - macos-universal
       - windows
       - linux
-      - linux-cross
       - musllinux
       - musllinux-cross
       - validate-tag
