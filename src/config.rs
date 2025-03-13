@@ -12,5 +12,7 @@ pub struct Config<'a> {
     pub file_end_str: String,
     pub verbose: bool,
     pub dry_run: bool,
+    pub include_node_prefixes: Option<&'a [String]>,
+    pub exclude_node_prefixes: Option<&'a [String]>,
     pub include_hidden: bool,
 }
