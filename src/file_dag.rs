@@ -277,6 +277,8 @@ pub struct TCGraph {
     pub include_globs: Option<HashSet<PathBuf>>,
     pub include_extensions: Option<HashSet<String>>,
     pub exclude_extensions: Option<HashSet<String>>,
+    pub include_node_prefixes: Option<HashSet<String>>,
+    pub exclude_node_prefixes: Option<HashSet<String>>,
     normal_graph: DiGraph<FileNode, ()>,
     prepend_graph: DiGraph<FileNode, ()>,
     append_graph: DiGraph<FileNode, ()>,
@@ -301,6 +303,11 @@ impl TCGraph {
             string_slice_to_array(config.include_extensions);
         let exclude_extensions: Option<HashSet<String>> =
             string_slice_to_array(config.exclude_extensions);
+        let include_node_prefixes: Option<HashSet<String>> =
+            string_slice_to_array(config.include_node_prefixes);
+        let exclude_node_prefixes: Option<HashSet<String>> =
+            string_slice_to_array(config.exclude_node_prefixes);
+
         TCGraph {
             comment_str: config.comment_str.clone(),
             file_dirs: config.input_dirs.clone(),
@@ -308,6 +315,8 @@ impl TCGraph {
             include_globs,
             include_extensions,
             exclude_extensions,
+            include_node_prefixes,
+            exclude_node_prefixes,
             normal_graph: DiGraph::new(),
             prepend_graph: DiGraph::new(),
             append_graph: DiGraph::new(),
@@ -439,7 +448,40 @@ impl TCGraph {
                     None => return Err(TopCatError::UnknownError("Node not found".to_string())),
                 };
                 trace!("{} node: {:?}", graph_type.as_str(), file_node.name);
-                sorted_files.push(file_node.path.clone());
+
+                // Apply prefix filtering
+                let should_include =
+                    match (&self.include_node_prefixes, &self.exclude_node_prefixes) {
+                        (Some(include_prefixes), Some(exclude_prefixes)) => {
+                            // If both are specified, include nodes that match include prefixes but not exclude prefixes
+                            include_prefixes
+                                .iter()
+                                .any(|prefix| file_node.name.starts_with(prefix))
+                                && !exclude_prefixes
+                                    .iter()
+                                    .any(|prefix| file_node.name.starts_with(prefix))
+                        }
+                        (Some(include_prefixes), None) => {
+                            // If include prefixes are specified, only include nodes with matching prefixes
+                            include_prefixes
+                                .iter()
+                                .any(|prefix| file_node.name.starts_with(prefix))
+                        }
+                        (None, Some(exclude_prefixes)) => {
+                            // If exclude prefixes are specified, exclude nodes with matching prefixes
+                            !exclude_prefixes
+                                .iter()
+                                .any(|prefix| file_node.name.starts_with(prefix))
+                        }
+                        (None, None) => {
+                            // If no prefix filters are specified, include all nodes
+                            true
+                        }
+                    };
+
+                if should_include {
+                    sorted_files.push(file_node.path.clone());
+                }
             }
         }
         Ok(sorted_files)

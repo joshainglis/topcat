@@ -23,8 +23,8 @@ impl fmt::Display for TopCatError {
             Self::GraphMissing => write!(f, "Graph is None"),
             Self::InvalidFileHeader(x, s) => write!(f, "Invalid file header in {}: {}", x.display(), s),
             Self::NameClash(name, f1, f2) => write!(f, "Name {} found in both {} and {}", name, f1.display(), f2.display()),
-            Self::MissingExist(x, s) => write!(f, "MissingExist: {} expects {} to exist but it is not found", s, x),
-            Self::MissingDependency(x, s) => write!(f, "MissingDependency: {} depends on {} bit it is missing", s, x),
+            Self::MissingExist(x, s) => write!(f, "MissingExist: {} expects {} to exist but it is not found", x, s),
+            Self::MissingDependency(x, s) => write!(f, "MissingDependency: {} depends on {} but it is missing", x, s),
             Self::InvalidDependency(x, s) => write!(f, "InvalidDependency: {} is marked as prepend so it cannot depend on {} which isn't marked as prepend", s, x),
             Self::CyclicDependency(x) => {
                 let mut error_message = "Cyclic dependency detected:\n".to_string();

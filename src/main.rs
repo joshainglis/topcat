@@ -102,6 +102,20 @@ struct Opt {
     verbose: bool,
 
     #[structopt(
+        long = "include-prefix",
+        help = "Only include nodes with the given prefixes in the output",
+        value_name = "PREFIXES"
+    )]
+    include_node_prefixes: Option<Vec<String>>,
+
+    #[structopt(
+        long = "exclude-prefix",
+        help = "Exclude nodes with the given prefixes from the output",
+        value_name = "PREFIXES"
+    )]
+    exclude_node_prefixes: Option<Vec<String>>,
+
+    #[structopt(
         short = "d",
         long = "dry-run",
         help = "Only print the output, do not write to file"
@@ -128,6 +142,8 @@ fn main() -> Result<(), TopCatError> {
         file_end_str: opt.ensure_each_file_ends_with_str,
         include_hidden: opt.include_hidden_files_and_directories,
         verbose: opt.verbose,
+        include_node_prefixes: opt.include_node_prefixes.as_deref(),
+        exclude_node_prefixes: opt.exclude_node_prefixes.as_deref(),
         dry_run: opt.dry_run,
     };
 
