@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - rust: 1.76.0 # MSRV
+          - rust: 1.85.0 # MSRV
           - rust: stable
             test_all: --all
           - rust: beta
