@@ -1,10 +1,27 @@
 {
   inputs = {
-    flakelight.url = "github:nix-community/flakelight";
-    flakelight-rust.url = "github:accelbread/flakelight-rust";
+    flake-utils.url = "github:numtide/flake-utils";
+    naersk.url = "github:nix-community/naersk";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
-  outputs = { flakelight, flakelight-rust, ... }: flakelight ./. {
-    imports = [ flakelight-rust.flakelightModules.default ];
-    systems = [ "x86_64-linux" "aarch64-linux" "i686-linux" "armv7l-linux" "aarch64-darwin" ];
-  };
+
+  outputs = { self, flake-utils, naersk, nixpkgs }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = (import nixpkgs) {
+          inherit system;
+        };
+
+        naersk' = pkgs.callPackage naersk {};
+
+      in {
+        defaultPackage = naersk'.buildPackage {
+          src = ./.;
+        };
+
+        devShell = pkgs.mkShell {
+          nativeBuildInputs = with pkgs; [ rustc cargo ];
+        };
+      }
+    );
 }
