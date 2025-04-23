@@ -27,7 +27,7 @@
     {
       overlays.default = (final: prev: {
         naersk = prev.callPackage inputs.naersk { };
-        topcat = final.naersk.buildPackage.buildPackage { src = ./.; };
+        topcat = final.naersk.buildPackage { src = ./.; };
       });
     };
 }
