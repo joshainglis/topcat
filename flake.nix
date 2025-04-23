@@ -10,14 +10,17 @@
       let
         pkgs = (import nixpkgs) {
           inherit system;
+          overlays = [
+            naersk.outputs.overlay
+          ];
         };
+      in
+      {
+        defaultPackage = pkgs.naersk.buildPackage { src = ./.; };
 
-        naersk' = pkgs.callPackage naersk {};
-
-      in {
-        defaultPackage = naersk'.buildPackage {
-          src = ./.;
-        };
+        overlays.default = (final: prev: {
+          topcat = prev.naersk.buildPackage.buildPackage { src = ./.; };
+        });
 
         devShell = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [ rustc cargo ];
