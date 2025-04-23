@@ -116,6 +116,13 @@ struct Opt {
     exclude_node_prefixes: Option<Vec<String>>,
 
     #[structopt(
+        long = "subdir-filter",
+        help = "Only include files from this subdirectory and their dependencies",
+        value_name = "SUBDIR"
+    )]
+    subdir_filter: Option<PathBuf>,
+
+    #[structopt(
         short = "d",
         long = "dry-run",
         help = "Only print the output, do not write to file"
@@ -145,6 +152,7 @@ fn main() -> Result<(), TopCatError> {
         include_node_prefixes: opt.include_node_prefixes.as_deref(),
         exclude_node_prefixes: opt.exclude_node_prefixes.as_deref(),
         dry_run: opt.dry_run,
+        subdir_filter: opt.subdir_filter,
     };
 
     let mut filedag = TCGraph::new(&config);

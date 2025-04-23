@@ -15,4 +15,5 @@ pub struct Config<'a> {
     pub include_node_prefixes: Option<&'a [String]>,
     pub exclude_node_prefixes: Option<&'a [String]>,
     pub include_hidden: bool,
+    pub subdir_filter: Option<PathBuf>,
 }

@@ -1,5 +1,5 @@
 use graph_cycles::Cycles;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;
 use std::path::PathBuf;
 
@@ -289,6 +289,7 @@ pub struct TCGraph {
     append_index_map: HashMap<String, NodeIndex>,
     include_hidden: bool,
     graph_is_built: bool,
+    subdir_filter: Option<PathBuf>,
 }
 
 impl TCGraph {
@@ -327,6 +328,7 @@ impl TCGraph {
             append_index_map: HashMap::new(),
             include_hidden: config.include_hidden,
             graph_is_built: false,
+            subdir_filter: config.subdir_filter.clone(),
         }
     }
 
@@ -393,6 +395,37 @@ impl TCGraph {
         Ok(())
     }
 
+    fn find_required_nodes(
+        &self,
+        initial_nodes: &HashSet<String>,
+    ) -> Result<HashSet<String>, TopCatError> {
+        let mut required = HashSet::new();
+        let mut queue: VecDeque<String> = initial_nodes.iter().cloned().collect();
+        required.extend(initial_nodes.iter().cloned());
+
+        while let Some(node_name) = queue.pop_front() {
+            let file_node = self.name_map.get(&node_name).ok_or_else(|| {
+                TopCatError::UnknownError(format!(
+                    "Node '{}' not found in name_map during dependency traversal.",
+                    node_name
+                ))
+            })?;
+
+            for dep_name in &file_node.deps {
+                if !self.name_map.contains_key(dep_name) {
+                    return Err(TopCatError::MissingDependency(
+                        node_name.clone(),
+                        dep_name.clone(),
+                    ));
+                }
+                if required.insert(dep_name.clone()) {
+                    queue.push_back(dep_name.clone());
+                }
+            }
+        }
+        Ok(required)
+    }
+
     pub fn graph_as_dot(
         &self,
         graph_type: TCGraphType,
@@ -419,6 +452,51 @@ impl TCGraph {
             return Err(TopCatError::GraphMissing);
         }
         info!("Getting sorted files");
+
+        let required_node_names: Option<HashSet<String>> =
+            if let Some(subdir_path) = &self.subdir_filter {
+                info!("Applying subdirectory filter: {:?}", subdir_path);
+                let canonical_subdir_path =
+                    subdir_path.canonicalize().map_err(|e| TopCatError::Io(e))?;
+
+                let initial_nodes: HashSet<String> = self
+                    .name_map
+                    .values()
+                    .filter_map(|node| {
+                        node.path
+                            .canonicalize()
+                            .ok()
+                            .and_then(|canonical_node_path| {
+                                if canonical_node_path.starts_with(&canonical_subdir_path) {
+                                    Some(node.name.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                    })
+                    .collect();
+
+                if initial_nodes.is_empty() {
+                    info!(
+                        "No files are found within the specified subdirectory filter: {:?}",
+                        subdir_path
+                    );
+                    return Ok(Vec::new());
+                }
+
+                debug!("Initial nodes from subdir: {:?}", initial_nodes);
+                Some(self.find_required_nodes(&initial_nodes)?)
+            } else {
+                None
+            };
+
+        if let Some(required) = &required_node_names {
+            debug!(
+                "Total required nodes (including dependencies): {:?}",
+                required
+            );
+        }
+
         let mut sorted_files = Vec::new();
 
         for graph_type in [
@@ -442,42 +520,44 @@ impl TCGraph {
             );
 
             let mut topo = StableTopo::new(graph);
-            while let Some(node) = topo.next() {
-                let file_node = match graph.node_weight(node) {
+            while let Some(node_idx) = topo.next() {
+                let file_node = match graph.node_weight(node_idx) {
                     Some(x) => x,
                     None => return Err(TopCatError::UnknownError("Node not found".to_string())),
                 };
                 trace!("{} node: {:?}", graph_type.as_str(), file_node.name);
 
-                // Apply prefix filtering
-                let should_include =
-                    match (&self.include_node_prefixes, &self.exclude_node_prefixes) {
-                        (Some(include_prefixes), Some(exclude_prefixes)) => {
-                            // If both are specified, include nodes that match include prefixes but not exclude prefixes
-                            include_prefixes
-                                .iter()
-                                .any(|prefix| file_node.name.starts_with(prefix))
-                                && !exclude_prefixes
-                                    .iter()
-                                    .any(|prefix| file_node.name.starts_with(prefix))
-                        }
-                        (Some(include_prefixes), None) => {
-                            // If include prefixes are specified, only include nodes with matching prefixes
-                            include_prefixes
-                                .iter()
-                                .any(|prefix| file_node.name.starts_with(prefix))
-                        }
-                        (None, Some(exclude_prefixes)) => {
-                            // If exclude prefixes are specified, exclude nodes with matching prefixes
-                            !exclude_prefixes
-                                .iter()
-                                .any(|prefix| file_node.name.starts_with(prefix))
-                        }
-                        (None, None) => {
-                            // If no prefix filters are specified, include all nodes
-                            true
-                        }
-                    };
+                let mut should_include = true;
+
+                if let Some(required) = &required_node_names {
+                    if !required.contains(&file_node.name) {
+                        trace!(
+                            "Excluding node '{}' (not required by subdir filter)",
+                            file_node.name
+                        );
+                        should_include = false;
+                    }
+                }
+
+                if should_include {
+                    should_include =
+                        match (&self.include_node_prefixes, &self.exclude_node_prefixes) {
+                            (Some(include), Some(exclude)) => {
+                                include.iter().any(|p| file_node.name.starts_with(p))
+                                    && !exclude.iter().any(|p| file_node.name.starts_with(p))
+                            }
+                            (Some(include), None) => {
+                                include.iter().any(|p| file_node.name.starts_with(p))
+                            }
+                            (None, Some(exclude)) => {
+                                !exclude.iter().any(|p| file_node.name.starts_with(p))
+                            }
+                            (None, None) => true,
+                        };
+                    if !should_include {
+                        trace!("Excluding node '{}' by prefix filter", file_node.name);
+                    }
+                }
 
                 if should_include {
                     sorted_files.push(file_node.path.clone());
