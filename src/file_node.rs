@@ -108,7 +108,12 @@ impl FileNode {
             })
             .collect()
     }
-    pub fn from_file(comment_str: &str, path: &PathBuf, layers: &[String], fallback_layer: &str) -> Result<FileNode, FileNodeError> {
+    pub fn from_file(
+        comment_str: &str,
+        path: &PathBuf,
+        layers: &[String],
+        fallback_layer: &str,
+    ) -> Result<FileNode, FileNodeError> {
         let file_data = get_file_headers(&path, comment_str);
         let name_str = format!("{} name:", comment_str);
         let dep_str = format!("{} requires:", comment_str);
@@ -169,12 +174,12 @@ impl FileNode {
         if name.is_empty() {
             return Err(FileNodeError::NoNameDefined(path.clone()));
         }
-        
+
         // Validate that the declared layer exists in the configured layers
         if !layers.contains(&layer) {
             return Err(FileNodeError::InvalidLayer(path.clone(), layer));
         }
-        
+
         Ok(FileNode::new(
             name,
             path.clone(),
@@ -191,57 +196,97 @@ mod tests {
 
     #[test]
     fn test_new_layer_header_format() {
-        let layers = vec!["first".to_string(), "second".to_string(), "third".to_string()];
+        let layers = vec![
+            "first".to_string(),
+            "second".to_string(),
+            "third".to_string(),
+        ];
         let fallback_layer = "second";
-        
+
         // Create a temporary file with new layer format
         let temp_file = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
         std::fs::write(&temp_file, "-- name: test_node\n-- layer: first\nSELECT 1;").unwrap();
-        
-        let file_node = FileNode::from_file("--", &temp_file.path().to_path_buf(), &layers, fallback_layer).unwrap();
-        
+
+        let file_node = FileNode::from_file(
+            "--",
+            &temp_file.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
         assert_eq!(file_node.name, "test_node");
         assert_eq!(file_node.layer, "first");
     }
 
     #[test]
     fn test_backward_compatibility_is_initial() {
-        let layers = vec!["prepend".to_string(), "normal".to_string(), "append".to_string()];
+        let layers = vec![
+            "prepend".to_string(),
+            "normal".to_string(),
+            "append".to_string(),
+        ];
         let fallback_layer = "normal";
-        
+
         let temp_file = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
         std::fs::write(&temp_file, "-- name: test_node\n-- is_initial\nSELECT 1;").unwrap();
-        
-        let file_node = FileNode::from_file("--", &temp_file.path().to_path_buf(), &layers, fallback_layer).unwrap();
-        
+
+        let file_node = FileNode::from_file(
+            "--",
+            &temp_file.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
         assert_eq!(file_node.name, "test_node");
         assert_eq!(file_node.layer, "prepend");
     }
 
     #[test]
     fn test_backward_compatibility_is_final() {
-        let layers = vec!["prepend".to_string(), "normal".to_string(), "append".to_string()];
+        let layers = vec![
+            "prepend".to_string(),
+            "normal".to_string(),
+            "append".to_string(),
+        ];
         let fallback_layer = "normal";
-        
+
         let temp_file = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
         std::fs::write(&temp_file, "-- name: test_node\n-- is_final\nSELECT 1;").unwrap();
-        
-        let file_node = FileNode::from_file("--", &temp_file.path().to_path_buf(), &layers, fallback_layer).unwrap();
-        
+
+        let file_node = FileNode::from_file(
+            "--",
+            &temp_file.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
         assert_eq!(file_node.name, "test_node");
         assert_eq!(file_node.layer, "append");
     }
 
     #[test]
     fn test_fallback_layer() {
-        let layers = vec!["first".to_string(), "second".to_string(), "third".to_string()];
+        let layers = vec![
+            "first".to_string(),
+            "second".to_string(),
+            "third".to_string(),
+        ];
         let fallback_layer = "second";
-        
+
         let temp_file = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
         std::fs::write(&temp_file, "-- name: test_node\nSELECT 1;").unwrap();
-        
-        let file_node = FileNode::from_file("--", &temp_file.path().to_path_buf(), &layers, fallback_layer).unwrap();
-        
+
+        let file_node = FileNode::from_file(
+            "--",
+            &temp_file.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
         assert_eq!(file_node.name, "test_node");
         assert_eq!(file_node.layer, "second");
     }
@@ -250,12 +295,21 @@ mod tests {
     fn test_invalid_layer_error() {
         let layers = vec!["first".to_string(), "second".to_string()];
         let fallback_layer = "first";
-        
+
         let temp_file = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
-        std::fs::write(&temp_file, "-- name: test_node\n-- layer: invalid\nSELECT 1;").unwrap();
-        
-        let result = FileNode::from_file("--", &temp_file.path().to_path_buf(), &layers, fallback_layer);
-        
+        std::fs::write(
+            &temp_file,
+            "-- name: test_node\n-- layer: invalid\nSELECT 1;",
+        )
+        .unwrap();
+
+        let result = FileNode::from_file(
+            "--",
+            &temp_file.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        );
+
         assert!(result.is_err());
         match result.unwrap_err() {
             FileNodeError::InvalidLayer(_, layer) => assert_eq!(layer, "invalid"),
@@ -267,12 +321,18 @@ mod tests {
     fn test_dependencies_parsing() {
         let layers = vec!["first".to_string(), "second".to_string()];
         let fallback_layer = "first";
-        
+
         let temp_file = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
         std::fs::write(&temp_file, "-- name: test_node\n-- layer: first\n-- requires: dep1, dep2\n-- dropped_by: dep3\nSELECT 1;").unwrap();
-        
-        let file_node = FileNode::from_file("--", &temp_file.path().to_path_buf(), &layers, fallback_layer).unwrap();
-        
+
+        let file_node = FileNode::from_file(
+            "--",
+            &temp_file.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
         assert_eq!(file_node.name, "test_node");
         assert_eq!(file_node.layer, "first");
         assert!(file_node.deps.contains("dep1"));

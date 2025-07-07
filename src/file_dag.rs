@@ -119,9 +119,13 @@ fn add_nodes_to_graphs(
 ) {
     for file_node in name_map.values() {
         let layer = &file_node.layer;
-        let graph = layer_graphs.get_mut(layer).expect("Layer graph should exist");
-        let index_map = layer_index_maps.get_mut(layer).expect("Layer index map should exist");
-        
+        let graph = layer_graphs
+            .get_mut(layer)
+            .expect("Layer graph should exist");
+        let index_map = layer_index_maps
+            .get_mut(layer)
+            .expect("Layer index map should exist");
+
         let idx = graph.add_node(file_node.clone());
         index_map.insert(file_node.name.clone(), idx);
     }
@@ -207,16 +211,13 @@ fn check_cyclic_dependencies(
     layer_graphs: &HashMap<String, DiGraph<FileNode, ()>>,
 ) -> Result<(), TopCatError> {
     let mut cycles: Vec<Vec<FileNode>> = Vec::new();
-    
+
     for graph in layer_graphs.values() {
         if is_cyclic_directed(graph) {
-            cycles.extend(convert_cycle_indexes_to_cycle_nodes(
-                graph.cycles(),
-                graph,
-            ));
+            cycles.extend(convert_cycle_indexes_to_cycle_nodes(graph.cycles(), graph));
         }
     }
-    
+
     if !cycles.is_empty() {
         return Err(TopCatError::CyclicDependency(cycles));
     }
@@ -306,7 +307,12 @@ impl TCGraph {
         );
 
         for file in filtered_files {
-            let file_node = match FileNode::from_file(&self.comment_str, &file, &self.layers, &self.fallback_layer) {
+            let file_node = match FileNode::from_file(
+                &self.comment_str,
+                &file,
+                &self.layers,
+                &self.fallback_layer,
+            ) {
                 Ok(f) => f,
                 Err(e) => {
                     handle_file_node_error(e)?;

@@ -152,9 +152,16 @@ fn main() -> Result<(), TopCatError> {
 
     // Parse layers from CLI or use defaults
     let layers = if let Some(layers_str) = opt.layers {
-        layers_str.split(',').map(|s| s.trim().to_string()).collect()
+        layers_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect()
     } else {
-        vec!["prepend".to_string(), "normal".to_string(), "append".to_string()]
+        vec![
+            "prepend".to_string(),
+            "normal".to_string(),
+            "append".to_string(),
+        ]
     };
 
     // Set fallback layer
@@ -162,7 +169,10 @@ fn main() -> Result<(), TopCatError> {
 
     // Validate that fallback layer exists in layers
     if !layers.contains(&fallback_layer) {
-        eprintln!("Error: Fallback layer '{}' is not in the layers list: {:?}", fallback_layer, layers);
+        eprintln!(
+            "Error: Fallback layer '{}' is not in the layers list: {:?}",
+            fallback_layer, layers
+        );
         std::process::exit(1);
     }
 
@@ -200,11 +210,7 @@ fn main() -> Result<(), TopCatError> {
 
     if config.verbose {
         for layer in &config.layers {
-            println!(
-                "{} Graph: {:#?}",
-                layer,
-                filedag.graph_as_dot(layer)?
-            );
+            println!("{} Graph: {:#?}", layer, filedag.graph_as_dot(layer)?);
         }
     }
 
