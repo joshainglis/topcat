@@ -9,7 +9,6 @@ use structopt::StructOpt;
 use file_dag::TCGraph;
 
 use crate::exceptions::TopCatError;
-use crate::file_dag::TCGraphType;
 
 mod config;
 mod exceptions;
@@ -128,6 +127,20 @@ struct Opt {
         help = "Only print the output, do not write to file"
     )]
     dry_run: bool,
+
+    #[structopt(
+        long = "layers",
+        help = "Comma-separated list of layer names in order",
+        value_name = "LAYERS"
+    )]
+    layers: Option<String>,
+
+    #[structopt(
+        long = "fallback-layer",
+        help = "Default layer for nodes without explicit layer declaration",
+        value_name = "LAYER"
+    )]
+    fallback_layer: Option<String>,
 }
 fn main() -> Result<(), TopCatError> {
     let opt = Opt::from_args();
@@ -135,6 +148,32 @@ fn main() -> Result<(), TopCatError> {
         Builder::new().filter(None, LevelFilter::Debug).init();
     } else {
         Builder::new().filter(None, LevelFilter::Info).init();
+    }
+
+    // Parse layers from CLI or use defaults
+    let layers = if let Some(layers_str) = opt.layers {
+        layers_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect()
+    } else {
+        vec![
+            "prepend".to_string(),
+            "normal".to_string(),
+            "append".to_string(),
+        ]
+    };
+
+    // Set fallback layer
+    let fallback_layer = opt.fallback_layer.unwrap_or_else(|| "normal".to_string());
+
+    // Validate that fallback layer exists in layers
+    if !layers.contains(&fallback_layer) {
+        eprintln!(
+            "Error: Fallback layer '{}' is not in the layers list: {:?}",
+            fallback_layer, layers
+        );
+        std::process::exit(1);
     }
 
     let config = config::Config {
@@ -153,6 +192,8 @@ fn main() -> Result<(), TopCatError> {
         exclude_node_prefixes: opt.exclude_node_prefixes.as_deref(),
         dry_run: opt.dry_run,
         subdir_filter: opt.subdir_filter,
+        layers,
+        fallback_layer,
     };
 
     let mut filedag = TCGraph::new(&config);
@@ -168,15 +209,9 @@ fn main() -> Result<(), TopCatError> {
     }
 
     if config.verbose {
-        println!(
-            "Prepend Graph: {:#?}",
-            filedag.graph_as_dot(TCGraphType::Prepend)?
-        );
-        println!("Graph: {:#?}", filedag.graph_as_dot(TCGraphType::Normal)?);
-        println!(
-            "Append Graph: {:#?}",
-            filedag.graph_as_dot(TCGraphType::Append)?
-        );
+        for layer in &config.layers {
+            println!("{} Graph: {:#?}", layer, filedag.graph_as_dot(layer)?);
+        }
     }
 
     let result = output::generate(filedag, config, &mut fs::RealFileSystem);

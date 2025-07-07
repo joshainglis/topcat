@@ -16,4 +16,6 @@ pub struct Config<'a> {
     pub exclude_node_prefixes: Option<&'a [String]>,
     pub include_hidden: bool,
     pub subdir_filter: Option<PathBuf>,
+    pub layers: Vec<String>,
+    pub fallback_layer: String,
 }

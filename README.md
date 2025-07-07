@@ -132,6 +132,38 @@ For example:
 -- exists: my_schema.c
 ```
 
+### `layer`
+
+You can organize files into layers that enforce ordering constraints. Files in lower-index layers cannot depend on files in higher-index layers.
+
+For example:
+
+```postgresql
+-- name: my_schema.setup
+-- layer: first
+
+-- name: my_schema.functions  
+-- layer: second
+-- requires: my_schema.setup
+
+-- name: my_schema.views
+-- layer: third
+-- requires: my_schema.functions
+```
+
+#### Layer Configuration
+
+- Use `--layers first,second,third` to define custom layers in order
+- Use `--fallback-layer second` to specify the default layer for files without explicit layer declarations
+- Default layers are `prepend,normal,append` with `normal` as the fallback
+
+#### Backward Compatibility
+
+The legacy `-- is_initial` and `-- is_final` headers are still supported:
+- `-- is_initial` maps to the "prepend" layer  
+- `-- is_final` maps to the "append" layer
+- Files without layer declarations use the fallback layer
+
 ## Example
 
 Lets say you have a directory with the following files:

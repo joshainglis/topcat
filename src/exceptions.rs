@@ -21,11 +21,27 @@ impl fmt::Display for TopCatError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::GraphMissing => write!(f, "Graph is None"),
-            Self::InvalidFileHeader(x, s) => write!(f, "Invalid file header in {}: {}", x.display(), s),
-            Self::NameClash(name, f1, f2) => write!(f, "Name {} found in both {} and {}", name, f1.display(), f2.display()),
-            Self::MissingExist(x, s) => write!(f, "MissingExist: {} expects {} to exist but it is not found", x, s),
-            Self::MissingDependency(x, s) => write!(f, "MissingDependency: {} depends on {} but it is missing", x, s),
-            Self::InvalidDependency(x, s) => write!(f, "InvalidDependency: {} is marked as prepend so it cannot depend on {} which isn't marked as prepend", s, x),
+            Self::InvalidFileHeader(x, s) => {
+                write!(f, "Invalid file header in {}: {}", x.display(), s)
+            }
+            Self::NameClash(name, f1, f2) => write!(
+                f,
+                "Name {} found in both {} and {}",
+                name,
+                f1.display(),
+                f2.display()
+            ),
+            Self::MissingExist(x, s) => write!(
+                f,
+                "MissingExist: {} expects {} to exist but it is not found",
+                x, s
+            ),
+            Self::MissingDependency(x, s) => write!(
+                f,
+                "MissingDependency: {} depends on {} but it is missing",
+                x, s
+            ),
+            Self::InvalidDependency(x, s) => write!(f, "InvalidDependency: {}: {}", x, s),
             Self::CyclicDependency(x) => {
                 let mut error_message = "Cyclic dependency detected:\n".to_string();
                 for (i, cycle) in x.iter().enumerate() {
@@ -42,16 +58,13 @@ impl fmt::Display for TopCatError {
                     error_message.push_str("    Edges:\n");
                     for (i, node) in cycle.iter().enumerate() {
                         let next_node = &cycle[(i + 1) % cycle.len()];
-                        error_message.push_str(&format!(
-                            "      - {} -> {}\n",
-                            node.name,
-                            next_node.name
-                        ));
+                        error_message
+                            .push_str(&format!("      - {} -> {}\n", node.name, next_node.name));
                     }
                 }
 
                 write!(f, "{}", error_message)
-            },
+            }
             Self::Io(err) => write!(f, "IO error: {}", err),
             Self::UnknownError(s) => write!(f, "UnknownError: {}", s),
         }
@@ -70,6 +83,7 @@ impl Error for TopCatError {}
 pub enum FileNodeError {
     TooManyNames(PathBuf, Vec<String>),
     NoNameDefined(PathBuf),
+    InvalidLayer(PathBuf, String),
 }
 
 impl fmt::Display for FileNodeError {
@@ -82,6 +96,9 @@ impl fmt::Display for FileNodeError {
                 s.join(", ")
             ),
             Self::NoNameDefined(x) => write!(f, "No name defined in {}", x.display()),
+            Self::InvalidLayer(x, layer) => {
+                write!(f, "Invalid layer '{}' declared in {}", layer, x.display())
+            }
         }
     }
 }
