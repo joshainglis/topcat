@@ -25,7 +25,7 @@ impl fmt::Display for TopCatError {
             Self::NameClash(name, f1, f2) => write!(f, "Name {} found in both {} and {}", name, f1.display(), f2.display()),
             Self::MissingExist(x, s) => write!(f, "MissingExist: {} expects {} to exist but it is not found", x, s),
             Self::MissingDependency(x, s) => write!(f, "MissingDependency: {} depends on {} but it is missing", x, s),
-            Self::InvalidDependency(x, s) => write!(f, "InvalidDependency: {} is marked as prepend so it cannot depend on {} which isn't marked as prepend", s, x),
+            Self::InvalidDependency(x, s) => write!(f, "InvalidDependency: {}: {}", x, s),
             Self::CyclicDependency(x) => {
                 let mut error_message = "Cyclic dependency detected:\n".to_string();
                 for (i, cycle) in x.iter().enumerate() {
@@ -70,6 +70,7 @@ impl Error for TopCatError {}
 pub enum FileNodeError {
     TooManyNames(PathBuf, Vec<String>),
     NoNameDefined(PathBuf),
+    InvalidLayer(PathBuf, String),
 }
 
 impl fmt::Display for FileNodeError {
@@ -82,6 +83,7 @@ impl fmt::Display for FileNodeError {
                 s.join(", ")
             ),
             Self::NoNameDefined(x) => write!(f, "No name defined in {}", x.display()),
+            Self::InvalidLayer(x, layer) => write!(f, "Invalid layer '{}' declared in {}", layer, x.display()),
         }
     }
 }

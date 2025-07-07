@@ -15,31 +15,6 @@ use crate::file_node::FileNode;
 use crate::stable_topo::StableTopo;
 use crate::{config, io_utils};
 
-/// The `TCGraphType` enum represents the different types of graph modifications.
-///
-/// These modifications can be applied to a graph to manipulate its content.
-///
-/// # Variants
-///
-/// - `Normal`: Indicates no modifications will be applied to the graph.
-/// - `Prepend`: Indicates that new elements will be prepended to the graph.
-/// - `Append`: Indicates that new elements will be appended to the graph.
-pub enum TCGraphType {
-    Normal,
-    Prepend,
-    Append,
-}
-
-impl TCGraphType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            TCGraphType::Normal => "normal",
-            TCGraphType::Prepend => "prepend",
-            TCGraphType::Append => "append",
-        }
-    }
-}
-
 fn string_slice_to_array<T: Hash + Eq + Clone>(option: Option<&[T]>) -> Option<HashSet<T>> {
     match option {
         Some(arr) => Some(arr.iter().cloned().collect()),
@@ -130,42 +105,41 @@ fn handle_file_node_error(e: FileNodeError) -> Result<(), TopCatError> {
             p,
             format!("Too many names declared: {}", s.join(", ")),
         )),
+        FileNodeError::InvalidLayer(p, layer) => Err(TopCatError::InvalidFileHeader(
+            p,
+            format!("Invalid layer '{}' declared", layer),
+        )),
     };
 }
 
 fn add_nodes_to_graphs(
-    prepend_graph: &mut Graph<FileNode, (), Directed>,
-    append_graph: &mut Graph<FileNode, (), Directed>,
-    normal_graph: &mut Graph<FileNode, (), Directed>,
-    prepend_index_map: &mut HashMap<String, NodeIndex>,
-    append_index_map: &mut HashMap<String, NodeIndex>,
-    normal_index_map: &mut HashMap<String, NodeIndex>,
+    layer_graphs: &mut HashMap<String, DiGraph<FileNode, ()>>,
+    layer_index_maps: &mut HashMap<String, HashMap<String, NodeIndex>>,
     name_map: &HashMap<String, FileNode>,
 ) {
     for file_node in name_map.values() {
-        let idx: NodeIndex;
-        if file_node.prepend {
-            idx = prepend_graph.add_node(file_node.clone());
-            prepend_index_map.insert(file_node.name.clone(), idx);
-        } else if file_node.append {
-            idx = append_graph.add_node(file_node.clone());
-            append_index_map.insert(file_node.name.clone(), idx);
-        } else {
-            idx = normal_graph.add_node(file_node.clone());
-            normal_index_map.insert(file_node.name.clone(), idx);
-        }
+        let layer = &file_node.layer;
+        let graph = layer_graphs.get_mut(layer).expect("Layer graph should exist");
+        let index_map = layer_index_maps.get_mut(layer).expect("Layer index map should exist");
+        
+        let idx = graph.add_node(file_node.clone());
+        index_map.insert(file_node.name.clone(), idx);
     }
 }
 
 fn validate_dependencies(
     name_map: &HashMap<String, FileNode>,
-    prepend_graph: &mut Graph<FileNode, (), Directed>,
-    append_graph: &mut Graph<FileNode, (), Directed>,
-    normal_graph: &mut Graph<FileNode, (), Directed>,
-    prepend_index_map: &HashMap<String, NodeIndex>,
-    append_index_map: &HashMap<String, NodeIndex>,
-    normal_index_map: &HashMap<String, NodeIndex>,
+    layer_graphs: &mut HashMap<String, DiGraph<FileNode, ()>>,
+    layer_index_maps: &HashMap<String, HashMap<String, NodeIndex>>,
+    layers: &[String],
 ) -> Result<(), TopCatError> {
+    // Create a map from layer name to its index for dependency validation
+    let layer_indices: HashMap<String, usize> = layers
+        .iter()
+        .enumerate()
+        .map(|(i, layer)| (layer.clone(), i))
+        .collect();
+
     for file_node in name_map.values() {
         for ensure in &file_node.ensure_exists {
             if !name_map.contains_key(ensure) {
@@ -181,39 +155,29 @@ fn validate_dependencies(
                 TopCatError::MissingDependency(file_node.name.clone(), dep.clone())
             })?;
 
-            if file_node.prepend {
-                if !dep_node.prepend {
-                    return Err(TopCatError::InvalidDependency(
-                        file_node.name.clone(),
-                        dep.clone(),
-                    ));
-                }
-                prepend_graph.add_edge(
-                    *prepend_index_map.get(dep).unwrap(),
-                    *prepend_index_map.get(&file_node.name).unwrap(),
+            let file_layer_idx = layer_indices.get(&file_node.layer).unwrap();
+            let dep_layer_idx = layer_indices.get(&dep_node.layer).unwrap();
+
+            // Enforce layer ordering: lower index layers cannot depend on higher index layers
+            if file_layer_idx < dep_layer_idx {
+                return Err(TopCatError::InvalidDependency(
+                    file_node.name.clone(),
+                    format!(
+                        "Node in layer '{}' (index {}) cannot depend on node '{}' in layer '{}' (index {})",
+                        file_node.layer, file_layer_idx, dep.clone(), dep_node.layer, dep_layer_idx
+                    ),
+                ));
+            }
+
+            // Only add edges within the same layer
+            if file_node.layer == dep_node.layer {
+                let graph = layer_graphs.get_mut(&file_node.layer).unwrap();
+                let index_map = layer_index_maps.get(&file_node.layer).unwrap();
+                graph.add_edge(
+                    *index_map.get(dep).unwrap(),
+                    *index_map.get(&file_node.name).unwrap(),
                     (),
                 );
-            } else if file_node.append {
-                if dep_node.append {
-                    append_graph.add_edge(
-                        *append_index_map.get(dep).unwrap(),
-                        *append_index_map.get(&file_node.name).unwrap(),
-                        (),
-                    );
-                }
-            } else {
-                if dep_node.append {
-                    return Err(TopCatError::InvalidDependency(
-                        file_node.name.clone(),
-                        dep.clone(),
-                    ));
-                } else if !dep_node.prepend {
-                    normal_graph.add_edge(
-                        *normal_index_map.get(dep).unwrap(),
-                        *normal_index_map.get(&file_node.name).unwrap(),
-                        (),
-                    );
-                }
             }
         }
     }
@@ -240,29 +204,19 @@ fn convert_cycle_indexes_to_cycle_nodes(
         .collect()
 }
 fn check_cyclic_dependencies(
-    normal_graph: &Graph<FileNode, (), Directed>,
-    prepend_graph: &Graph<FileNode, (), Directed>,
-    append_graph: &Graph<FileNode, (), Directed>,
+    layer_graphs: &HashMap<String, DiGraph<FileNode, ()>>,
 ) -> Result<(), TopCatError> {
     let mut cycles: Vec<Vec<FileNode>> = Vec::new();
-    if is_cyclic_directed(prepend_graph) {
-        cycles.extend(convert_cycle_indexes_to_cycle_nodes(
-            prepend_graph.cycles(),
-            prepend_graph,
-        ));
+    
+    for graph in layer_graphs.values() {
+        if is_cyclic_directed(graph) {
+            cycles.extend(convert_cycle_indexes_to_cycle_nodes(
+                graph.cycles(),
+                graph,
+            ));
+        }
     }
-    if is_cyclic_directed(normal_graph) {
-        cycles.extend(convert_cycle_indexes_to_cycle_nodes(
-            normal_graph.cycles(),
-            normal_graph,
-        ));
-    }
-    if is_cyclic_directed(append_graph) {
-        cycles.extend(convert_cycle_indexes_to_cycle_nodes(
-            append_graph.cycles(),
-            append_graph,
-        ));
-    }
+    
     if !cycles.is_empty() {
         return Err(TopCatError::CyclicDependency(cycles));
     }
@@ -279,14 +233,12 @@ pub struct TCGraph {
     pub exclude_extensions: Option<HashSet<String>>,
     pub include_node_prefixes: Option<HashSet<String>>,
     pub exclude_node_prefixes: Option<HashSet<String>>,
-    normal_graph: DiGraph<FileNode, ()>,
-    prepend_graph: DiGraph<FileNode, ()>,
-    append_graph: DiGraph<FileNode, ()>,
+    layer_graphs: HashMap<String, DiGraph<FileNode, ()>>,
+    layer_index_maps: HashMap<String, HashMap<String, NodeIndex>>,
+    layers: Vec<String>,
+    fallback_layer: String,
     path_map: HashMap<PathBuf, FileNode>,
     name_map: HashMap<String, FileNode>,
-    normal_index_map: HashMap<String, NodeIndex>,
-    prepend_index_map: HashMap<String, NodeIndex>,
-    append_index_map: HashMap<String, NodeIndex>,
     include_hidden: bool,
     graph_is_built: bool,
     subdir_filter: Option<PathBuf>,
@@ -309,6 +261,14 @@ impl TCGraph {
         let exclude_node_prefixes: Option<HashSet<String>> =
             string_slice_to_array(config.exclude_node_prefixes);
 
+        // Initialize graphs and index maps for each layer
+        let mut layer_graphs = HashMap::new();
+        let mut layer_index_maps = HashMap::new();
+        for layer in &config.layers {
+            layer_graphs.insert(layer.clone(), DiGraph::new());
+            layer_index_maps.insert(layer.clone(), HashMap::new());
+        }
+
         TCGraph {
             comment_str: config.comment_str.clone(),
             file_dirs: config.input_dirs.clone(),
@@ -318,14 +278,12 @@ impl TCGraph {
             exclude_extensions,
             include_node_prefixes,
             exclude_node_prefixes,
-            normal_graph: DiGraph::new(),
-            prepend_graph: DiGraph::new(),
-            append_graph: DiGraph::new(),
+            layer_graphs,
+            layer_index_maps,
+            layers: config.layers.clone(),
+            fallback_layer: config.fallback_layer.clone(),
             path_map: HashMap::new(),
             name_map: HashMap::new(),
-            normal_index_map: HashMap::new(),
-            prepend_index_map: HashMap::new(),
-            append_index_map: HashMap::new(),
             include_hidden: config.include_hidden,
             graph_is_built: false,
             subdir_filter: config.subdir_filter.clone(),
@@ -348,7 +306,7 @@ impl TCGraph {
         );
 
         for file in filtered_files {
-            let file_node = match FileNode::from_file(&self.comment_str, &file) {
+            let file_node = match FileNode::from_file(&self.comment_str, &file, &self.layers, &self.fallback_layer) {
                 Ok(f) => f,
                 Err(e) => {
                     handle_file_node_error(e)?;
@@ -370,26 +328,19 @@ impl TCGraph {
         }
 
         add_nodes_to_graphs(
-            &mut self.prepend_graph,
-            &mut self.append_graph,
-            &mut self.normal_graph,
-            &mut self.prepend_index_map,
-            &mut self.append_index_map,
-            &mut self.normal_index_map,
+            &mut self.layer_graphs,
+            &mut self.layer_index_maps,
             &self.name_map,
         );
 
         validate_dependencies(
             &self.name_map,
-            &mut self.prepend_graph,
-            &mut self.append_graph,
-            &mut self.normal_graph,
-            &self.prepend_index_map,
-            &self.append_index_map,
-            &self.normal_index_map,
+            &mut self.layer_graphs,
+            &self.layer_index_maps,
+            &self.layers,
         )?;
 
-        check_cyclic_dependencies(&self.normal_graph, &self.prepend_graph, &self.append_graph)?;
+        check_cyclic_dependencies(&self.layer_graphs)?;
 
         self.graph_is_built = true;
         Ok(())
@@ -428,16 +379,14 @@ impl TCGraph {
 
     pub fn graph_as_dot(
         &self,
-        graph_type: TCGraphType,
+        layer_name: &str,
     ) -> Result<Dot<&DiGraph<FileNode, ()>>, TopCatError> {
         if !self.graph_is_built {
             return Err(TopCatError::GraphMissing);
         }
-        let graph = match graph_type {
-            TCGraphType::Normal => &self.normal_graph,
-            TCGraphType::Prepend => &self.prepend_graph,
-            TCGraphType::Append => &self.append_graph,
-        };
+        let graph = self.layer_graphs.get(layer_name).ok_or_else(|| {
+            TopCatError::UnknownError(format!("Layer '{}' not found", layer_name))
+        })?;
         let dot = Dot::with_attr_getters(
             graph,
             &[Config::EdgeNoLabel, Config::NodeNoLabel],
@@ -499,22 +448,12 @@ impl TCGraph {
 
         let mut sorted_files = Vec::new();
 
-        for graph_type in [
-            TCGraphType::Prepend,
-            TCGraphType::Normal,
-            TCGraphType::Append,
-        ]
-        .iter()
-        {
-            let graph = match graph_type {
-                TCGraphType::Prepend => &self.prepend_graph,
-                TCGraphType::Normal => &self.normal_graph,
-                TCGraphType::Append => &self.append_graph,
-            };
+        for layer_name in &self.layers {
+            let graph = self.layer_graphs.get(layer_name).unwrap();
 
             debug!(
                 "{} graph: {:?} nodes and {:?} edges",
-                graph_type.as_str(),
+                layer_name,
                 graph.node_count(),
                 graph.edge_count()
             );
@@ -525,7 +464,7 @@ impl TCGraph {
                     Some(x) => x,
                     None => return Err(TopCatError::UnknownError("Node not found".to_string())),
                 };
-                trace!("{} node: {:?}", graph_type.as_str(), file_node.name);
+                trace!("{} node: {:?}", layer_name, file_node.name);
 
                 let mut should_include = true;
 

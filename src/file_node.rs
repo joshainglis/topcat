@@ -42,8 +42,7 @@ pub struct FileNode {
     pub name: String,
     pub path: PathBuf,
     pub deps: HashSet<String>,
-    pub prepend: bool,
-    pub append: bool,
+    pub layer: String,
     pub ensure_exists: HashSet<String>,
 }
 
@@ -85,16 +84,14 @@ impl FileNode {
         name: String,
         path: PathBuf,
         deps: HashSet<String>,
-        prepend: bool,
-        append: bool,
+        layer: String,
         ensure_exists: HashSet<String>,
     ) -> FileNode {
         FileNode {
             name,
             path,
             deps,
-            prepend,
-            append,
+            layer,
             ensure_exists,
         }
     }
@@ -111,19 +108,20 @@ impl FileNode {
             })
             .collect()
     }
-    pub fn from_file(comment_str: &str, path: &PathBuf) -> Result<FileNode, FileNodeError> {
+    pub fn from_file(comment_str: &str, path: &PathBuf, layers: &[String], fallback_layer: &str) -> Result<FileNode, FileNodeError> {
         let file_data = get_file_headers(&path, comment_str);
         let name_str = format!("{} name:", comment_str);
         let dep_str = format!("{} requires:", comment_str);
         let drop_str = format!("{} dropped_by:", comment_str);
+        let layer_str = format!("{} layer:", comment_str);
+        // Keep backward compatibility with old headers
         let prepend_str = format!("{} is_initial", comment_str);
         let append_str = format!("{} is_final", comment_str);
         let ensure_exists_str = format!("{} exists:", comment_str);
 
         let mut name = String::new();
         let mut deps = HashSet::new();
-        let mut is_initial = false;
-        let mut is_final = false;
+        let mut layer = fallback_layer.to_string();
         let mut ensure_exists = HashSet::new();
 
         for unprocessed_line in &file_data {
@@ -149,12 +147,18 @@ impl FileNode {
                 for item in Self::split_dependencies(&line[drop_str.len()..]) {
                     deps.insert(item);
                 }
+            } else if line.starts_with(&layer_str) {
+                // -- layer: prepend -> "prepend"
+                let declared_layer = line[layer_str.len()..].trim();
+                if !declared_layer.is_empty() {
+                    layer = declared_layer.to_string();
+                }
             } else if line.starts_with(&prepend_str) {
-                // -- is_initial -> true
-                is_initial = true;
+                // -- is_initial -> "prepend" (backward compatibility)
+                layer = "prepend".to_string();
             } else if line.starts_with(&append_str) {
-                // -- is_final -> true
-                is_final = true;
+                // -- is_final -> "append" (backward compatibility)
+                layer = "append".to_string();
             } else if line.starts_with(&ensure_exists_str) {
                 // --exists: tomato, potato -> ["tomato", "potato"]
                 for item in Self::split_dependencies(&line[ensure_exists_str.len()..]) {
@@ -165,12 +169,17 @@ impl FileNode {
         if name.is_empty() {
             return Err(FileNodeError::NoNameDefined(path.clone()));
         }
+        
+        // Validate that the declared layer exists in the configured layers
+        if !layers.contains(&layer) {
+            return Err(FileNodeError::InvalidLayer(path.clone(), layer));
+        }
+        
         Ok(FileNode::new(
             name,
             path.clone(),
             deps,
-            is_initial,
-            is_final,
+            layer,
             ensure_exists,
         ))
     }
