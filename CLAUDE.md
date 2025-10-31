@@ -177,3 +177,180 @@ Example:
 ```bash
 cargo run -- -i input/ -o output.sql -v > debug.log 2>&1
 ```
+
+## SQL Dependency Discovery
+
+**NEW**: Topcat now supports automatic dependency discovery from SQL content, eliminating the need for manual header maintenance.
+
+### Module Structure
+
+- **sql_config.rs** - Configuration for SQL discovery (patterns, mappings, merge strategies)
+- **sql_parser.rs** - `SqlAnalyzer` that extracts dependencies from SQL content using regex patterns
+- **header_generator.rs** - Generates/updates file headers with discovered dependencies
+
+### Key Features
+
+#### Automatic Dependency Extraction
+
+The SQL analyzer can discover dependencies from:
+- **DDL Statements**: Extracts object names from CREATE/ALTER/DROP statements
+- **DML References**: Finds schema.object references in SELECT, JOIN, INSERT, UPDATE, DELETE
+- **Function Calls**: Detects function/procedure dependencies
+- **Type References**: Handles custom types and casts (e.g., `::TSTZRANGE`)
+- **Model Generation**: Special patterns for code generation procedures
+
+#### Configuration
+
+Configure SQL discovery via:
+1. **CLI arguments** for simple cases
+2. **TOML config file** for complex patterns
+
+Example TOML config (`topcat.toml`):
+```toml
+[sql_discovery]
+enabled = true
+schema_pattern = "(?:test|e|c|d[pio]|codegen|md)_\\w+"
+merge_strategy = "discovery-only"
+
+[[sql_discovery.type_mappings]]
+from = "TSTZRANGE"
+to = "c_tmf.t_time_period"
+
+[[sql_discovery.extension_mappings]]
+object = "digest"
+extension = "pgcrypto"
+```
+
+#### Merge Strategies
+
+Control how discovered dependencies combine with manual ones:
+
+- **discovery-only** (default): Replace manual dependencies with discovered ones
+- **header-only**: Ignore discovered dependencies, use only manual headers
+- **union**: Combine both manual and discovered dependencies
+- **header-with-fallback**: Use manual if present, otherwise use discovered
+- **validate**: Check for mismatches between manual and discovered
+
+#### Override Mechanism
+
+Use `!` prefix to force a dependency to be kept even if not discovered:
+
+```sql
+-- name: my_table
+-- requires: !special_dep, other_dep
+```
+
+The `!special_dep` will always be included even if not found in the SQL content.
+
+#### Header Generation
+
+Two modes for updating file headers:
+
+1. **In-place update** (`--update-headers`): Modifies files directly
+2. **Generate to directory** (`--generate-headers DIR`): Creates updated copies
+
+### CLI Arguments
+
+```bash
+# Enable SQL discovery
+--enable-sql-discovery
+
+# Provide config file
+--sql-config topcat.toml
+
+# Override schema pattern
+--schema-pattern "(?:schema1|schema2)_\\w+"
+
+# Set merge strategy
+--merge-strategy discovery-only
+
+# Update headers in-place
+--update-headers
+
+# Generate updated headers to directory
+--generate-headers /path/to/output
+```
+
+### Example Usage
+
+```bash
+# Basic usage with discovery
+cargo run -- -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "myschema_\\w+"
+
+# With config file
+cargo run -- -i sql/ -o output.sql --sql-config topcat.toml
+
+# Update headers in-place
+cargo run -- -i sql/ -o output.sql --enable-sql-discovery --update-headers
+
+# Generate updated headers to new directory
+cargo run -- -i sql/ -o output.sql --enable-sql-discovery --generate-headers /tmp/updated_sql
+```
+
+### Implementation Details
+
+#### Discovery Workflow
+
+1. `file_dag.rs:build_graph()` creates `SqlAnalyzer` if discovery enabled
+2. For each file, `perform_sql_discovery()` reads content and calls `analyzer.analyze()`
+3. Results stored in `FileNode.discovered_deps`
+4. `FileNode.merge_dependencies()` merges based on strategy
+5. Graph validation proceeds as normal
+
+#### Pattern Matching
+
+The analyzer uses configurable regex patterns:
+- Schema pattern matches schema names (e.g., `c_\w+`, `test_\w+`)
+- Dependency pattern matches `schema.object` references
+- Model generation patterns for procedure calls
+- Type cast patterns for `::TYPE` syntax
+
+#### Transformations
+
+Apply transformations to normalize object names:
+- Strip suffixes (e.g., `_or_ref`)
+- Map to extensions (e.g., `digest` → `pgcrypto`)
+- Custom type mappings (e.g., `TSTZRANGE` → `c_tmf.t_time_period`)
+
+### Testing
+
+SQL discovery features have comprehensive test coverage:
+- `sql_config.rs`: Configuration parsing and merging
+- `sql_parser.rs`: Pattern matching, DDL extraction, dependency discovery
+- `header_generator.rs`: Header generation and file updates
+- `file_node.rs`: Dependency merging with override mechanism
+
+All tests can be run with:
+```bash
+cargo test sql_  # Run SQL-related tests
+cargo test       # Run all tests
+```
+
+### Migration Path
+
+For existing projects:
+
+1. **Start with validation mode** to compare manual vs discovered dependencies:
+   ```bash
+   topcat --sql-config config.toml --merge-strategy validate
+   ```
+
+2. **Review warnings** about mismatches
+
+3. **Switch to discovery-only** once confident:
+   ```bash
+   topcat --sql-config config.toml --merge-strategy discovery-only
+   ```
+
+4. **Update headers** to remove manual dependencies:
+   ```bash
+   topcat --sql-config config.toml --update-headers
+   ```
+
+### Configuration Best Practices
+
+1. **Start simple**: Use CLI args for basic patterns
+2. **Graduate to TOML**: Move to config file as patterns become complex
+3. **Use override prefix**: Mark critical dependencies with `!` if needed
+4. **Test incremental**: Validate on subset before full codebase
+5. **Version control**: Commit config file with project

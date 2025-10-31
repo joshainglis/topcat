@@ -12,6 +12,7 @@ use petgraph::{Directed, Graph};
 
 use crate::exceptions::{FileNodeError, TopCatError};
 use crate::file_node::FileNode;
+use crate::sql_parser::SqlAnalyzer;
 use crate::stable_topo::StableTopo;
 use crate::{config, io_utils};
 
@@ -105,6 +106,54 @@ fn handle_file_node_error(e: FileNodeError) -> Result<(), TopCatError> {
             format!("Invalid layer '{layer}' declared"),
         )),
     }
+}
+
+/// Perform SQL discovery on a file node
+fn perform_sql_discovery(
+    file_node: &mut FileNode,
+    analyzer: &SqlAnalyzer,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Read the file content
+    let content = std::fs::read_to_string(&file_node.path)?;
+
+    // Analyze the SQL content
+    let analysis = analyzer.analyze(&content);
+
+    // Update the node name if discovered and not already set
+    if let Some(discovered_name) = analysis.node_name {
+        if file_node.name_source == crate::file_node::NameSource::Discovered
+            || file_node.name.is_empty()
+        {
+            debug!(
+                "Discovered node name: {} for file {:?}",
+                discovered_name, file_node.path
+            );
+            file_node.name = discovered_name;
+            file_node.name_source = crate::file_node::NameSource::Discovered;
+        }
+    }
+
+    // Remove self-dependencies and subobjects
+    let mut discovered_deps = analysis.dependencies;
+    discovered_deps.remove(&file_node.name);
+    for subobj in &analysis.subobjects {
+        discovered_deps.remove(subobj);
+    }
+
+    // Store the discovered dependencies
+    file_node.discovered_deps = Some(discovered_deps);
+
+    debug!(
+        "SQL discovery for {:?}: discovered {} dependencies",
+        file_node.path,
+        file_node
+            .discovered_deps
+            .as_ref()
+            .map(|d| d.len())
+            .unwrap_or(0)
+    );
+
+    Ok(())
 }
 
 fn add_nodes_to_graphs(
@@ -242,6 +291,7 @@ pub struct TCGraph {
     include_hidden: bool,
     graph_is_built: bool,
     subdir_filter: Option<PathBuf>,
+    sql_discovery: crate::sql_config::SqlDiscoveryConfig,
 }
 
 impl TCGraph {
@@ -287,6 +337,7 @@ impl TCGraph {
             include_hidden: config.include_hidden,
             graph_is_built: false,
             subdir_filter: config.subdir_filter.clone(),
+            sql_discovery: config.sql_discovery.clone(),
         }
     }
 
@@ -305,8 +356,19 @@ impl TCGraph {
             &self.exclude_extensions,
         );
 
+        // Create SQL analyzer if discovery is enabled
+        let sql_analyzer = if self.sql_discovery.enabled {
+            Some(
+                crate::sql_parser::SqlAnalyzer::new(self.sql_discovery.clone()).map_err(|e| {
+                    TopCatError::ConfigError(format!("Failed to create SQL analyzer: {e}"))
+                })?,
+            )
+        } else {
+            None
+        };
+
         for file in filtered_files {
-            let file_node = match FileNode::from_file(
+            let mut file_node = match FileNode::from_file(
                 &self.comment_str,
                 file,
                 &self.layers,
@@ -318,6 +380,19 @@ impl TCGraph {
                     continue;
                 }
             };
+
+            // Perform SQL discovery if enabled
+            if let Some(ref analyzer) = sql_analyzer {
+                match perform_sql_discovery(&mut file_node, analyzer) {
+                    Ok(_) => {
+                        // Merge discovered dependencies based on strategy
+                        file_node.merge_dependencies(self.sql_discovery.merge_strategy);
+                    }
+                    Err(e) => {
+                        info!("SQL discovery failed for {:?}: {}", file_node.path, e);
+                    }
+                }
+            }
 
             if let Some(other_path) = self.name_map.get(&file_node.name) {
                 return Err(TopCatError::NameClash(
@@ -399,6 +474,11 @@ impl TCGraph {
             &|_, (_, f)| format!("label=\"{}\"", f.name),
         );
         Ok(dot)
+    }
+
+    /// Get all file nodes from the graph
+    pub fn get_all_nodes(&self) -> Vec<FileNode> {
+        self.name_map.values().cloned().collect()
     }
 
     pub fn get_sorted_files(&self) -> Result<Vec<PathBuf>, TopCatError> {

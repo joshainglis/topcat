@@ -1,3 +1,4 @@
+use crate::sql_config::{HeaderUpdateMode, SqlDiscoveryConfig};
 use std::path::PathBuf;
 
 pub struct Config<'a> {
@@ -18,4 +19,8 @@ pub struct Config<'a> {
     pub subdir_filter: Option<PathBuf>,
     pub layers: Vec<String>,
     pub fallback_layer: String,
+    // SQL discovery configuration
+    pub sql_discovery: SqlDiscoveryConfig,
+    pub header_update_mode: HeaderUpdateMode,
+    pub header_output_dir: Option<PathBuf>,
 }

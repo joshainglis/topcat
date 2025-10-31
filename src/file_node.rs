@@ -44,6 +44,21 @@ pub struct FileNode {
     pub deps: HashSet<String>,
     pub layer: String,
     pub ensure_exists: HashSet<String>,
+    /// Dependencies discovered from SQL content analysis
+    pub discovered_deps: Option<HashSet<String>>,
+    /// Manual dependencies that should override discovered ones (marked with ! prefix)
+    pub override_deps: HashSet<String>,
+    /// Source of the node name (manual header vs discovered from SQL)
+    pub name_source: NameSource,
+}
+
+/// Source of node name
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameSource {
+    /// Name from file header
+    Header,
+    /// Name discovered from SQL CREATE statement
+    Discovered,
 }
 
 // Implementing PartialEq for equality comparisons
@@ -93,6 +108,9 @@ impl FileNode {
             deps,
             layer,
             ensure_exists,
+            discovered_deps: None,
+            override_deps: HashSet::new(),
+            name_source: NameSource::Header,
         }
     }
 
@@ -103,6 +121,23 @@ impl FileNode {
                 if !x.is_empty() { Some(x) } else { None }
             })
             .collect()
+    }
+
+    /// Split dependencies and identify which ones have the override prefix (!)
+    /// Returns (normal_deps, override_deps)
+    fn split_dependencies_with_overrides(line: &str) -> (Vec<String>, Vec<String>) {
+        let mut normal_deps = Vec::new();
+        let mut override_deps = Vec::new();
+
+        for item in Self::split_dependencies(line) {
+            if let Some(stripped) = item.strip_prefix('!') {
+                override_deps.push(stripped.to_string());
+            } else {
+                normal_deps.push(item);
+            }
+        }
+
+        (normal_deps, override_deps)
     }
     pub fn from_file(
         comment_str: &str,
@@ -124,6 +159,7 @@ impl FileNode {
         let mut deps = HashSet::new();
         let mut layer = fallback_layer.to_string();
         let mut ensure_exists = HashSet::new();
+        let mut override_deps = HashSet::new();
 
         for unprocessed_line in &file_data {
             let line = unprocessed_line.trim().to_lowercase();
@@ -138,15 +174,25 @@ impl FileNode {
                     ));
                 }
             } else if line.starts_with(&dep_str) {
-                // -- requires: tomato, potato orange -> ["tomato", "potato", "orange"]
-                // Should split on comma or space and then trim. Don't insert empty strings
-                for item in Self::split_dependencies(&line[dep_str.len()..]) {
+                // -- requires: tomato, !potato, orange -> normal: ["tomato", "orange"], override: ["potato"]
+                // Split dependencies with support for ! prefix
+                let (normal, overrides) =
+                    Self::split_dependencies_with_overrides(&line[dep_str.len()..]);
+                for item in normal {
                     deps.insert(item);
                 }
+                for item in overrides {
+                    override_deps.insert(item);
+                }
             } else if line.starts_with(&drop_str) {
-                // -- dropped_by: tomato, potato -> ["tomato", "potato"]
-                for item in Self::split_dependencies(&line[drop_str.len()..]) {
+                // -- dropped_by: tomato, !potato -> normal: ["tomato"], override: ["potato"]
+                let (normal, overrides) =
+                    Self::split_dependencies_with_overrides(&line[drop_str.len()..]);
+                for item in normal {
                     deps.insert(item);
+                }
+                for item in overrides {
+                    override_deps.insert(item);
                 }
             } else if line.starts_with(&layer_str) {
                 // -- layer: prepend -> "prepend"
@@ -176,13 +222,59 @@ impl FileNode {
             return Err(FileNodeError::InvalidLayer(path.clone(), layer));
         }
 
-        Ok(FileNode::new(
-            name,
-            path.clone(),
-            deps,
-            layer,
-            ensure_exists,
-        ))
+        let mut file_node = FileNode::new(name, path.clone(), deps, layer, ensure_exists);
+        file_node.override_deps = override_deps;
+        Ok(file_node)
+    }
+
+    /// Merge discovered dependencies with manual dependencies based on the strategy
+    pub fn merge_dependencies(&mut self, merge_strategy: crate::sql_config::MergeStrategy) {
+        use crate::sql_config::MergeStrategy;
+
+        let Some(ref discovered) = self.discovered_deps else {
+            // No discovered dependencies, nothing to merge
+            return;
+        };
+
+        match merge_strategy {
+            MergeStrategy::HeaderOnly => {
+                // Keep only manual dependencies
+            }
+            MergeStrategy::DiscoveryOnly => {
+                // Replace deps with discovered, but keep override_deps
+                self.deps = discovered.clone();
+                // Add back override deps
+                self.deps.extend(self.override_deps.clone());
+            }
+            MergeStrategy::Union => {
+                // Combine both
+                self.deps.extend(discovered.clone());
+            }
+            MergeStrategy::HeaderWithFallback => {
+                // If deps is empty (no manual deps), use discovered
+                if self.deps.is_empty() {
+                    self.deps = discovered.clone();
+                }
+                // Always add override deps
+                self.deps.extend(self.override_deps.clone());
+            }
+            MergeStrategy::Validate => {
+                // Check for discrepancies
+                let manual_only: HashSet<_> = self.deps.difference(discovered).collect();
+                let discovered_only: HashSet<_> = discovered.difference(&self.deps).collect();
+
+                if !manual_only.is_empty() || !discovered_only.is_empty() {
+                    log::warn!(
+                        "Dependency mismatch in {}: manual-only={:?}, discovered-only={:?}",
+                        self.path.display(),
+                        manual_only,
+                        discovered_only
+                    );
+                }
+                // For validate mode, we'll use union to include everything
+                self.deps.extend(discovered.clone());
+            }
+        }
     }
 }
 

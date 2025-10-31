@@ -14,6 +14,7 @@ pub enum TopCatError {
     MissingDependency(String, String),
     InvalidDependency(String, String),
     CyclicDependency(Vec<Vec<FileNode>>),
+    ConfigError(String),
     UnknownError(String),
 }
 
@@ -63,6 +64,7 @@ impl fmt::Display for TopCatError {
                 write!(f, "{error_message}")
             }
             Self::Io(err) => write!(f, "IO error: {err}"),
+            Self::ConfigError(s) => write!(f, "Configuration error: {s}"),
             Self::UnknownError(s) => write!(f, "UnknownError: {s}"),
         }
     }

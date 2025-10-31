@@ -15,8 +15,11 @@ mod exceptions;
 mod file_dag;
 mod file_node;
 mod fs;
+mod header_generator;
 mod io_utils;
 mod output;
+mod sql_config;
+mod sql_parser;
 mod stable_topo;
 
 #[derive(Debug, StructOpt)]
@@ -141,6 +144,48 @@ struct Opt {
         value_name = "LAYER"
     )]
     fallback_layer: Option<String>,
+
+    // SQL Discovery Options
+    #[structopt(
+        long = "enable-sql-discovery",
+        help = "Enable automatic dependency discovery from SQL content"
+    )]
+    enable_sql_discovery: bool,
+
+    #[structopt(
+        long = "sql-config",
+        help = "Path to TOML configuration file for SQL discovery patterns",
+        value_name = "FILE"
+    )]
+    sql_config_file: Option<PathBuf>,
+
+    #[structopt(
+        long = "schema-pattern",
+        help = "Regex pattern for matching schema names (e.g., '(?:schema1|schema2)_\\w+')",
+        value_name = "PATTERN"
+    )]
+    schema_pattern: Option<String>,
+
+    #[structopt(
+        long = "merge-strategy",
+        help = "How to merge discovered and manual dependencies [header-only|discovery-only|union|header-with-fallback|validate]",
+        value_name = "STRATEGY",
+        default_value = "discovery-only"
+    )]
+    merge_strategy: String,
+
+    #[structopt(
+        long = "update-headers",
+        help = "Update files in-place with discovered dependencies"
+    )]
+    update_headers: bool,
+
+    #[structopt(
+        long = "generate-headers",
+        help = "Generate files with updated headers in the specified directory",
+        value_name = "DIR"
+    )]
+    generate_headers_dir: Option<PathBuf>,
 }
 fn main() -> Result<(), TopCatError> {
     let opt = Opt::from_args();
@@ -149,6 +194,9 @@ fn main() -> Result<(), TopCatError> {
     } else {
         Builder::new().filter(None, LevelFilter::Info).init();
     }
+
+    // Load SQL discovery configuration early (before consuming opt fields)
+    let sql_discovery = load_sql_discovery_config(&opt)?;
 
     // Parse layers from CLI or use defaults
     let layers = if let Some(layers_str) = opt.layers {
@@ -173,13 +221,22 @@ fn main() -> Result<(), TopCatError> {
         std::process::exit(1);
     }
 
+    // Determine header update mode
+    let header_update_mode = if opt.update_headers {
+        sql_config::HeaderUpdateMode::InPlace
+    } else if opt.generate_headers_dir.is_some() {
+        sql_config::HeaderUpdateMode::Generate
+    } else {
+        sql_config::HeaderUpdateMode::Never
+    };
+
     let config = config::Config {
         input_dirs: opt.input_dirs,
         include_extensions: opt.include_file_extensions.as_deref(),
         exclude_extensions: opt.exclude_file_extensions.as_deref(),
         include_globs: opt.include_globs.as_deref(),
         exclude_globs: opt.exclude_globs.as_deref(),
-        output: opt.output,
+        output: opt.output.clone(),
         comment_str: opt.comment_str,
         file_separator_str: opt.file_separator_str,
         file_end_str: opt.ensure_each_file_ends_with_str,
@@ -191,6 +248,9 @@ fn main() -> Result<(), TopCatError> {
         subdir_filter: opt.subdir_filter,
         layers,
         fallback_layer,
+        sql_discovery,
+        header_update_mode,
+        header_output_dir: opt.generate_headers_dir,
     };
 
     let mut filedag = TCGraph::new(&config);
@@ -211,6 +271,18 @@ fn main() -> Result<(), TopCatError> {
         }
     }
 
+    // Update headers if requested
+    if config.header_update_mode != sql_config::HeaderUpdateMode::Never {
+        info!("Updating file headers...");
+        let file_nodes: Vec<_> = filedag.get_all_nodes();
+        header_generator::update_headers(
+            &file_nodes,
+            &config.comment_str,
+            config.header_update_mode,
+            config.header_output_dir.as_deref(),
+        )?;
+    }
+
     let result = output::generate(filedag, config, &mut fs::RealFileSystem);
 
     match result {
@@ -226,4 +298,37 @@ fn main() -> Result<(), TopCatError> {
     }
 
     Ok(())
+}
+
+/// Load SQL discovery configuration from file and CLI overrides
+fn load_sql_discovery_config(opt: &Opt) -> Result<sql_config::SqlDiscoveryConfig, TopCatError> {
+    // Start with file config if provided
+    let mut config = if let Some(ref config_path) = opt.sql_config_file {
+        match sql_config::TopcatConfig::from_file(config_path) {
+            Ok(cfg) => cfg.sql_discovery,
+            Err(e) => {
+                eprintln!("Warning: Failed to load SQL config file: {e}");
+                sql_config::SqlDiscoveryConfig::default()
+            }
+        }
+    } else {
+        sql_config::SqlDiscoveryConfig::default()
+    };
+
+    // Apply CLI overrides
+    if opt.enable_sql_discovery {
+        config.enabled = true;
+    }
+
+    if let Some(ref pattern) = opt.schema_pattern {
+        config.schema_pattern = Some(pattern.clone());
+    }
+
+    // Parse merge strategy
+    config.merge_strategy = opt
+        .merge_strategy
+        .parse()
+        .map_err(|e: String| TopCatError::ConfigError(e))?;
+
+    Ok(config)
 }
