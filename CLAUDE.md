@@ -1,356 +1,218 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with Topcat.
 
 ## Project Overview
 
-`topcat` is a Rust CLI tool for **topological concatenation of files**. It reads files with dependency metadata in header comments, builds a directed acyclic graph (DAG), performs topological sorting respecting layer constraints, and outputs a single concatenated file. The primary use case is SQL files where execution order matters.
+**Topcat** is a Rust CLI tool for **topological concatenation of files**. It reads files with dependency metadata in header comments, builds a directed acyclic graph (DAG), performs topological sorting respecting layer constraints, and outputs a single concatenated file.
 
-## Build and Development Commands
+Primary use case: Ordering SQL migration files where execution order matters based on dependencies.
 
-### Basic Commands
+## Quick Start
 
 ```bash
-# Build debug version
-cargo build
-
-# Build release version
+# Build and run
 cargo build --release
+cargo run -- -i input_dir/ -o output.sql
 
-# Run all tests
-cargo test
+# Basic usage
+topcat -i sql/ -o migrations.sql                    # Concatenate SQL files
+topcat -i sql/ -o migrations.sql --dry              # Preview output
+topcat -i sql/ -o migrations.sql -v                 # Verbose with DOT graph
 
-# Run a specific test
-cargo test test_name
-
-# Run tests with output
-cargo test -- --nocapture
-
-# Linting
-cargo clippy
-
-# Format code
-cargo fmt
-
-# Check formatting without modifying
-cargo fmt -- --check
+# With SQL dependency discovery
+topcat -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "myschema_\\w+"
 ```
 
-### Development Environment
-
-This project uses Nix flakes for reproducible development:
+## Development Commands
 
 ```bash
-# Enter development shell with all dependencies
-nix develop
-```
+# Development environment (Nix)
+nix develop                      # Enter dev shell with all dependencies
 
-The Nix environment includes:
-- Rust 1.88.0 stable with clippy, rustfmt, rust-src
-- rust-analyzer
-- Rust-Rover IDE support
+# Build & Test
+cargo build                      # Debug build
+cargo build --release            # Release build
+cargo test                       # Run all tests
+cargo test test_name             # Run specific test
+cargo clippy                     # Lint code
+cargo fmt                        # Format code
 
-### Testing the CLI
-
-```bash
-# Basic test
+# Run with test data
 cargo run -- -i tests/input/sql -o /tmp/output.sql
-
-# Dry run (print to stdout)
-cargo run -- -i tests/input/sql -o /tmp/output.sql --dry
-
-# Verbose mode (includes DOT graph output)
-cargo run -- -i tests/input/sql -o /tmp/output.sql -v
 ```
 
-## Architecture Overview
+## Architecture Summary
 
-### Module Structure
+### Core Modules
 
-- **main.rs** - CLI argument parsing (structopt), workflow orchestration, error handling
-- **file_node.rs** - `FileNode` struct representing individual files with dependency metadata (name, requires, dropped_by, exists, layer)
-- **file_dag.rs** - `TCGraph` manages the dependency graph, organized by layers (HashMap<String, DiGraph>), validates dependencies, detects cycles
-- **stable_topo.rs** - Custom DFS-based topological sort that produces deterministic output by respecting node weights (FileNode implements Ord)
-- **config.rs** - Configuration struct derived from CLI arguments
-- **output.rs** - Handles file writing and stdout output with separators/suffixes
-- **io_utils.rs** - File system traversal, glob matching, hidden file handling
-- **exceptions.rs** - Error types (TopCatError, FileNodeError)
+| Module | Purpose |
+|--------|---------|
+| `main.rs` | CLI parsing, workflow orchestration |
+| `file_node.rs` | File representation with metadata |
+| `file_dag.rs` | DAG management and validation |
+| `stable_topo.rs` | Deterministic topological sort |
+| `config.rs` | Configuration management |
+| `output.rs` | Output generation |
+| `io_utils.rs` | File system operations |
 
-### Key Architectural Concepts
+### Key Concepts
 
-#### Layer System
+#### File Metadata
 
-Files can be assigned to layers that enforce strict ordering constraints:
+Files include dependency metadata in header comments:
 
 ```sql
--- layer: prepend
+-- name: create_users_table
+-- requires: create_schema
 -- layer: normal
--- layer: append
+-- exists: extensions
+
+CREATE TABLE users (...);
 ```
 
-- Default layers: `prepend` → `normal` → `append`
-- Custom layers via `--layers first,second,third`
-- Files in lower-index layers **cannot** depend on files in higher-index layers
-- `--fallback-layer` specifies where files without explicit layer go (default: "normal")
-- Each layer has its own independent DAG in `TCGraph`
+#### Layers
 
-Implementation: `file_dag.rs:TCGraph` maintains `HashMap<String, DiGraph<NodeIndex, ()>>` where keys are layer names.
+Layers enforce ordering between groups of files:
+- Default: `prepend` → `normal` → `append`
+- Custom: `--layers first,second,third`
+- Files in earlier layers always precede later layers
 
-#### Dependency Types
+#### Dependencies
 
-- **Hard dependencies** (`requires`, `dropped_by`): Enforce topological ordering
-- **Soft dependencies** (`exists`): Ensure file inclusion without ordering constraints
-- **Layer constraints**: Implicit ordering between all files in different layers
+- **Hard** (`requires`, `dropped_by`): Enforce ordering
+- **Soft** (`exists`): Ensure inclusion without ordering
+- **Override** (`!prefix`): Force dependency retention
 
-#### Stable Topological Sort
+## Available Skills
 
-`stable_topo.rs` implements a custom DFS-based topological sort:
+Topcat includes specialized skills for detailed guidance:
 
-1. Nodes are sorted by weight before DFS traversal (FileNode implements Ord)
-2. Ensures deterministic output even with equivalent topological orderings
-3. Respects both explicit dependencies and layer constraints
+### 🔍 topcat-sql-discovery
+Comprehensive guide for automatic SQL dependency discovery:
+- Pattern-based dependency extraction
+- Configuration via CLI or TOML
+- Merge strategies for manual/automatic dependencies
+- Header generation and updates
+- Migration from manual to automatic discovery
 
-### Metadata Parsing
+### 🏗️ topcat-architecture
+Deep dive into implementation details:
+- Module responsibilities and interactions
+- Layer system implementation
+- Graph validation and cycle detection
+- Stable topological sort algorithm
+- Performance considerations
+- Extension points for customization
 
-Files must include header comments (format: `{comment_prefix} key: value1, value2`):
+### 🧪 topcat-testing
+Testing and debugging guidance:
+- Test organization and best practices
+- Running and writing tests
+- Debugging techniques with verbose mode
+- DOT graph visualization
+- Performance testing and profiling
 
-```sql
--- name: unique_identifier
--- requires: dependency1, dependency2
--- dropped_by: cleanup_task
--- layer: prepend
--- exists: soft_dependency
-```
+## Common Tasks
 
-Backward compatibility:
-- `-- is_initial` → maps to "prepend" layer
-- `-- is_final` → maps to "append" layer
+### Basic Concatenation
 
-Parsing implementation: `file_node.rs:FileNode::from_file()`
-
-## Testing
-
-Test files are organized by module:
-
-- `file_node.rs` - Header parsing, layer handling, dependency extraction
-- `io_utils.rs` - Directory walking, glob matching
-- `stable_topo.rs` - Topological sort correctness and stability
-- `output.rs` - File suffix handling
-
-When adding new features:
-
-1. Add unit tests in the relevant module
-2. Add integration test input files to `tests/input/`
-3. Use `tempfile` crate for temporary file testing
-
-## Important Implementation Notes
-
-### Cycle Detection
-
-The graph is validated for cycles using `graph-cycles` crate. Errors include the full cycle path for debugging.
-
-### Name Uniqueness
-
-All file nodes must have unique names across all layers. Duplicates cause validation errors.
-
-### Cross-Layer Dependencies
-
-If a file in layer N depends on a file in layer M where M > N, validation fails. Layers enforce a strict partial ordering.
-
-### Node Filtering
-
-Multiple filtering mechanisms:
-- Extension-based: `--include-exts`, `--exclude-exts`
-- Glob patterns: `--include-glob`, `--exclude-glob`
-- Name prefixes: `--include-prefix`, `--exclude-prefix`
-- Subdirectory filtering with dependency pulling: `--subdir-filter`
-
-When using `--subdir-filter`, dependencies outside the subdirectory are automatically included to maintain graph integrity.
-
-## Debugging
-
-Use `-v` flag to output:
-1. Debug logs via `env_logger`
-2. DOT format graph visualization (can be rendered with Graphviz)
-
-Example:
 ```bash
-cargo run -- -i input/ -o output.sql -v > debug.log 2>&1
+# Simple concatenation with default settings
+topcat -i sql/ -o output.sql
+
+# With custom layers
+topcat -i sql/ -o output.sql --layers "ddl,dml,indexes"
+
+# Filter by extension
+topcat -i migrations/ -o all.sql --include-exts sql,ddl
 ```
 
-## SQL Dependency Discovery
+### SQL Dependency Discovery
 
-**NEW**: Topcat now supports automatic dependency discovery from SQL content, eliminating the need for manual header maintenance.
+```bash
+# Enable discovery with pattern
+topcat -i sql/ -o output.sql \
+  --enable-sql-discovery \
+  --schema-pattern "app_\\w+"
 
-### Module Structure
+# Use config file
+topcat -i sql/ -o output.sql --sql-config topcat.toml
 
-- **sql_config.rs** - Configuration for SQL discovery (patterns, mappings, merge strategies)
-- **sql_parser.rs** - `SqlAnalyzer` that extracts dependencies from SQL content using regex patterns
-- **header_generator.rs** - Generates/updates file headers with discovered dependencies
+# Update headers in-place
+topcat -i sql/ -o output.sql \
+  --enable-sql-discovery \
+  --update-headers
+```
 
-### Key Features
+### Filtering
 
-#### Automatic Dependency Extraction
+```bash
+# By glob pattern
+topcat -i sql/ -o output.sql --include-glob "**/migrations/*.sql"
 
-The SQL analyzer can discover dependencies from:
-- **DDL Statements**: Extracts object names from CREATE/ALTER/DROP statements
-- **DML References**: Finds schema.object references in SELECT, JOIN, INSERT, UPDATE, DELETE
-- **Function Calls**: Detects function/procedure dependencies
-- **Type References**: Handles custom types and casts (e.g., `::TSTZRANGE`)
-- **Model Generation**: Special patterns for code generation procedures
+# By prefix
+topcat -i sql/ -o output.sql --include-prefix "v2_"
 
-#### Configuration
+# Subdirectory with dependency pulling
+topcat -i sql/ -o output.sql --subdir-filter "customer/"
+```
 
-Configure SQL discovery via:
-1. **CLI arguments** for simple cases
-2. **TOML config file** for complex patterns
+### Debugging
 
-Example TOML config (`topcat.toml`):
+```bash
+# Verbose output with graph
+topcat -i sql/ -o output.sql -v
+
+# Debug specific module
+RUST_LOG=topcat::file_dag=debug cargo run -- -i sql/ -o output.sql
+
+# Generate graph visualization
+topcat -i sql/ -o output.sql -v 2>&1 | \
+  grep "digraph" -A 1000 > graph.dot && \
+  dot -Tpng graph.dot -o graph.png
+```
+
+## Configuration
+
+### TOML Config Example
+
 ```toml
 [sql_discovery]
 enabled = true
-schema_pattern = "(?:test|e|c|d[pio]|codegen|md)_\\w+"
+schema_pattern = "(?:app|test)_\\w+"
 merge_strategy = "discovery-only"
 
 [[sql_discovery.type_mappings]]
-from = "TSTZRANGE"
-to = "c_tmf.t_time_period"
+from = "JSONB"
+to = "pg_catalog.jsonb"
 
 [[sql_discovery.extension_mappings]]
-object = "digest"
-extension = "pgcrypto"
+object = "uuid_generate_v4"
+extension = "uuid-ossp"
 ```
 
-#### Merge Strategies
+## Error Resolution
 
-Control how discovered dependencies combine with manual ones:
+| Error | Solution |
+|-------|----------|
+| Cycle detected | Check dependencies, use layers to break cycles |
+| Missing dependency | Ensure file exists or use `exists` for soft deps |
+| Cross-layer violation | Move file to appropriate layer |
+| Duplicate names | Ensure unique `name` metadata across files |
 
-- **discovery-only** (default): Replace manual dependencies with discovered ones
-- **header-only**: Ignore discovered dependencies, use only manual headers
-- **union**: Combine both manual and discovered dependencies
-- **header-with-fallback**: Use manual if present, otherwise use discovered
-- **validate**: Check for mismatches between manual and discovered
+## Best Practices
 
-#### Override Mechanism
+1. **Use meaningful names** in metadata that reflect the file's purpose
+2. **Leverage layers** for high-level ordering (DDL before DML)
+3. **Start with discovery** for SQL projects to avoid manual maintenance
+4. **Test incrementally** on subsets before processing entire codebases
+5. **Version control** your `topcat.toml` configuration
+6. **Use verbose mode** for debugging dependency issues
 
-Use `!` prefix to force a dependency to be kept even if not discovered:
+## Need More Details?
 
-```sql
--- name: my_table
--- requires: !special_dep, other_dep
-```
-
-The `!special_dep` will always be included even if not found in the SQL content.
-
-#### Header Generation
-
-Two modes for updating file headers:
-
-1. **In-place update** (`--update-headers`): Modifies files directly
-2. **Generate to directory** (`--generate-headers DIR`): Creates updated copies
-
-### CLI Arguments
-
-```bash
-# Enable SQL discovery
---enable-sql-discovery
-
-# Provide config file
---sql-config topcat.toml
-
-# Override schema pattern
---schema-pattern "(?:schema1|schema2)_\\w+"
-
-# Set merge strategy
---merge-strategy discovery-only
-
-# Update headers in-place
---update-headers
-
-# Generate updated headers to directory
---generate-headers /path/to/output
-```
-
-### Example Usage
-
-```bash
-# Basic usage with discovery
-cargo run -- -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "myschema_\\w+"
-
-# With config file
-cargo run -- -i sql/ -o output.sql --sql-config topcat.toml
-
-# Update headers in-place
-cargo run -- -i sql/ -o output.sql --enable-sql-discovery --update-headers
-
-# Generate updated headers to new directory
-cargo run -- -i sql/ -o output.sql --enable-sql-discovery --generate-headers /tmp/updated_sql
-```
-
-### Implementation Details
-
-#### Discovery Workflow
-
-1. `file_dag.rs:build_graph()` creates `SqlAnalyzer` if discovery enabled
-2. For each file, `perform_sql_discovery()` reads content and calls `analyzer.analyze()`
-3. Results stored in `FileNode.discovered_deps`
-4. `FileNode.merge_dependencies()` merges based on strategy
-5. Graph validation proceeds as normal
-
-#### Pattern Matching
-
-The analyzer uses configurable regex patterns:
-- Schema pattern matches schema names (e.g., `c_\w+`, `test_\w+`)
-- Dependency pattern matches `schema.object` references
-- Model generation patterns for procedure calls
-- Type cast patterns for `::TYPE` syntax
-
-#### Transformations
-
-Apply transformations to normalize object names:
-- Strip suffixes (e.g., `_or_ref`)
-- Map to extensions (e.g., `digest` → `pgcrypto`)
-- Custom type mappings (e.g., `TSTZRANGE` → `c_tmf.t_time_period`)
-
-### Testing
-
-SQL discovery features have comprehensive test coverage:
-- `sql_config.rs`: Configuration parsing and merging
-- `sql_parser.rs`: Pattern matching, DDL extraction, dependency discovery
-- `header_generator.rs`: Header generation and file updates
-- `file_node.rs`: Dependency merging with override mechanism
-
-All tests can be run with:
-```bash
-cargo test sql_  # Run SQL-related tests
-cargo test       # Run all tests
-```
-
-### Migration Path
-
-For existing projects:
-
-1. **Start with validation mode** to compare manual vs discovered dependencies:
-   ```bash
-   topcat --sql-config config.toml --merge-strategy validate
-   ```
-
-2. **Review warnings** about mismatches
-
-3. **Switch to discovery-only** once confident:
-   ```bash
-   topcat --sql-config config.toml --merge-strategy discovery-only
-   ```
-
-4. **Update headers** to remove manual dependencies:
-   ```bash
-   topcat --sql-config config.toml --update-headers
-   ```
-
-### Configuration Best Practices
-
-1. **Start simple**: Use CLI args for basic patterns
-2. **Graduate to TOML**: Move to config file as patterns become complex
-3. **Use override prefix**: Mark critical dependencies with `!` if needed
-4. **Test incremental**: Validate on subset before full codebase
-5. **Version control**: Commit config file with project
+Load the appropriate skill for in-depth information:
+- **SQL Discovery**: Details on automatic dependency extraction
+- **Architecture**: Implementation details and internals
+- **Testing**: Comprehensive testing and debugging guide
