@@ -19,6 +19,8 @@ enum Commands {
     Concat(commands::concat::ConcatArgs),
     /// Analyze dependency structure and find cleanup candidates
     Analyze(commands::analyze::AnalyzeArgs),
+    /// Remove unused files based on dependency analysis
+    Clean(commands::clean::CleanArgs),
 }
 
 fn main() -> Result<(), TopCatError> {
@@ -27,5 +29,6 @@ fn main() -> Result<(), TopCatError> {
     match cli.command {
         Commands::Concat(args) => args.execute(),
         Commands::Analyze(args) => args.execute(),
+        Commands::Clean(args) => args.execute(),
     }
 }

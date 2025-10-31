@@ -1,83 +1,79 @@
 # Quick Pickup Guide for Next Session
 
 ## TL;DR Status
-- ✅ **Phase 1, 2 & 2.5 COMPLETE**: All analysis features working perfectly with root node protection!
-- ✅ **All Tests Passing**: 52/52 tests (36 unit + 16 integration)
-- 🎯 **Next Task**: Implement Phase 3 - Cleanup Operations (File Deletion)
+- ✅ **Phases 1, 2, 2.5 & 3 COMPLETE**: Full analysis and cleanup operations working perfectly!
+- ✅ **All Tests Passing**: 63/63 tests (36 unit + 16 analysis + 11 clean)
+- ✅ **Zero Clippy Warnings**: Clean, production-ready code
+- 🎯 **Next Task**: Implement Phase 4 - Comprehensive Analysis Commands
 
 ## What Just Happened
 
-### Major Win: Root Nodes Feature Complete! 🎉
-Phase 2.5 successfully implemented comprehensive root node protection with 4 pattern matching methods:
-- Exact node names (`--root-nodes`)
-- Glob patterns (`--root-pattern`)
-- Regex patterns (`--root-regex`)
-- Directory-based (`--root-dir`)
+### Major Win: Phase 3 Cleanup Operations Complete! 🎉
 
-**All 52 tests passing!** Zero clippy warnings. Production-ready.
+Successfully implemented safe file deletion with comprehensive safety features:
 
-### Phase 2.5 Complete Summary
-All root node protection features are fully implemented and tested:
-- ✅ `RootNodeMatcher` struct with 4 pattern types
-- ✅ CLI arguments for all pattern types
-- ✅ Config file support (`topcat.toml` with `[analysis]` section)
-- ✅ CLI + config merging
-- ✅ Integration with `find_dead_branches()` algorithm
-- ✅ 11 unit tests + 6 integration tests
-- ✅ All existing tests updated
-- ✅ Zero clippy warnings
+**All 4 cleanup subcommands working:**
+- `clean dead-branches` - Remove complete dead subtrees
+- `clean orphans` - Remove isolated files
+- `clean unrequired` - Remove files not required by others
+- `clean targets <files>` - Remove specific files with dependency checking
 
-**Benefits Delivered**:
-- Production safety: Critical entry points can never be accidentally deleted
-- Flexible configuration: Multiple pattern types for different use cases
-- Version control: Config file can be committed to repository
-- Better testing: Realistic scenarios with protected nodes
+**Safety features implemented:**
+- ✅ Dry-run by default (must use `--no-dry-run` to delete)
+- ✅ Interactive confirmation prompts (unless `--force`)
+- ✅ Root node protection (respects all 4 pattern types)
+- ✅ External usage checking integration
+- ✅ Dependency validation (prevents breaking deletions)
+- ✅ Preview tables before deletion
+- ✅ Robust error handling with partial failure support
 
-## Next Priority: Phase 3 - Cleanup Operations 🎯
+**Implementation stats:**
+- Created `src/commands/clean.rs` (750 lines)
+- Added 11 comprehensive integration tests (`tests/clean_tests.rs`, 430 lines)
+- Made `build_dependents_map()` public for cleanup operations
+- All 63 tests passing
+- Zero clippy warnings
 
-**Goal**: Implement safe file deletion with dependency awareness
+## Next Priority: Phase 4 - Comprehensive Analysis 🎯
 
-### The Need
-Currently topcat can ANALYZE dead branches, but cannot DELETE them. Phase 3 adds the ability to safely remove dead files with:
-- Dry-run preview
-- Confirmation prompts
-- Force mode for automation
-- Dependency tree visualization before deletion
+**Goal**: Add remaining analysis commands that were deferred from Phase 2
+
+### Why Phase 4 Now?
+
+Phase 2 implemented `analyze dead-branches` as the priority feature. Now that we have both analysis AND cleanup working, we should complete the analysis suite with the remaining commands that users will need.
 
 ### Implementation Tasks
 
-See `IMPLEMENTATION_PLAN.md` Phase 3 for full task list. Key steps:
+See `IMPLEMENTATION_PLAN.md` Phase 4 for full task list. Key commands to implement:
 
-1. **Create `clean` subcommand structure**
-   - Add `CleanCommand` enum
-   - Add `CleanArgs` struct with subcommands
-   - Integrate into main CLI
+#### Already Implemented (from Phase 2)
+- ✅ `analyze dead-branches`
+- ✅ `analyze orphans`
+- ✅ `analyze unrequired`
+- ✅ `analyze leaf-nodes`
+- ✅ `analyze root-nodes`
 
-2. **Implement `clean dead-branches`**
-   - Add `--dry-run` flag (default: true for safety)
-   - Add `--force` flag to skip confirmation
-   - Show dependency tree visualization
-   - Implement confirmation prompt
-   - Safe file deletion with error handling
+#### Still To Implement
+1. **`analyze cycles`** - Enhanced cycle detection with clear reporting
+   - Show the cycle participants
+   - Show the edges that form the cycle
+   - Help users understand how to break the cycle
 
-3. **Add supporting commands**
-   - `clean unrequired` - Remove unrequired files
-   - `clean orphans` - Remove orphan files
-   - `clean targets <files>` - Remove specific files with dependency checking
+2. **`analyze missing`** - Report missing dependencies
+   - Files that are referenced but don't exist
+   - Helps identify broken dependencies
+   - Could suggest similar file names
 
-4. **Safety Features**
-   - Always show what will be deleted before deletion
-   - Require explicit confirmation (unless `--force`)
-   - Support dry-run mode (show only, don't delete)
-   - Detailed error handling and recovery
-   - Summary of deleted files
+3. **`analyze file <path>`** - Single file analysis
+   - Show all dependencies (direct and transitive)
+   - Show all dependents (what depends on this file)
+   - Show layer information
+   - Show if it's in a dead branch
 
-5. **Testing**
-   - Unit tests for file deletion logic
-   - Integration tests with TempDir
-   - Test dry-run mode
-   - Test confirmation flow
-   - Test error scenarios
+4. **Enhanced Output**
+   - Add progress bars for long operations (already have `indicatif`)
+   - Add `--quiet` mode for scripting
+   - Improve verbose output with more details
 
 ### Quick Start Commands
 
@@ -85,51 +81,83 @@ See `IMPLEMENTATION_PLAN.md` Phase 3 for full task list. Key steps:
 # Build and test
 cargo build
 cargo test --lib --tests
+cargo clippy --all-targets
 
-# Test existing features
+# Test existing functionality
 ./target/debug/topcat analyze -i tests/input/sql -e sql dead-branches
-./target/debug/topcat analyze -i tests/input/sql -e sql \
-  --root-nodes my_other_schema.c \
-  dead-branches
+./target/debug/topcat clean -i tests/input/sql -e sql dead-branches
 
-# After implementing Phase 3:
-./target/debug/topcat clean dead-branches -i tests/input/sql -e sql --dry-run
-./target/debug/topcat clean dead-branches -i tests/input/sql -e sql --force
+# After implementing Phase 4:
+./target/debug/topcat analyze -i tests/input/sql -e sql cycles
+./target/debug/topcat analyze -i tests/input/sql -e sql missing
+./target/debug/topcat analyze -i tests/input/sql -e sql file tests/input/sql/my_schema/schema.sql
 ```
 
 ## Key Files Reference
 
-- **`IMPLEMENTATION_PLAN.md`** - Phase 3 has the task breakdown
-- **`STATUS.md`** - Updated with Phase 2.5 completion
-- **`ROOT_NODES_DESIGN.md`** - Complete spec for implemented root nodes feature
-- **`src/commands/analyze.rs`** - Reference for command structure
+- **`IMPLEMENTATION_PLAN.md`** - Phase 4 has the detailed task breakdown
+- **`STATUS.md`** - Updated with Phase 3 completion
+- **`src/commands/analyze.rs`** - Where to add new analysis commands (605 lines)
 - **`src/analysis/mod.rs`** - Where analysis algorithms live
+- **`src/file_dag.rs`** - Core graph structure and cycle detection
 - **`tests/analysis_tests.rs`** - Integration test patterns to follow
 
 ## Important Context
 
-### Root Nodes Feature (Just Completed)
-The root nodes feature allows protecting critical entry points from deletion:
+### Analysis Command Structure (from Phases 2 & 2.5)
 
-```bash
-# Protect specific nodes
-topcat analyze -i sql/ -e sql --root-nodes api_main dead-branches
+The analyze command follows this pattern:
 
-# Protect using patterns
-topcat analyze -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches
+```rust
+#[derive(Debug, Subcommand)]
+enum AnalyzeCommand {
+    DeadBranches,  // ✅ Implemented
+    Orphans,       // ✅ Implemented
+    Unrequired,    // ✅ Implemented
+    LeafNodes,     // ✅ Implemented
+    RootNodes,     // ✅ Implemented
+    Cycles,        // 🎯 To implement
+    Missing,       // 🎯 To implement
+    File { path: PathBuf },  // 🎯 To implement
+}
 
-# Config file support
-[analysis]
-root_nodes = ["api_main", "worker_main"]
-root_patterns = ["**/api/*.sql"]
-root_regex = ["^api_.*"]
-root_dirs = ["sql/entry_points/"]
+impl AnalyzeArgs {
+    pub fn execute(&self) -> Result<(), TopCatError> {
+        // 1. Build graph
+        // 2. Setup external checker (optional)
+        // 3. Build root matcher (optional)
+        // 4. Route to specific command handler
+        match &self.command {
+            AnalyzeCommand::Cycles => self.analyze_cycles(&graph),
+            AnalyzeCommand::Missing => self.analyze_missing(&graph),
+            AnalyzeCommand::File { path } => self.analyze_file(&graph, path),
+            // ...
+        }
+    }
+}
 ```
 
-This will be critical for Phase 3 - we must respect root nodes when deleting!
+### Cycle Detection (Already Exists!)
+
+Topcat already has cycle detection in `src/file_dag.rs`:
+
+```rust
+pub fn get_sorted_files(&self) -> Result<Vec<PathBuf>, TopCatError> {
+    // Calls check_cycles() internally
+    // Returns TopCatError::CyclicDependency if cycles found
+}
+
+fn check_cycles(&self) -> Result<(), TopCatError> {
+    // Uses tarjan_scc to find strongly connected components
+    // Already formats nice error messages!
+}
+```
+
+**Task**: Expose this as an `analyze cycles` command instead of only during concat operations.
 
 ### Testing with TempDir
-Remember: `TempDir` creates hidden directories (`.tmpXXXX`), so tests must set `include_hidden: true` in Config.
+
+Remember: `TempDir` creates hidden directories (`.tmpXXXX`), so tests must set `include_hidden: true` in Config!
 
 ```rust
 let config = Config {
@@ -138,21 +166,29 @@ let config = Config {
 };
 ```
 
-### Clean Command Design Principles
+## Phase 4 Implementation Strategy
 
-1. **Safety First**: Dry-run should be default behavior
-2. **Clear Communication**: Always show what will happen before doing it
-3. **Respect Root Nodes**: Never delete protected entry points
-4. **Atomic Operations**: Either delete all or none (for consistency)
-5. **Detailed Feedback**: Show what was deleted, what failed, and why
+### 1. Cycles Command (Easiest)
+- Most of the work is already done in `file_dag.rs`
+- Just need to call `check_cycles()` and format the output
+- Can reuse existing error formatting from `TopCatError::CyclicDependency`
 
-## After Phase 3: Future Phases
+### 2. Missing Dependencies Command (Medium)
+- Need to identify nodes referenced in `requires:` that don't exist in graph
+- Already tracked during graph building (see `MissingDependency` error)
+- Collect and report instead of erroring
 
-### Phase 4: Comprehensive Analysis
-- Enhanced analysis commands
-- Cycle detection improvements
-- Missing dependency reporting
-- Single file analysis
+### 3. Single File Analysis (Medium)
+- Use existing graph traversal methods
+- Show: dependencies (transitive), dependents (reverse lookup), layer, dead branch status
+- Good UX feature for understanding specific files
+
+### 4. Enhanced Output (Polish)
+- Progress bars for operations that take time
+- `--quiet` flag to suppress output (just return exit code)
+- Better verbose output with timing information
+
+## After Phase 4: Future Phases
 
 ### Phase 5: Schema Analysis
 - Schema extraction and filtering
@@ -167,7 +203,7 @@ let config = Config {
 
 ### Phase 7: Configuration & Polish
 - Auto-discovery of `.topcat.toml`
-- Shell completions
+- Shell completions (bash, zsh, fish)
 - Man pages
 - Performance optimizations
 
@@ -179,23 +215,35 @@ let config = Config {
 
 ## Success Criteria
 
-Phase 3 is complete when:
-1. ✅ `topcat clean dead-branches` command works
-2. ✅ Dry-run mode shows preview without deleting
-3. ✅ Force mode skips confirmation
-4. ✅ Interactive mode prompts for confirmation
-5. ✅ Root nodes are respected (protected files never deleted)
-6. ✅ Error handling is robust
-7. ✅ All tests pass (expect 60+ tests after Phase 3)
-8. ✅ `cargo clippy` passes
-9. ✅ Manual testing confirms safe deletion
-10. ✅ Integration tests cover deletion scenarios
+Phase 4 is complete when:
+1. ✅ `analyze cycles` command works and shows clear cycle information
+2. ✅ `analyze missing` command reports missing dependencies
+3. ✅ `analyze file <path>` command shows comprehensive single-file analysis
+4. ✅ Progress bars work for long operations
+5. ✅ `--quiet` mode suppresses output appropriately
+6. ✅ All tests pass (expect 70+ tests after Phase 4)
+7. ✅ `cargo clippy` passes with zero warnings
+8. ✅ Manual testing confirms all new commands work correctly
+9. ✅ Integration tests cover new analysis types
+10. ✅ Documentation updated
+
+## Current Test Stats
+
+```
+✅ All 63 tests passing
+   - 36 unit tests
+   - 16 analysis integration tests
+   - 11 clean integration tests
+
+✅ Zero clippy warnings
+✅ Clean build
+```
 
 ## Useful Debug Commands
 
 ```bash
 # Run specific test
-cargo test --test analysis_tests test_dead_branches_simple -- --nocapture
+cargo test --test analysis_tests test_cycles -- --nocapture
 
 # Run all integration tests
 cargo test --test analysis_tests
@@ -207,18 +255,67 @@ cargo test --lib --tests
 cargo clippy --all-targets
 
 # Build and test analyze command
-cargo build && ./target/debug/topcat analyze -i tests/input/sql -e sql dead-branches
+cargo build && ./target/debug/topcat analyze -i tests/input/sql -e sql cycles
 
-# Build and test clean command (after implementation)
-cargo build && ./target/debug/topcat clean dead-branches -i tests/input/sql -e sql --dry-run
+# Build and test clean command
+cargo build && ./target/debug/topcat clean -i tests/input/sql -e sql dead-branches
 ```
+
+## Phase 4 Specific Notes
+
+### Cycles Command Implementation Hints
+
+The cycle detection already exists and produces excellent error messages. Example from existing code:
+
+```
+Cyclic dependency detected:
+  Cycle 1:
+    Participants:
+      - node_a (path/to/a.sql)
+      - node_b (path/to/b.sql)
+      - node_c (path/to/c.sql)
+    Edges:
+      - node_a -> node_b
+      - node_b -> node_c
+      - node_c -> node_a
+```
+
+**Implementation approach:**
+1. Call graph building (may fail with CyclicDependency error)
+2. Catch the error and extract cycle information
+3. Format as a table using `comfy-table`
+4. Show helpful suggestions for breaking cycles
+
+### Missing Dependencies Implementation Hints
+
+Currently, missing dependencies cause graph building to fail. We need to:
+1. Modify graph building to collect missing deps instead of failing
+2. Store them in a separate collection
+3. Report them in `analyze missing` command
+
+Or alternatively:
+1. Try to build graph, catch MissingDependency errors
+2. Collect all missing references
+3. Format as a table
+
+### Single File Analysis Implementation Hints
+
+For a given file path:
+1. Find the node in the graph
+2. Get its dependencies (direct from node.deps)
+3. Get transitive dependencies (follow the graph)
+4. Get dependents (use `build_dependents_map()`)
+5. Get transitive dependents (reverse follow)
+6. Check if in dead branches
+7. Show layer information
+8. Format everything nicely
 
 ## Contact/Handoff Info
 
 - All code compiles cleanly
-- All 52 tests passing
-- Phase 1, 2, and 2.5 are production-ready
-- Root nodes feature provides essential safety for production use
-- IMPLEMENTATION_PLAN.md Phase 3 has everything needed for next implementation
+- All 63 tests passing
+- Phases 1, 2, 2.5, and 3 are production-ready
+- Clean command provides safe deletion with comprehensive safety features
+- IMPLEMENTATION_PLAN.md Phase 4 has everything needed for next implementation
 
-Good luck! The foundation is solid. Phase 3 brings the actual cleanup capability! 🚀
+Good luck! Phase 4 completes the analysis suite! 🚀

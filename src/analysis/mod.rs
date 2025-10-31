@@ -150,7 +150,7 @@ impl GraphAnalyzer for TCGraph {
 impl TCGraph {
     /// Build a reverse dependency map: for each node, list all nodes that depend on it
     /// This is the "dependents" relationship (opposite of "dependencies")
-    fn build_dependents_map(&self) -> HashMap<String, HashSet<String>> {
+    pub fn build_dependents_map(&self) -> HashMap<String, HashSet<String>> {
         let mut dependents: HashMap<String, HashSet<String>> = HashMap::new();
         let all_nodes = self.get_all_nodes();
 

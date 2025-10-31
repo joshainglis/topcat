@@ -1,8 +1,8 @@
 # Topcat Dependency Analysis - Implementation Status
 
 **Date**: 2025-10-31
-**Session**: Phase 1, 2, & 2.5 Implementation Complete
-**Status**: Phase 1 ✅ Complete, Phase 2 ✅ Complete, Phase 2.5 ✅ Complete (All 52 Tests Passing!)
+**Session**: Phase 1, 2, 2.5, & 3 Implementation Complete
+**Status**: Phase 1 ✅ Complete, Phase 2 ✅ Complete, Phase 2.5 ✅ Complete, Phase 3 ✅ Complete (All 63 Tests Passing!)
 
 ## What's Been Completed
 
@@ -171,6 +171,114 @@ root_dirs = ["sql/entry_points/", "sql/migrations/"]
 - ✅ **Version Control**: Config file can be committed to repository
 - ✅ **Better Testing**: Tests can create realistic scenarios with protected entry points
 - ✅ **Complementary**: Works seamlessly with `--external-check-dir` for maximum accuracy
+
+### Phase 3: Cleanup Operations ✅ (Safe File Deletion)
+**COMPLETE!** Successfully implemented safe file deletion with comprehensive dependency awareness and protection features.
+
+#### The Goal
+Enable users to actually DELETE dead files identified by analysis, not just view them. Must be safe, reversible (via dry-run), and respect all protection mechanisms (root nodes, external usage).
+
+#### Implementation Completed
+Created complete `clean` command with **4 deletion subcommands**:
+
+1. **`clean dead-branches`** - Remove complete dead subtrees
+   ```bash
+   topcat clean -i sql/ -e sql dead-branches --no-dry-run
+   ```
+
+2. **`clean orphans`** - Remove isolated files with no connections
+   ```bash
+   topcat clean -i sql/ -e sql orphans --no-dry-run
+   ```
+
+3. **`clean unrequired`** - Remove files not required by others
+   ```bash
+   topcat clean -i sql/ -e sql unrequired --no-dry-run
+   ```
+
+4. **`clean targets <files>`** - Remove specific files with dependency checking
+   ```bash
+   topcat clean -i sql/ -e sql targets "old_*.sql" --no-dry-run
+   ```
+
+#### Safety Features Implemented
+All cleanup operations include comprehensive safety mechanisms:
+
+1. **Dry-run by Default** - Must explicitly use `--no-dry-run` to actually delete
+2. **Confirmation Prompts** - Interactive "Are you sure?" unless `--force` is set
+3. **Root Node Protection** - Respects all 4 root node pattern types from Phase 2.5
+4. **External Usage Checking** - Filters out files referenced in external code
+5. **Dependency Validation** - Prevents deletion of files still required by others
+6. **Error Handling** - Robust error reporting with partial failure support
+7. **Preview Tables** - Shows exactly which files will be deleted before deletion
+
+#### Example Workflows
+
+**Basic cleanup with safety checks**:
+```bash
+# Preview what would be deleted
+topcat clean -i sql/ -e sql dead-branches
+
+# Actually delete with confirmation
+topcat clean -i sql/ -e sql dead-branches --no-dry-run
+
+# Delete without confirmation (CI/automation)
+topcat clean -i sql/ -e sql orphans --no-dry-run --force
+```
+
+**With protection**:
+```bash
+# Protect critical entry points
+topcat clean -i sql/ -e sql --root-nodes api_main dead-branches --no-dry-run
+
+# Use pattern protection
+topcat clean -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches --no-dry-run
+
+# Check external usage before deletion
+topcat clean -i sql/ -e sql \
+  --external-check-dir src/ \
+  --external-check-pattern "*.py" \
+  dead-branches --no-dry-run
+```
+
+#### Files Created/Modified
+**New Files**:
+- **`src/commands/clean.rs`** (750 lines) - Complete clean command implementation
+  - All 4 cleanup subcommands
+  - Dry-run mode, confirmation prompts, force mode
+  - Integration with root node protection
+  - Integration with external usage checking
+  - Comprehensive error handling
+
+- **`tests/clean_tests.rs`** (430 lines) - 11 comprehensive integration tests
+  - Test all cleanup subcommands
+  - Test root node protection during deletion
+  - Test dependency validation (prevents breaking deletions)
+  - Test error handling and partial failures
+  - Test glob pattern protection
+  - Test public API (`build_dependents_map`)
+
+**Modified Files**:
+- **`src/main.rs`** - Added `Clean` variant to `Commands` enum
+- **`src/commands/mod.rs`** - Exported clean module
+- **`src/analysis/mod.rs`** - Made `build_dependents_map()` public for cleanup operations
+
+#### Test Results (Phase 3)
+- ✅ **All 63 tests passing** (36 unit + 16 analysis + 11 clean)
+- ✅ 11 new integration tests for cleanup operations
+- ✅ Tests cover dry-run, deletion, force mode, root protection, error handling
+- ✅ Zero clippy warnings
+- ✅ Clean build
+- ✅ Manual testing confirms safe deletion behavior
+
+#### Benefits Delivered
+- ✅ **Safe Deletion**: Dry-run by default prevents accidental data loss
+- ✅ **User Control**: Interactive confirmation puts user in control
+- ✅ **Automation Ready**: `--force` mode enables CI/CD integration
+- ✅ **Comprehensive Protection**: Respects root nodes and external usage
+- ✅ **Clear Communication**: Preview tables show exactly what will be deleted
+- ✅ **Robust Error Handling**: Reports failures, continues with remaining files
+- ✅ **Production Ready**: All safety mechanisms tested and verified
 
 ## Common Mistakes & Lessons Learned
 

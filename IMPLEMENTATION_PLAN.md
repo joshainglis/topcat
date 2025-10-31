@@ -173,27 +173,38 @@ The integration tests were failing because `TempDir` creates directories startin
 - ✅ Config file support: Project-specific protection rules can be version controlled
 - ✅ Complementary to external checking: Works alongside `--external-check-dir`
 
-### Phase 3: Cleanup Operations
+### Phase 3: Cleanup Operations ✅ COMPLETE
 **Goal**: Implement safe file deletion with dependency awareness
 
 **Tasks**:
-- [ ] Implement `clean` subcommand structure
-- [ ] Add `clean dead-branches` with dry-run support
-- [ ] Add `clean unrequired` command
-- [ ] Add `clean orphans` command
-- [ ] Add `clean targets <files>` for specific files
-- [ ] Implement dependency tree visualization before deletion
-- [ ] Add force/confirmation prompts
-- [ ] Add file deletion with error handling
-- [ ] Show affected files summary
-- [ ] Run `cargo clippy --all-targets`
+- ✅ Implement `clean` subcommand structure
+- ✅ Add `clean dead-branches` with dry-run support
+- ✅ Add `clean unrequired` command
+- ✅ Add `clean orphans` command
+- ✅ Add `clean targets <files>` for specific files
+- ✅ Implement dependency tree visualization before deletion
+- ✅ Add force/confirmation prompts
+- ✅ Add file deletion with error handling
+- ✅ Show affected files summary
+- ✅ Run `cargo clippy --all-targets`
 
 **Tests**:
-- [ ] Test dry-run mode
-- [ ] Test deletion with dependencies
-- [ ] Test force deletion
-- [ ] Test error recovery
-- [ ] Integration tests with temp directories
+- ✅ Test dry-run mode
+- ✅ Test deletion with dependencies
+- ✅ Test force deletion
+- ✅ Test error recovery
+- ✅ Integration tests with temp directories
+
+**Implementation Summary**:
+- Created `src/commands/clean.rs` (750 lines) with full cleanup functionality
+- Added 11 comprehensive integration tests in `tests/clean_tests.rs`
+- Made `build_dependents_map()` public for cleanup operations
+- All 63 tests passing (36 unit + 16 analysis + 11 clean)
+- Zero clippy warnings
+- Dry-run mode by default for safety
+- Respects root node protection from Phase 2.5
+- Supports external usage checking
+- Interactive confirmation prompts with --force override
 
 ### Phase 4: Comprehensive Analysis
 **Goal**: Add all analysis subcommands
