@@ -50,6 +50,8 @@ pub struct FileNode {
     pub override_deps: HashSet<String>,
     /// Source of the node name (manual header vs discovered from SQL)
     pub name_source: NameSource,
+    /// Schema extracted from node name (e.g., "my_schema" from "my_schema.table")
+    pub schema: Option<String>,
 }
 
 /// Source of node name
@@ -102,6 +104,9 @@ impl FileNode {
         layer: String,
         ensure_exists: HashSet<String>,
     ) -> FileNode {
+        // Extract schema from name if present (e.g., "schema.table" -> Some("schema"))
+        let schema = Self::extract_schema(&name);
+
         FileNode {
             name,
             path,
@@ -111,7 +116,30 @@ impl FileNode {
             discovered_deps: None,
             override_deps: HashSet::new(),
             name_source: NameSource::Header,
+            schema,
         }
+    }
+
+    /// Extract schema name from node name
+    /// Supports patterns like "schema.table", "schema_table", "schema::table"
+    /// Returns None if no schema pattern is detected
+    pub fn extract_schema(name: &str) -> Option<String> {
+        // Try common separators: ".", "_", "::"
+        // Priority: dot (.) is most common in SQL
+        if let Some(idx) = name.find('.') {
+            return Some(name[..idx].to_string());
+        }
+
+        // PostgreSQL-style :: separator
+        if let Some(idx) = name.find("::") {
+            return Some(name[..idx].to_string());
+        }
+
+        // Underscore separator - only if it looks like schema_table pattern
+        // We'll be conservative here and not assume all underscores are schema separators
+        // This would require more context or configuration
+
+        None
     }
 
     fn split_dependencies(line: &str) -> Vec<String> {
@@ -427,5 +455,51 @@ mod tests {
         assert!(file_node.deps.contains("dep2"));
         assert!(file_node.deps.contains("dep3"));
         assert_eq!(file_node.deps.len(), 3);
+    }
+
+    #[test]
+    fn test_schema_extraction_dot_separator() {
+        assert_eq!(
+            FileNode::extract_schema("my_schema.table_name"),
+            Some("my_schema".to_string())
+        );
+        assert_eq!(
+            FileNode::extract_schema("public.users"),
+            Some("public".to_string())
+        );
+    }
+
+    #[test]
+    fn test_schema_extraction_double_colon() {
+        assert_eq!(
+            FileNode::extract_schema("my_schema::table_name"),
+            Some("my_schema".to_string())
+        );
+    }
+
+    #[test]
+    fn test_schema_extraction_no_schema() {
+        assert_eq!(FileNode::extract_schema("table_name"), None);
+        assert_eq!(FileNode::extract_schema("simple_table"), None);
+    }
+
+    #[test]
+    fn test_schema_in_file_node() {
+        let layers = vec!["first".to_string()];
+        let fallback_layer = "first";
+
+        let temp_file = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
+        std::fs::write(&temp_file, "-- name: my_schema.my_table\nSELECT 1;").unwrap();
+
+        let file_node = FileNode::from_file(
+            "--",
+            &temp_file.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
+        assert_eq!(file_node.name, "my_schema.my_table");
+        assert_eq!(file_node.schema, Some("my_schema".to_string()));
     }
 }

@@ -21,6 +21,8 @@ enum Commands {
     Analyze(commands::analyze::AnalyzeArgs),
     /// Remove unused files based on dependency analysis
     Clean(commands::clean::CleanArgs),
+    /// Analyze and manage schemas in the project
+    Schema(commands::schema::SchemaArgs),
 }
 
 fn main() -> Result<(), TopCatError> {
@@ -30,5 +32,6 @@ fn main() -> Result<(), TopCatError> {
         Commands::Concat(args) => args.execute(),
         Commands::Analyze(args) => args.execute(),
         Commands::Clean(args) => args.execute(),
+        Commands::Schema(args) => args.execute(),
     }
 }

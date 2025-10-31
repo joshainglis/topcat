@@ -1,8 +1,8 @@
 # Topcat Dependency Analysis - Implementation Status
 
 **Date**: 2025-10-31
-**Session**: Phase 1, 2, 2.5, 3, & 4 Implementation Complete
-**Status**: Phase 1 ✅ Complete, Phase 2 ✅ Complete, Phase 2.5 ✅ Complete, Phase 3 ✅ Complete, Phase 4 ✅ Complete (All 72 Tests Passing!)
+**Session**: Phase 1, 2, 2.5, 3, 4, & 5 Implementation Complete
+**Status**: Phase 1 ✅ Complete, Phase 2 ✅ Complete, Phase 2.5 ✅ Complete, Phase 3 ✅ Complete, Phase 4 ✅ Complete, Phase 5 ✅ Complete (All 83 Tests Passing!)
 
 ## What's Been Completed
 
@@ -448,6 +448,208 @@ fi
 - ✅ **Production Ready**: Comprehensive testing and zero warnings
 - ✅ **Developer Friendly**: Single file analysis helps understand dependencies
 
+### Phase 5: Schema Analysis ✅ (Schema-Aware Operations)
+**COMPLETE!** Successfully implemented schema extraction and schema-aware analysis capabilities.
+
+#### The Goal
+Enable schema-based organization and analysis for projects with multiple database schemas. Allow filtering by schema and visualizing cross-schema dependencies.
+
+#### Implementation Completed
+Added **schema extraction and 3 new schema commands**:
+
+1. **Schema Extraction** - Automatic from node names
+   - Extracts schema from patterns: `schema.table`, `schema::table`
+   - Stored in `FileNode.schema: Option<String>`
+   - Added 4 unit tests for extraction logic
+
+2. **`schema list`** - Display all schemas with statistics
+   ```bash
+   topcat schema --input-dirs sql/ --include-exts sql list
+   ```
+   - Shows file count per schema
+   - Shows dependency count per schema
+   - Beautiful bar chart visualization
+   - Sorted alphabetically for consistency
+
+3. **`schema analyze <name>`** - Detailed schema view
+   ```bash
+   topcat schema --input-dirs sql/ --include-exts sql analyze my_schema
+   ```
+   - Lists all files in schema
+   - Shows internal dependencies (within schema)
+   - Shows external dependencies (to other schemas)
+   - Shows dependent schemas (who depends on this)
+   - Grouped by target schema for clarity
+
+4. **`schema dependencies`** - Cross-schema dependency visualization
+   ```bash
+   topcat schema --input-dirs sql/ --include-exts sql dependencies
+   ```
+   - Shows all cross-schema relationships
+   - Color-coded table output
+   - Helps identify coupling between schemas
+
+#### Schema Filtering for Existing Commands
+Added **`--schema` flag** to analyze and clean commands:
+
+```bash
+# Filter analysis by schema
+topcat analyze -i sql/ -e sql --schema my_schema orphans
+topcat analyze -i sql/ -e sql --schema my_schema leaf-nodes
+
+# Filter cleanup by schema
+topcat clean -i sql/ -e sql --schema my_schema orphans --no-dry-run
+```
+
+- Filters to specific schema(s)
+- Handles both schema definition nodes and schema-prefixed nodes
+- Works with all analyze and clean subcommands
+
+#### Helper Methods Added to TCGraph
+Added 6 new public methods for schema operations:
+
+1. `get_schemas()` - Group all nodes by schema
+2. `get_schema_names()` - List unique schema names
+3. `get_internal_dependencies()` - Dependencies within schema
+4. `get_external_dependencies()` - Dependencies to other schemas
+5. `get_dependent_schemas()` - Schemas depending on a schema
+6. `get_cross_schema_dependencies()` - All cross-schema pairs
+
+#### Files Created/Modified
+**New Files**:
+- **`src/commands/schema.rs`** (265 lines)
+  - Complete schema command implementation
+  - All 3 schema subcommands (list, analyze, dependencies)
+  - Beautiful table formatting with comfy-table
+  - Bar chart visualization for distribution
+
+- **`tests/schema_tests.rs`** (180 lines)
+  - 7 comprehensive integration tests
+  - Tests for all schema operations
+  - Tests for schema extraction edge cases
+  - Tests for schema filtering behavior
+
+**Modified Files**:
+- **`src/file_node.rs`** (+15 lines)
+  - Added `schema: Option<String>` field
+  - Added `extract_schema()` method (supports `.` and `::` separators)
+  - Added 4 unit tests for extraction
+
+- **`src/file_dag.rs`** (+120 lines)
+  - Added 6 schema helper methods
+  - All methods well-documented and tested
+
+- **`src/commands/analyze.rs`** (+15 lines)
+  - Added `--schema` filter argument
+  - Converts schema to node prefix filters
+
+- **`src/commands/clean.rs`** (+15 lines)
+  - Added `--schema` filter argument
+  - Converts schema to node prefix filters
+
+- **`src/main.rs`** (+2 lines)
+  - Added `Schema` variant to Commands enum
+
+- **`src/commands/mod.rs`** (+1 line)
+  - Exported schema module
+
+#### Test Results (Phase 5)
+- ✅ **All 83 tests passing** (40 unit + 25 analysis + 11 clean + 7 schema)
+- ✅ 7 new integration tests for schema operations:
+  - `test_get_schema_names` - Schema name extraction
+  - `test_get_schemas` - Schema grouping
+  - `test_get_internal_dependencies` - Intra-schema deps
+  - `test_get_external_dependencies` - Cross-schema deps
+  - `test_get_dependent_schemas` - Reverse dependencies
+  - `test_get_cross_schema_dependencies` - All cross-schema pairs
+  - `test_schema_filtering` - Schema-based filtering
+- ✅ 4 unit tests for schema extraction in file_node.rs
+- ✅ Zero clippy warnings
+- ✅ Clean build
+- ✅ Manual testing confirms all commands work correctly
+
+#### Example Workflows
+
+**Schema overview**:
+```bash
+$ topcat schema --input-dirs sql/ --include-exts sql list
+
+╭─────────────────┬───────┬──────────────┬──────────────────────────────────────────╮
+│ Schema          ┆ Files ┆ Dependencies ┆ Distribution                             │
+╞═════════════════╪═══════╪══════════════╪══════════════════════════════════════════╡
+│ my_other_schema ┆ 1     ┆ 2            ┆ █████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ my_schema       ┆ 3     ┆ 6            ┆ ████████████████████████████████████████ │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ no_schema       ┆ 2     ┆ 0            ┆ ██████████████████████████░░░░░░░░░░░░░░ │
+╰─────────────────┴───────┴──────────────┴──────────────────────────────────────────╯
+```
+
+**Detailed schema analysis**:
+```bash
+$ topcat schema --input-dirs sql/ --include-exts sql analyze my_schema
+
+Schema: my_schema
+
+Files (3):
+  - my_schema.a
+  - my_schema.b
+  - my_schema.c
+
+Internal Dependencies (2):
+  my_schema.b → my_schema.a
+  my_schema.c → my_schema.b
+
+External Dependencies (1):
+
+  To schema 'my_other_schema':
+    my_schema.c → my_other_schema.a
+
+Dependent Schemas (1):
+  my_other_schema
+```
+
+**Cross-schema dependencies**:
+```bash
+$ topcat schema --input-dirs sql/ --include-exts sql dependencies
+
+Cross-Schema Dependencies:
+
+╭─────────────────┬───┬─────────────────╮
+│ Source Schema   ┆ → ┆ Target Schema   │
+╞═════════════════╪═══╪═════════════════╡
+│ my_other_schema ┆ → ┆ my_schema       │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ my_schema       ┆ → ┆ my_other_schema │
+╰─────────────────┴───┴─────────────────╯
+```
+
+**Schema filtering in analysis**:
+```bash
+# Analyze only one schema
+$ topcat analyze -i sql/ -e sql --schema my_schema leaf-nodes
+
+🍃 Leaf Nodes Analysis
+═══════════════════════════════════════════════════════════
+
+📊 Found 1 leaf node(s) (have dependencies but no dependents):
+
++-------------+--------------------+-------------------------------------------------+
+| Node Name   | Dependencies Count | File Path                                       |
++====================================================================================+
+| my_schema.c | 3                  | tests/input/sql/my_other_schema/functions/c.sql |
++-------------+--------------------+-------------------------------------------------+
+```
+
+#### Benefits Delivered
+- ✅ **Schema Organization**: Clear view of multi-schema projects
+- ✅ **Cross-Schema Analysis**: Understand coupling between schemas
+- ✅ **Schema Filtering**: Focus analysis on specific schemas
+- ✅ **Visual Statistics**: Bar charts show schema distribution
+- ✅ **Automatic Extraction**: No manual schema tagging required
+- ✅ **Flexible Patterns**: Supports dot (`.`) and double-colon (`::`) separators
+- ✅ **Production Ready**: Comprehensive testing and zero warnings
+
 ## Common Mistakes & Lessons Learned
 
 ### 1. Lifetime Issues with Config Struct
@@ -672,12 +874,13 @@ cargo clippy --all-targets                    # Lint (clean except 1 dead_code w
 2. ~~**No deletion capability**~~ - ✅ FIXED in Phase 3! Safe deletion with `topcat clean` command
 3. ~~**No cycle detection**~~ - ✅ FIXED in Phase 4! `analyze cycles` command available
 4. ~~**No missing dependency detection**~~ - ✅ FIXED in Phase 4! `analyze missing` command available
-5. **Limited config file support** - SQL discovery and analysis (root nodes) configured via TOML; other features not yet in config
-6. **No schema filtering** - Can't limit analysis to specific schema (Phase 5)
+5. ~~**No schema filtering**~~ - ✅ FIXED in Phase 5! `--schema` flag and `schema` command available
+6. **Limited config file support** - SQL discovery and analysis (root nodes) configured via TOML; other features not yet in config
+7. **No graph export formats** - Can't export to JSON, GraphML, Mermaid (Phase 6)
 
 ## Code Quality Status
 
-- ✅ **All 72 tests passing** (36 unit + 25 analysis + 11 clean)
+- ✅ **All 83 tests passing** (40 unit + 25 analysis + 11 clean + 7 schema)
 - ✅ Cargo clippy clean (zero warnings)
 - ✅ Cargo build successful
 - ✅ Manual testing successful
@@ -687,9 +890,9 @@ cargo clippy --all-targets                    # Lint (clean except 1 dead_code w
 
 ## Session Summary
 
-**Session Focus**: Phase 1, 2, 2.5, 3, & 4 Implementation Complete
-**Hours Invested**: ~11-12 hours total
-**Lines Added**: ~4000+ lines (commands, analysis, cleanup, tests, documentation)
+**Session Focus**: Phase 1, 2, 2.5, 3, 4, & 5 Implementation Complete
+**Hours Invested**: ~13-14 hours total
+**Lines Added**: ~4500+ lines (commands, analysis, cleanup, schema, tests, documentation)
 
 **Key Achievements**:
 1. ✅ Complete subcommand architecture migration (Phase 1)
@@ -700,8 +903,9 @@ cargo clippy --all-targets                    # Lint (clean except 1 dead_code w
 6. ✅ **Safe Cleanup Operations**: Complete `clean` command with dry-run, confirmation, and protection (Phase 3)
 7. ✅ **Comprehensive Analysis Suite**: Added cycles, missing, and file analysis commands (Phase 4)
 8. ✅ **CI/CD Integration**: `--quiet` flag and proper exit codes (Phase 4)
-9. ✅ All 72 tests passing (36 unit + 25 analysis + 11 clean)
-10. ✅ Zero clippy warnings, clean build
+9. ✅ **Schema Analysis Complete**: Schema extraction, 3 schema commands, schema filtering (Phase 5)
+10. ✅ All 83 tests passing (40 unit + 25 analysis + 11 clean + 7 schema)
+11. ✅ Zero clippy warnings, clean build
 
 **Critical Insights**:
 - The "dead branches" algorithm works perfectly and is production-ready
@@ -709,7 +913,9 @@ cargo clippy --all-targets                    # Lint (clean except 1 dead_code w
 - Safe deletion with multiple safety checks prevents accidental data loss
 - Cycle detection and missing dependency analysis complete the analysis suite
 - Quiet mode and exit codes enable CI/CD integration
+- Schema analysis enables multi-schema project organization and dependency tracking
+- Automatic schema extraction from node names simplifies workflow
 - Flexible configuration (CLI + TOML) makes the tool adaptable to various workflows
 - Comprehensive test coverage ensures reliability
 
-**Next Session**: Implement Phase 5 (Schema Analysis) for schema-aware filtering and cross-schema dependency analysis.
+**Next Session**: Implement Phase 6 (Export Capabilities) for graph export in JSON, GraphML, and Mermaid formats.

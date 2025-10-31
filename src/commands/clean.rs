@@ -158,6 +158,14 @@ pub struct CleanArgs {
     )]
     root_dirs: Vec<PathBuf>,
 
+    // Schema Filtering
+    #[arg(
+        long = "schema",
+        help = "Filter cleaning to specific schema(s) (can specify multiple times)",
+        value_name = "SCHEMA"
+    )]
+    schema_filter: Vec<String>,
+
     // Clean-specific flags
     #[arg(
         long = "dry-run",
@@ -302,6 +310,19 @@ impl CleanArgs {
             )));
         }
 
+        // Convert schema filter to node prefixes if specified
+        // Include both "schema" and "schema." to catch schema definition nodes
+        let include_node_prefixes = if !self.schema_filter.is_empty() {
+            let mut prefixes = Vec::new();
+            for schema in &self.schema_filter {
+                prefixes.push(schema.clone()); // For exact match (e.g., "my_schema")
+                prefixes.push(format!("{schema}.")); // For prefixed match (e.g., "my_schema.")
+            }
+            Some(prefixes)
+        } else {
+            None
+        };
+
         let config = config::Config {
             input_dirs: self.input_dirs.clone(),
             include_extensions: self.include_file_extensions.as_deref(),
@@ -314,7 +335,7 @@ impl CleanArgs {
             file_end_str: String::new(),
             include_hidden: self.include_hidden_files_and_directories,
             verbose: self.verbose,
-            include_node_prefixes: None,
+            include_node_prefixes: include_node_prefixes.as_deref(),
             exclude_node_prefixes: None,
             dry_run: false,
             subdir_filter: None,

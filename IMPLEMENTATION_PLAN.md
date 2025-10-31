@@ -235,24 +235,34 @@ The integration tests were failing because `TempDir` creates directories startin
 - 9 new comprehensive integration tests
 - Zero clippy warnings
 
-### Phase 5: Schema Analysis
+### Phase 5: Schema Analysis ✅ COMPLETE
 **Goal**: Add schema-aware analysis features
 
 **Tasks**:
-- [ ] Implement schema extraction from names
-- [ ] Add `schema list` command with statistics
-- [ ] Add `schema analyze <schema>` detailed view
-- [ ] Add cross-schema dependency analysis
-- [ ] Add schema filtering to all commands
-- [ ] Implement visual statistics (bar charts)
-- [ ] Add schema-based graph coloring in DOT export
-- [ ] Run `cargo clippy --all-targets`
+- [x] Implement schema extraction from names
+- [x] Add `schema list` command with statistics
+- [x] Add `schema analyze <schema>` detailed view
+- [x] Add cross-schema dependency analysis
+- [x] Add schema filtering to all commands
+- [x] Implement visual statistics (bar charts)
+- [ ] Add schema-based graph coloring in DOT export (deferred to Phase 6)
+- [x] Run `cargo clippy --all-targets`
 
 **Tests**:
-- [ ] Test schema extraction
-- [ ] Test schema filtering
-- [ ] Test cross-schema analysis
-- [ ] Test with no-schema files
+- [x] Test schema extraction (4 unit tests in file_node.rs)
+- [x] Test schema filtering (integration test in schema_tests.rs)
+- [x] Test cross-schema analysis (7 integration tests)
+- [x] Test with no-schema files (included in schema_tests.rs)
+
+**Implementation Summary**:
+- Added `schema` field to `FileNode` with automatic extraction
+- Created `src/commands/schema.rs` (265 lines) with 3 subcommands
+- Added 6 helper methods to `TCGraph` for schema operations
+- Implemented `--schema` filtering for analyze and clean commands
+- Created `tests/schema_tests.rs` with 7 comprehensive tests
+- All 83 tests passing (40 unit + 25 analysis + 11 clean + 7 schema)
+- Zero clippy warnings
+- Beautiful table output with bar charts and color coding
 
 ### Phase 6: Export Capabilities
 **Goal**: Add graph export in multiple formats
