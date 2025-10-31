@@ -86,9 +86,9 @@ Layers enforce ordering between groups of files:
 
 ## Available Skills
 
-Topcat includes specialized skills for detailed guidance:
+### Project-Specific Skills
 
-### 🔍 topcat-sql-discovery
+#### 🔍 discovering-sql-dependencies
 Comprehensive guide for automatic SQL dependency discovery:
 - Pattern-based dependency extraction
 - Configuration via CLI or TOML
@@ -96,7 +96,7 @@ Comprehensive guide for automatic SQL dependency discovery:
 - Header generation and updates
 - Migration from manual to automatic discovery
 
-### 🏗️ topcat-architecture
+#### 🏗️ understanding-architecture
 Deep dive into implementation details:
 - Module responsibilities and interactions
 - Layer system implementation
@@ -105,13 +105,36 @@ Deep dive into implementation details:
 - Performance considerations
 - Extension points for customization
 
-### 🧪 topcat-testing
+#### 🧪 testing-topcat
 Testing and debugging guidance:
 - Test organization and best practices
 - Running and writing tests
 - Debugging techniques with verbose mode
 - DOT graph visualization
 - Performance testing and profiling
+
+### Meta-Skills for Skill Management
+
+#### ✍️ writing-skills
+Creating new skills from scratch:
+- Proper structure and metadata
+- Progressive disclosure patterns
+- Testing and iteration workflow
+- Templates for common skill types
+
+#### 🔄 updating-skills
+Holistically refactoring existing skills:
+- Refactoring patterns
+- Migration strategies
+- Testing updates
+- Maintaining quality standards
+
+#### 📝 updating-claude-md
+Maintaining CLAUDE.md quality and conciseness:
+- Refactor vs patch approach
+- Content vs skill decisions
+- Structure optimization
+- Token cost awareness
 
 ## Common Tasks
 
@@ -210,9 +233,51 @@ extension = "uuid-ossp"
 5. **Version control** your `topcat.toml` configuration
 6. **Use verbose mode** for debugging dependency issues
 
+## Skill Maintenance Workflow
+
+**IMPORTANT**: Skills should evolve with the codebase to capture learnings and new capabilities.
+
+### When to Check Skills
+
+After completing any of the following, **proactively ask the user** if skills should be updated:
+
+1. **Feature Implementation**: "I've completed the new feature. Should I check if any skills need updating to reflect this new capability?"
+
+2. **Bug Fix**: "I've fixed the bug. Should I update the relevant skill to document this issue and its solution?"
+
+3. **Better Approach Found**: "I discovered a better way to do this. Should I update the skill to reflect the improved approach?"
+
+4. **Complex Task Completed**: "This was a complex process. Should I create a skill to capture this workflow for future use?"
+
+5. **Repeated Questions**: "You've asked about this several times. Should I create a skill to document this pattern?"
+
+### During Planning
+
+When planning complex tasks, consider:
+- "Are there existing skills that could help with this task?"
+- "Will this work create new patterns worth capturing in a skill?"
+- "Should I plan to update skills as part of this task?"
+
+### Skill Update Guidelines
+
+When updating skills:
+- **Use the `updating-skills` skill** for proper refactoring approach
+- **Don't just append** - refactor holistically to maintain quality
+- **Test updates** with a fresh context to ensure effectiveness
+- **Keep skills focused** - consider creating new skills rather than expanding scope
+
+### Available Meta-Skills
+
+- **writing-skills**: For creating new skills from scratch
+- **updating-skills**: For holistically refactoring existing skills
+- **updating-claude-md**: For maintaining CLAUDE.md conciseness and quality
+
 ## Need More Details?
 
 Load the appropriate skill for in-depth information:
-- **SQL Discovery**: Details on automatic dependency extraction
-- **Architecture**: Implementation details and internals
-- **Testing**: Comprehensive testing and debugging guide
+- **discovering-sql-dependencies**: Automatic dependency extraction
+- **understanding-architecture**: Implementation details and internals
+- **testing-topcat**: Comprehensive testing and debugging guide
+- **writing-skills**: Creating new skills from scratch
+- **updating-skills**: Refactoring existing skills
+- **updating-claude-md**: Maintaining CLAUDE.md quality
