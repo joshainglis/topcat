@@ -43,7 +43,6 @@
             pkgs.pkg-config
 
             pkgs.rust-analyzer
-            pkgs.jetbrains.rust-rover
           ];
 
           shellHook = ''
