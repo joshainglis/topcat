@@ -358,11 +358,9 @@ impl TCGraph {
 
         // Create SQL analyzer if discovery is enabled
         let sql_analyzer = if self.sql_discovery.enabled {
-            Some(
-                crate::sql_parser::SqlAnalyzer::new(self.sql_discovery.clone()).map_err(|e| {
-                    TopCatError::ConfigError(format!("Failed to create SQL analyzer: {e}"))
-                })?,
-            )
+            Some(SqlAnalyzer::new(self.sql_discovery.clone()).map_err(|e| {
+                TopCatError::ConfigError(format!("Failed to create SQL analyzer: {e}"))
+            })?)
         } else {
             None
         };
