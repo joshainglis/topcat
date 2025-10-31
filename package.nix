@@ -7,11 +7,10 @@
 
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "topcat";
-  version = "0.2.3";
+  version = "0.2.4";
 
   src = ./.;
-  useFetchCargoVendor = true;
-  cargoHash = "sha256-iVNAAzGwz1U17aP0bjxKj3ndPF1uXDtvuicp0g7HX+I=";
+  cargoHash = "sha256-YPgxoTm2earVQSz7QzBpAHMqiMHZndZkWPO8uHBZYxw=";
 
   nativeBuildInputs = [ ];
 
