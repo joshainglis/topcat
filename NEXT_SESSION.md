@@ -1,172 +1,174 @@
 # Quick Pickup Guide for Next Session
 
 ## TL;DR Status
-- ✅ **Phase 1 & 2 COMPLETE**: Dead branches detection fully working!
-- ❌ **Blocker**: Integration tests fail (show 0 nodes in graph)
-- 🎯 **Next Task**: Debug why `build_test_graph()` returns empty graph
+- ✅ **Phase 1 & 2 COMPLETE**: All analysis features working perfectly!
+- ✅ **All Tests Passing**: 36/36 tests (26 existing + 10 new integration tests)
+- 🎯 **Next Task**: Implement Phase 2.5 - Root Nodes / Entry Points Feature
 
-## The Issue
+## What Just Happened
 
-Integration tests are failing because `TCGraph::build_graph()` finds 0 nodes:
+### Major Win: Test Issue Resolved! 🎉
+The integration tests were failing because `TempDir` creates directories starting with a dot (e.g., `.tmpXXXX`), and topcat's `walk_dir` was correctly treating these as hidden and skipping them.
+
+**The Fix**: Set `include_hidden: true` in test Config.
+
+### Phase 2 Complete
+All 5 analysis commands are fully implemented and tested:
+- ✅ `topcat analyze dead-branches`
+- ✅ `topcat analyze orphans`
+- ✅ `topcat analyze unrequired`
+- ✅ `topcat analyze leaf-nodes`
+- ✅ `topcat analyze root-nodes`
+
+Plus external usage checking with `--external-check-dir` and `--external-check-pattern`.
+
+## Next Priority: Root Nodes Feature 🎯
+
+**See `ROOT_NODES_DESIGN.md` for full specification.**
+
+### The Need
+Without external usage checking, the dead branches algorithm correctly identifies all unreferenced nodes as dead. However, certain files ARE entry points (API handlers, migrations, CLI commands) that should never be deleted.
+
+### The Solution
+Implement protected "root nodes" that can be specified via:
+- Specific node names: `--root-nodes api_main,worker_main`
+- Glob patterns: `--root-pattern "**/api/*.sql"`
+- Regex patterns: `--root-regex "^api_.*"`
+- Directory-based: `--root-dir sql/entry_points/`
+- Config file: `topcat.toml` with `[analysis]` section
+
+### Implementation Checklist
+
+See `IMPLEMENTATION_PLAN.md` Phase 2.5 for full task list. Key steps:
+
+1. **Add regex dependency** to `Cargo.toml`
+2. **Create `src/analysis/root_matcher.rs`** with `RootNodeMatcher` struct
+   - Exact node name matching
+   - Glob pattern matching for file paths
+   - Regex pattern matching for node names
+   - Directory-based root detection
+3. **Update `GraphAnalyzer` trait** to accept optional `RootNodeMatcher`
+4. **Modify `find_dead_branches()`** to exclude root nodes
+5. **Add CLI arguments** to `AnalyzeArgs`
+6. **Extend config file support** with `AnalysisConfig`
+7. **Update all analysis commands** to use root matcher
+8. **Write comprehensive tests**
+
+### Quick Start Commands
 
 ```bash
-$ cargo test --test analysis_tests
+# Build and test
+cargo build
+cargo test --lib --tests
 
-# Output:
-WARNING: No nodes found in graph for dir: "/tmp/..."
-Files in dir:
-  "/tmp/.../root.sql"    # Files ARE created
-  "/tmp/.../orphan.sql"  # But graph doesn't find them
-  "/tmp/.../leaf.sql"
-```
-
-**Test file**: `tests/analysis_tests.rs`
-**Function**: `build_test_graph()` at line 20
-
-## What Works
-
-```bash
-# Manual testing works perfectly
+# Test the existing analyze commands
 ./target/debug/topcat analyze -i tests/input/sql -e sql dead-branches
 
-# Shows beautiful output with 6 dead branches detected!
+# After implementing root nodes:
+./target/debug/topcat analyze -i tests/input/sql -e sql \
+  --root-nodes "api_main" \
+  --root-pattern "**/api/*.sql" \
+  dead-branches
 ```
 
-## Debugging Checklist
+## Key Files Reference
 
-### Hypothesis 1: File Not Flushed
-The test creates files but maybe they're not flushed before reading?
+- **`ROOT_NODES_DESIGN.md`** - Complete feature specification (NEW!)
+- **`IMPLEMENTATION_PLAN.md`** - Phase 2.5 has the task breakdown
+- **`STATUS.md`** - Updated with test fix and current status
+- **`src/analysis/mod.rs`** - Where `GraphAnalyzer` trait lives
+- **`src/commands/analyze.rs`** - Where CLI arguments go
+- **`src/sql_config.rs`** - Where config file structs live
+- **`tests/analysis_tests.rs`** - Integration tests to update
 
-**Try**: Add explicit `file.flush()` or `drop(file)` before building graph
+## Important Context
 
-### Hypothesis 2: Extension Filtering
-Config has `include_extensions: Some(&extensions)` where `extensions = vec!["sql".to_string()]`
+### Why Root Nodes Matter
+The current tests work by accepting that "everything is dead" in a closed system. But in production, this would be dangerous! Users need a way to protect entry points.
 
-**Try**:
-- Print what files `TCGraph` actually sees
-- Check if extension matching is case-sensitive
-- Verify glob pattern matching in tests
+**Benefits**:
+1. **Production Safety** - Critical files can never be accidentally deleted
+2. **Better Testing** - Tests can create realistic scenarios
+3. **Flexible Configuration** - Multiple pattern types
+4. **Config File Support** - Project-specific rules can be version controlled
 
-### Hypothesis 3: Path Canonicalization
-Maybe tempdir paths aren't being resolved correctly?
-
-**Try**: Print actual paths being passed vs what TCGraph receives
-
-### Quick Debug Script
-Add to `build_test_graph()` before `graph.build_graph()`:
-
-```rust
-// List what TCGraph will search
-eprintln!("Input dirs: {:?}", config.input_dirs);
-eprintln!("Include exts: {:?}", config.include_extensions);
-
-// Manually list SQL files
-use std::fs;
-for entry in fs::read_dir(&config.input_dirs[0]).unwrap() {
-    let entry = entry.unwrap();
-    let path = entry.path();
-    if path.extension().and_then(|s| s.to_str()) == Some("sql") {
-        eprintln!("Found SQL file: {:?}", path);
-        let content = fs::read_to_string(&path).unwrap();
-        eprintln!("  Content preview: {}", content.lines().take(2).collect::<Vec<_>>().join(" | "));
-    }
-}
-```
-
-## Files to Check
-
-1. `tests/analysis_tests.rs` - The failing tests
-2. `src/file_dag.rs` - `build_graph()` and `collect_files()` functions
-3. `src/io_utils.rs` - File collection logic
-
-## What the Working Analyze Command Does
-
-File: `src/commands/analyze.rs:build_graph()`
-
-Builds Config → Creates TCGraph → Calls `build_graph()` → Works!
-
-Compare this to test setup in `tests/analysis_tests.rs:build_test_graph()`
-
-## Quick Win Options
-
-### Option A: Use Real Test Files
-Instead of creating temp files, use `tests/input/sql` directory that already works:
-
-```rust
-fn build_test_graph() -> TCGraph {
-    let extensions = vec!["sql".to_string()];
-    let config = Config {
-        input_dirs: vec![PathBuf::from("tests/input/sql")],
-        include_extensions: Some(&extensions),
-        // ...
-    };
-    // ...
-}
-```
-
-### Option B: Copy Working Setup
-Look at how `cargo test` for existing tests works - copy that pattern
-
-### Option C: Add Logging
-Enable `env_logger` in tests to see what TCGraph is doing:
+### Test Expectations
+After implementing root nodes, update integration tests to use them. This will make tests more realistic:
 
 ```rust
 #[test]
-fn test_find_orphans() {
-    env_logger::init();  // See debug output
-    // ...
+fn test_dead_branches_with_root_nodes() {
+    let dir = TempDir::new().unwrap();
+
+    // Create files...
+    create_test_file(&dir, "entry.sql", "-- name: entry\nSELECT 1;");
+    create_test_file(&dir, "dead.sql", "-- name: dead\nSELECT 1;");
+
+    let graph = build_test_graph(&dir);
+
+    // Protect entry point
+    let root_matcher = RootNodeMatcher::new(
+        vec!["entry".to_string()],
+        vec![],
+        vec![],
+        vec![],
+    ).unwrap();
+
+    let dead = graph.find_dead_branches(Some(&root_matcher));
+
+    // Only dead.sql should be dead now
+    assert_eq!(dead.len(), 1);
+    assert!(dead.contains("dead"));
+    assert!(!dead.contains("entry")); // Protected!
 }
 ```
 
-## Commands to Run
+## After Root Nodes: Phase 3
 
-```bash
-# Run single test with output
-cargo test --test analysis_tests test_find_orphans -- --nocapture
-
-# Run all analysis tests
-cargo test --test analysis_tests
-
-# Check existing tests still pass
-cargo test
-
-# Manual test to confirm feature works
-./target/debug/topcat analyze -i tests/input/sql -e sql dead-branches
-```
+Once root nodes are implemented and tested, move to Phase 3: Cleanup Operations
+- Implement `topcat clean dead-branches` command
+- Add dry-run support
+- Add file deletion with safety checks
+- Add confirmation prompts
 
 ## Success Criteria
 
-When tests pass, you'll see:
+Root Nodes feature is complete when:
+1. ✅ Can specify root nodes via all 4 methods (exact, glob, regex, dir)
+2. ✅ CLI arguments work
+3. ✅ Config file loading works
+4. ✅ CLI + config merging works correctly
+5. ✅ `find_dead_branches()` respects root nodes
+6. ✅ All unit tests pass
+7. ✅ Integration tests updated and passing
+8. ✅ Manual testing confirms protection works
+9. ✅ `cargo clippy` passes
+
+## Useful Debug Commands
+
 ```bash
-running 10 tests
-test test_dead_branches_diamond_dependency ... ok
-test test_dead_branches_with_shared_dependency ... ok
-test test_find_dead_branches_complex ... ok
-test test_find_dead_branches_simple ... ok
-test test_find_leaf_nodes ... ok
-test test_find_orphans ... ok
-test test_find_root_nodes ... ok
-test test_find_unrequired ... ok
-test test_multiple_independent_dead_branches ... ok
-test test_no_dead_branches_in_live_graph ... ok
+# Run specific test
+cargo test --test analysis_tests test_dead_branches_simple -- --nocapture
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+# Run all integration tests
+cargo test --test analysis_tests
+
+# Run all tests
+cargo test --lib --tests
+
+# Check for warnings
+cargo clippy --all-targets
+
+# Build and run
+cargo build && ./target/debug/topcat analyze -i tests/input/sql -e sql dead-branches
 ```
-
-## After Tests Pass
-
-Move to **Phase 3: Cleanup Operations**
-- Implement `topcat clean dead-branches` command
-- Add dry-run mode
-- Add file deletion with safety checks
-
-See `IMPLEMENTATION_PLAN.md` Phase 3 for full details.
 
 ## Contact/Handoff Info
 
 - All code compiles cleanly
-- Manual testing confirms feature works perfectly
-- Just need to figure out test setup discrepancy
-- Likely a simple fix once spotted
+- All 36 tests passing
+- Phase 2 is production-ready pending root nodes enhancement
+- `ROOT_NODES_DESIGN.md` has everything needed for next implementation
+- IMPLEMENTATION_PLAN.md Phase 2.5 has the task breakdown
 
-Good luck! 🚀
+Good luck! The hard part (algorithm + external checking) is done. Root nodes is just the safety layer! 🚀
