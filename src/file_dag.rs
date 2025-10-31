@@ -49,7 +49,7 @@ fn filter_files<'a>(
     debug!("exclude extensions: {:?}", exclude_extensions);
     files.iter().filter(move |path| {
         trace!("checking filters for path: {:?}", path);
-        if let Some(ref include) = include_extensions {
+        if let Some(include) = include_extensions {
             if !include.is_empty() {
                 let ext = match path.extension() {
                     Some(e) => e.to_string_lossy().to_lowercase(),
@@ -64,7 +64,7 @@ fn filter_files<'a>(
                 }
             }
         }
-        if let Some(ref exclude) = exclude_extensions {
+        if let Some(exclude) = exclude_extensions {
             if !exclude.is_empty() {
                 let ext = match path.extension() {
                     Some(e) => e.to_string_lossy().to_lowercase(),
@@ -79,13 +79,13 @@ fn filter_files<'a>(
                 }
             }
         }
-        if let Some(ref include) = include_file_set {
+        if let Some(include) = include_file_set {
             if !include.is_empty() && !include.contains::<PathBuf>(&*path) {
                 debug!("Excluding file as it isn't in the include set: {:?}", path);
                 return false;
             }
         }
-        if let Some(ref exclude) = exclude_file_set {
+        if let Some(exclude) = exclude_file_set {
             if !exclude.is_empty() && exclude.contains::<PathBuf>(&*path) {
                 debug!("Excluding file as it is in the exclude set: {:?}", path);
                 return false;
