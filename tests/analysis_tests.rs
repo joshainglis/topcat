@@ -655,3 +655,301 @@ fn test_dead_branches_combined_root_patterns() {
     assert!(orphans.contains("migration_001"));
     assert!(orphans.contains("unprotected"));
 }
+
+// ============================================================================
+// Phase 4 Tests: Cycles, Missing Dependencies, and File Analysis
+// ============================================================================
+
+#[test]
+fn test_detect_simple_cycle() {
+    let dir = TempDir::new().unwrap();
+
+    // Create a simple 2-node cycle: a -> b -> a
+    create_test_file(&dir, "a.sql", "-- name: a\n-- requires: b\nSELECT 1;");
+    create_test_file(&dir, "b.sql", "-- name: b\n-- requires: a\nSELECT 1;");
+
+    // Try to build graph - should fail with CyclicDependency error
+    let extensions: Option<Vec<String>> = Some(vec!["sql".to_string()]);
+    let config = Config {
+        input_dirs: vec![dir.path().to_path_buf()],
+        include_extensions: extensions.as_deref(),
+        exclude_extensions: None,
+        include_globs: None,
+        exclude_globs: None,
+        output: dir.path().join("output.sql"),
+        comment_str: "--".to_string(),
+        file_separator_str: String::new(),
+        file_end_str: String::new(),
+        include_hidden: true,
+        verbose: false,
+        include_node_prefixes: None,
+        exclude_node_prefixes: None,
+        dry_run: false,
+        subdir_filter: None,
+        layers: vec!["normal".to_string()],
+        fallback_layer: "normal".to_string(),
+        sql_discovery: SqlDiscoveryConfig::default(),
+        header_update_mode: topcat::sql_config::HeaderUpdateMode::Never,
+        header_output_dir: None,
+    };
+
+    let mut graph = TCGraph::new(&config);
+    let result = graph.build_graph();
+
+    // Should detect cycle
+    assert!(result.is_err());
+    match result {
+        Err(topcat::exceptions::TopCatError::CyclicDependency(cycles)) => {
+            assert_eq!(cycles.len(), 1);
+            assert_eq!(cycles[0].len(), 2);
+        }
+        _ => panic!("Expected CyclicDependency error"),
+    }
+}
+
+#[test]
+fn test_detect_complex_cycle() {
+    let dir = TempDir::new().unwrap();
+
+    // Create a 3-node cycle: a -> b -> c -> a
+    create_test_file(&dir, "a.sql", "-- name: a\n-- requires: b\nSELECT 1;");
+    create_test_file(&dir, "b.sql", "-- name: b\n-- requires: c\nSELECT 1;");
+    create_test_file(&dir, "c.sql", "-- name: c\n-- requires: a\nSELECT 1;");
+
+    let extensions: Option<Vec<String>> = Some(vec!["sql".to_string()]);
+    let config = Config {
+        input_dirs: vec![dir.path().to_path_buf()],
+        include_extensions: extensions.as_deref(),
+        exclude_extensions: None,
+        include_globs: None,
+        exclude_globs: None,
+        output: dir.path().join("output.sql"),
+        comment_str: "--".to_string(),
+        file_separator_str: String::new(),
+        file_end_str: String::new(),
+        include_hidden: true,
+        verbose: false,
+        include_node_prefixes: None,
+        exclude_node_prefixes: None,
+        dry_run: false,
+        subdir_filter: None,
+        layers: vec!["normal".to_string()],
+        fallback_layer: "normal".to_string(),
+        sql_discovery: SqlDiscoveryConfig::default(),
+        header_update_mode: topcat::sql_config::HeaderUpdateMode::Never,
+        header_output_dir: None,
+    };
+
+    let mut graph = TCGraph::new(&config);
+    let result = graph.build_graph();
+
+    assert!(result.is_err());
+    match result {
+        Err(topcat::exceptions::TopCatError::CyclicDependency(cycles)) => {
+            assert_eq!(cycles.len(), 1);
+            assert_eq!(cycles[0].len(), 3);
+        }
+        _ => panic!("Expected CyclicDependency error"),
+    }
+}
+
+#[test]
+fn test_no_cycles_in_valid_dag() {
+    let dir = TempDir::new().unwrap();
+
+    // Create a valid DAG: a -> b -> c
+    create_test_file(&dir, "a.sql", "-- name: a\nSELECT 1;");
+    create_test_file(&dir, "b.sql", "-- name: b\n-- requires: a\nSELECT 1;");
+    create_test_file(&dir, "c.sql", "-- name: c\n-- requires: b\nSELECT 1;");
+
+    let graph = build_test_graph(&dir);
+
+    // Graph should build successfully without errors
+    assert_eq!(graph.get_all_nodes().len(), 3);
+}
+
+#[test]
+fn test_detect_missing_dependency() {
+    let dir = TempDir::new().unwrap();
+
+    // Create file that depends on non-existent file
+    create_test_file(
+        &dir,
+        "a.sql",
+        "-- name: a\n-- requires: nonexistent\nSELECT 1;",
+    );
+
+    let extensions: Option<Vec<String>> = Some(vec!["sql".to_string()]);
+    let config = Config {
+        input_dirs: vec![dir.path().to_path_buf()],
+        include_extensions: extensions.as_deref(),
+        exclude_extensions: None,
+        include_globs: None,
+        exclude_globs: None,
+        output: dir.path().join("output.sql"),
+        comment_str: "--".to_string(),
+        file_separator_str: String::new(),
+        file_end_str: String::new(),
+        include_hidden: true,
+        verbose: false,
+        include_node_prefixes: None,
+        exclude_node_prefixes: None,
+        dry_run: false,
+        subdir_filter: None,
+        layers: vec!["normal".to_string()],
+        fallback_layer: "normal".to_string(),
+        sql_discovery: SqlDiscoveryConfig::default(),
+        header_update_mode: topcat::sql_config::HeaderUpdateMode::Never,
+        header_output_dir: None,
+    };
+
+    let mut graph = TCGraph::new(&config);
+    let result = graph.build_graph();
+
+    // Should detect missing dependency
+    assert!(result.is_err());
+    match result {
+        Err(topcat::exceptions::TopCatError::MissingDependency(file, dep)) => {
+            assert_eq!(file, "a");
+            assert_eq!(dep, "nonexistent");
+        }
+        _ => panic!("Expected MissingDependency error"),
+    }
+}
+
+#[test]
+fn test_no_missing_dependencies_in_valid_graph() {
+    let dir = TempDir::new().unwrap();
+
+    // Create valid dependency chain
+    create_test_file(&dir, "a.sql", "-- name: a\nSELECT 1;");
+    create_test_file(&dir, "b.sql", "-- name: b\n-- requires: a\nSELECT 1;");
+
+    let graph = build_test_graph(&dir);
+
+    // Graph should build successfully
+    assert_eq!(graph.get_all_nodes().len(), 2);
+}
+
+#[test]
+fn test_file_analysis_root_node() {
+    let dir = TempDir::new().unwrap();
+
+    // Create a simple dependency chain: root -> middle -> leaf
+    create_test_file(&dir, "root.sql", "-- name: root\nSELECT 1;");
+    create_test_file(
+        &dir,
+        "middle.sql",
+        "-- name: middle\n-- requires: root\nSELECT 1;",
+    );
+    create_test_file(
+        &dir,
+        "leaf.sql",
+        "-- name: leaf\n-- requires: middle\nSELECT 1;",
+    );
+
+    let graph = build_test_graph(&dir);
+    let all_nodes = graph.get_all_nodes();
+    let root_node = all_nodes.iter().find(|n| n.name == "root").unwrap();
+
+    // Root node should have:
+    // - No dependencies
+    // - One direct dependent (middle)
+    assert_eq!(root_node.deps.len(), 0);
+
+    let dependents_map = graph.build_dependents_map();
+    let dependents = dependents_map.get("root").unwrap();
+    assert_eq!(dependents.len(), 1);
+    assert!(dependents.contains("middle"));
+}
+
+#[test]
+fn test_file_analysis_leaf_node() {
+    let dir = TempDir::new().unwrap();
+
+    create_test_file(&dir, "root.sql", "-- name: root\nSELECT 1;");
+    create_test_file(
+        &dir,
+        "middle.sql",
+        "-- name: middle\n-- requires: root\nSELECT 1;",
+    );
+    create_test_file(
+        &dir,
+        "leaf.sql",
+        "-- name: leaf\n-- requires: middle\nSELECT 1;",
+    );
+
+    let graph = build_test_graph(&dir);
+    let all_nodes = graph.get_all_nodes();
+    let leaf_node = all_nodes.iter().find(|n| n.name == "leaf").unwrap();
+
+    // Leaf node should have:
+    // - One dependency (middle)
+    // - No dependents
+    assert_eq!(leaf_node.deps.len(), 1);
+    assert!(leaf_node.deps.contains("middle"));
+
+    let dependents_map = graph.build_dependents_map();
+    assert!(!dependents_map.contains_key("leaf"));
+}
+
+#[test]
+fn test_file_analysis_intermediate_node() {
+    let dir = TempDir::new().unwrap();
+
+    create_test_file(&dir, "root.sql", "-- name: root\nSELECT 1;");
+    create_test_file(
+        &dir,
+        "middle.sql",
+        "-- name: middle\n-- requires: root\nSELECT 1;",
+    );
+    create_test_file(
+        &dir,
+        "leaf.sql",
+        "-- name: leaf\n-- requires: middle\nSELECT 1;",
+    );
+
+    let graph = build_test_graph(&dir);
+    let all_nodes = graph.get_all_nodes();
+    let middle_node = all_nodes.iter().find(|n| n.name == "middle").unwrap();
+
+    // Middle node should have:
+    // - One dependency (root)
+    // - One dependent (leaf)
+    assert_eq!(middle_node.deps.len(), 1);
+    assert!(middle_node.deps.contains("root"));
+
+    let dependents_map = graph.build_dependents_map();
+    let dependents = dependents_map.get("middle").unwrap();
+    assert_eq!(dependents.len(), 1);
+    assert!(dependents.contains("leaf"));
+}
+
+#[test]
+fn test_file_analysis_orphan_node() {
+    let dir = TempDir::new().unwrap();
+
+    create_test_file(&dir, "orphan.sql", "-- name: orphan\nSELECT 1;");
+    create_test_file(&dir, "connected.sql", "-- name: connected\nSELECT 1;");
+    create_test_file(
+        &dir,
+        "leaf.sql",
+        "-- name: leaf\n-- requires: connected\nSELECT 1;",
+    );
+
+    let graph = build_test_graph(&dir);
+    let all_nodes = graph.get_all_nodes();
+    let orphan_node = all_nodes.iter().find(|n| n.name == "orphan").unwrap();
+
+    // Orphan node should have:
+    // - No dependencies
+    // - No dependents
+    assert_eq!(orphan_node.deps.len(), 0);
+
+    let dependents_map = graph.build_dependents_map();
+    assert!(!dependents_map.contains_key("orphan"));
+
+    // Verify it's in the orphans list
+    let orphans = graph.find_orphans();
+    assert!(orphans.contains("orphan"));
+}

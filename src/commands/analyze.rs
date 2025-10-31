@@ -71,6 +71,13 @@ pub struct AnalyzeArgs {
     verbose: bool,
 
     #[arg(
+        short = 'q',
+        long = "quiet",
+        help = "Suppress output, only return exit code"
+    )]
+    quiet: bool,
+
+    #[arg(
         long = "layers",
         help = "Comma-separated list of layer names in order",
         value_name = "LAYERS"
@@ -173,24 +180,42 @@ enum AnalyzeCommand {
     LeafNodes,
     /// Find files with dependents but no dependencies
     RootNodes,
+    /// Detect cycles in the dependency graph
+    Cycles,
+    /// Find missing dependencies (referenced but non-existent files)
+    Missing,
+    /// Analyze a specific file in detail
+    File {
+        #[arg(help = "Path to the file to analyze")]
+        path: PathBuf,
+    },
 }
 
 impl AnalyzeArgs {
     pub fn execute(&self) -> Result<(), TopCatError> {
-        // Initialize logging
-        if self.verbose {
-            Builder::new()
-                .filter(None, LevelFilter::Debug)
-                .try_init()
-                .ok();
-        } else {
-            Builder::new()
-                .filter(None, LevelFilter::Info)
-                .try_init()
-                .ok();
+        // Initialize logging (unless quiet mode)
+        if !self.quiet {
+            if self.verbose {
+                Builder::new()
+                    .filter(None, LevelFilter::Debug)
+                    .try_init()
+                    .ok();
+            } else {
+                Builder::new()
+                    .filter(None, LevelFilter::Info)
+                    .try_init()
+                    .ok();
+            }
         }
 
-        // Build the dependency graph
+        // For cycles and missing commands, we handle graph building specially
+        match &self.command {
+            AnalyzeCommand::Cycles => return self.analyze_cycles(),
+            AnalyzeCommand::Missing => return self.analyze_missing(),
+            _ => {}
+        }
+
+        // Build the dependency graph (for all other commands)
         let graph = self.build_graph()?;
 
         // Check for external usage if requested
@@ -227,6 +252,11 @@ impl AnalyzeArgs {
             }
             AnalyzeCommand::LeafNodes => self.analyze_leaf_nodes(&graph, external_checker.as_ref()),
             AnalyzeCommand::RootNodes => self.analyze_root_nodes(&graph),
+            AnalyzeCommand::File { path } => {
+                self.analyze_file(&graph, path, external_checker.as_ref())
+            }
+            // Cycles and Missing are handled earlier
+            AnalyzeCommand::Cycles | AnalyzeCommand::Missing => unreachable!(),
         }
     }
 
@@ -601,6 +631,249 @@ impl AnalyzeArgs {
 
         println!("{table}");
         println!("\n💡 These files are entry points in your dependency graph");
+
+        Ok(())
+    }
+
+    fn analyze_cycles(&self) -> Result<(), TopCatError> {
+        if !self.quiet {
+            println!("\n🔄 Cycle Detection Analysis");
+            println!("═══════════════════════════════════════════════════════════\n");
+        }
+
+        // Try to build the graph - if it has cycles, it will return a CyclicDependency error
+        match self.build_graph() {
+            Ok(_) => {
+                if !self.quiet {
+                    println!("✅ No cycles detected in the dependency graph");
+                    println!("   The graph is a valid DAG (Directed Acyclic Graph)");
+                }
+                Ok(())
+            }
+            Err(TopCatError::CyclicDependency(cycles)) => {
+                if !self.quiet {
+                    println!(
+                        "⚠️  Found {} cycle(s) in the dependency graph:\n",
+                        cycles.len()
+                    );
+
+                    for (i, cycle) in cycles.iter().enumerate() {
+                        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                        println!("Cycle #{}", i + 1);
+                        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+                        // Show participants
+                        println!("Participants:");
+                        let mut table = Table::new();
+                        table.set_header(vec!["Node Name", "File Path"]);
+
+                        // Deduplicate participants
+                        let mut seen = std::collections::HashSet::new();
+                        for node in cycle {
+                            if seen.insert(&node.name) {
+                                table.add_row(vec![
+                                    Cell::new(&node.name),
+                                    Cell::new(node.path.display()),
+                                ]);
+                            }
+                        }
+                        println!("{table}\n");
+
+                        // Show cycle edges
+                        println!("Cycle Path:");
+                        for (j, node) in cycle.iter().enumerate() {
+                            let next_node = &cycle[(j + 1) % cycle.len()];
+                            println!("  {} → {}", node.name, next_node.name);
+                        }
+                        println!();
+                    }
+
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+                    println!("💡 How to fix cycles:");
+                    println!("   1. Remove one of the dependencies in the cycle");
+                    println!("   2. Use 'exists' instead of 'requires' for soft dependencies");
+                    println!("   3. Restructure code to break circular dependencies");
+                    println!("   4. Use layers to enforce ordering between groups");
+                }
+
+                // Return error with exit code 1 for scripting
+                Err(TopCatError::CyclicDependency(cycles))
+            }
+            Err(e) => {
+                // Other errors
+                Err(e)
+            }
+        }
+    }
+
+    fn analyze_missing(&self) -> Result<(), TopCatError> {
+        if !self.quiet {
+            println!("\n🔍 Missing Dependencies Analysis");
+            println!("═══════════════════════════════════════════════════════════\n");
+        }
+
+        // Try to build the graph - collect all missing dependency errors
+        let mut missing_deps: Vec<(String, String)> = Vec::new();
+
+        // We need to attempt to build and catch the missing dependency errors
+        match self.build_graph() {
+            Ok(_) => {
+                if !self.quiet {
+                    println!("✅ No missing dependencies found");
+                    println!("   All referenced dependencies exist in the graph");
+                }
+                Ok(())
+            }
+            Err(TopCatError::MissingDependency(file, dep)) => {
+                // Caught a missing dependency
+                missing_deps.push((file, dep));
+
+                if !self.quiet {
+                    println!("⚠️  Found missing dependencies:\n");
+
+                    let mut table = Table::new();
+                    table.set_header(vec!["File", "Missing Dependency"]);
+
+                    for (file, dep) in &missing_deps {
+                        table.add_row(vec![
+                            Cell::new(file).fg(Color::Yellow),
+                            Cell::new(dep).fg(Color::Red),
+                        ]);
+                    }
+
+                    println!("{table}\n");
+                    println!("💡 These files reference dependencies that don't exist:");
+                    println!("   1. Check if the dependency file name is spelled correctly");
+                    println!("   2. Verify the dependency file is in the input directory");
+                    println!("   3. Consider using 'exists' instead of 'requires' if optional");
+                }
+
+                // Return error for scripting (exit code 1)
+                Err(TopCatError::MissingDependency(
+                    missing_deps[0].0.clone(),
+                    missing_deps[0].1.clone(),
+                ))
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn analyze_file(
+        &self,
+        graph: &TCGraph,
+        path: &PathBuf,
+        external_checker: Option<&ExternalUsageChecker>,
+    ) -> Result<(), TopCatError> {
+        if !self.quiet {
+            println!("\n📄 File Analysis: {}", path.display());
+            println!("═══════════════════════════════════════════════════════════\n");
+        }
+
+        // Find the node in the graph
+        let all_nodes = graph.get_all_nodes();
+        let target_node = all_nodes.iter().find(|n| n.path == *path).ok_or_else(|| {
+            TopCatError::ConfigError(format!("File not found in graph: {}", path.display()))
+        })?;
+
+        if !self.quiet {
+            println!("Node Name: {}", target_node.name);
+            println!("File Path: {}", target_node.path.display());
+            println!("Layer: {}", target_node.layer);
+            println!();
+        }
+
+        // Get dependencies
+        if !self.quiet {
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("Direct Dependencies ({}):", target_node.deps.len());
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        }
+
+        if target_node.deps.is_empty() {
+            if !self.quiet {
+                println!("  (none)\n");
+            }
+        } else if !self.quiet {
+            let mut table = Table::new();
+            table.set_header(vec!["Dependency Name"]);
+            for dep in &target_node.deps {
+                table.add_row(vec![Cell::new(dep)]);
+            }
+            println!("{table}\n");
+        }
+
+        // Get dependents
+        let dependents_map = graph.build_dependents_map();
+        let direct_dependents = dependents_map
+            .get(&target_node.name)
+            .cloned()
+            .unwrap_or_default();
+
+        if !self.quiet {
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("Direct Dependents ({}):", direct_dependents.len());
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        }
+
+        if direct_dependents.is_empty() {
+            if !self.quiet {
+                println!("  (none)\n");
+            }
+        } else if !self.quiet {
+            let mut table = Table::new();
+            table.set_header(vec!["Dependent Name"]);
+            for dep in &direct_dependents {
+                table.add_row(vec![Cell::new(dep)]);
+            }
+            println!("{table}\n");
+        }
+
+        // Check external usage if available
+        if let Some(checker) = external_checker {
+            let mut single_node_set = std::collections::HashSet::new();
+            single_node_set.insert(target_node.name.clone());
+            let externally_used = checker.filter_unused(&single_node_set);
+
+            if !self.quiet {
+                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                println!("External Usage:");
+                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+                if externally_used.is_empty() {
+                    println!("  ❌ Not used by external files\n");
+                } else {
+                    println!("  ✅ Used by external files\n");
+                }
+            }
+        }
+
+        // Analysis summary
+        if !self.quiet {
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("Summary:");
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+            // Determine node type
+            let node_type = if target_node.deps.is_empty() && direct_dependents.is_empty() {
+                "Orphan (no connections)"
+            } else if target_node.deps.is_empty() {
+                "Root Node (entry point)"
+            } else if direct_dependents.is_empty() {
+                "Leaf Node (terminal)"
+            } else {
+                "Intermediate Node"
+            };
+
+            println!("  Node Type: {node_type}");
+
+            // Check if in dead branches
+            let unrequired = graph.find_unrequired();
+            if unrequired.contains(&target_node.name) {
+                println!("  ⚠️  Part of unrequired files (not used by others)");
+            } else {
+                println!("  ✅ Required by other files");
+            }
+        }
 
         Ok(())
     }

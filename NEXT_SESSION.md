@@ -1,79 +1,92 @@
 # Quick Pickup Guide for Next Session
 
 ## TL;DR Status
-- ✅ **Phases 1, 2, 2.5 & 3 COMPLETE**: Full analysis and cleanup operations working perfectly!
-- ✅ **All Tests Passing**: 63/63 tests (36 unit + 16 analysis + 11 clean)
+- ✅ **Phases 1, 2, 2.5, 3 & 4 COMPLETE**: Full analysis suite and cleanup operations working perfectly!
+- ✅ **All Tests Passing**: 72/72 tests (36 unit + 25 analysis + 11 clean)
 - ✅ **Zero Clippy Warnings**: Clean, production-ready code
-- 🎯 **Next Task**: Implement Phase 4 - Comprehensive Analysis Commands
+- 🎯 **Next Task**: Implement Phase 5 - Schema Analysis
 
 ## What Just Happened
 
-### Major Win: Phase 3 Cleanup Operations Complete! 🎉
+### Major Win: Phase 4 Complete! 🎉
 
-Successfully implemented safe file deletion with comprehensive safety features:
+Successfully implemented the final analysis commands to complete the comprehensive analysis suite:
 
-**All 4 cleanup subcommands working:**
-- `clean dead-branches` - Remove complete dead subtrees
-- `clean orphans` - Remove isolated files
-- `clean unrequired` - Remove files not required by others
-- `clean targets <files>` - Remove specific files with dependency checking
+**All 8 analysis subcommands now working:**
+- `analyze dead-branches` - Remove complete dead subtrees (Phase 2)
+- `analyze orphans` - Files with no connections (Phase 2)
+- `analyze unrequired` - Files not required by others (Phase 2)
+- `analyze leaf-nodes` - Files with deps but no dependents (Phase 2)
+- `analyze root-nodes` - Entry points (Phase 2)
+- `analyze cycles` - Detect circular dependencies (Phase 4 ✨)
+- `analyze missing` - Find missing dependencies (Phase 4 ✨)
+- `analyze file <path>` - Deep single-file analysis (Phase 4 ✨)
 
-**Safety features implemented:**
-- ✅ Dry-run by default (must use `--no-dry-run` to delete)
-- ✅ Interactive confirmation prompts (unless `--force`)
-- ✅ Root node protection (respects all 4 pattern types)
-- ✅ External usage checking integration
-- ✅ Dependency validation (prevents breaking deletions)
-- ✅ Preview tables before deletion
-- ✅ Robust error handling with partial failure support
+**New features implemented:**
+- ✅ `--quiet` flag for CI/CD integration (suppress output, return exit codes only)
+- ✅ Proper exit codes for scripting (0 = success, 1 = issues found)
+- ✅ Beautiful cycle detection with participant tables and cycle paths
+- ✅ Color-coded missing dependency reporting
+- ✅ Comprehensive single-file analysis showing dependencies, dependents, and node type
 
 **Implementation stats:**
-- Created `src/commands/clean.rs` (750 lines)
-- Added 11 comprehensive integration tests (`tests/clean_tests.rs`, 430 lines)
-- Made `build_dependents_map()` public for cleanup operations
-- All 63 tests passing
+- Modified `src/commands/analyze.rs` (+250 lines)
+- Added 9 comprehensive integration tests (`tests/analysis_tests.rs`, +331 lines)
+- All 72 tests passing
 - Zero clippy warnings
 
-## Next Priority: Phase 4 - Comprehensive Analysis 🎯
+## Next Priority: Phase 5 - Schema Analysis 🎯
 
-**Goal**: Add remaining analysis commands that were deferred from Phase 2
+**Goal**: Add schema-aware analysis and filtering capabilities
 
-### Why Phase 4 Now?
+### Why Phase 5 Now?
 
-Phase 2 implemented `analyze dead-branches` as the priority feature. Now that we have both analysis AND cleanup working, we should complete the analysis suite with the remaining commands that users will need.
+With the complete analysis suite (Phase 2 + 4) and cleanup operations (Phase 3) working, we now have all the core functionality. Phase 5 adds schema-specific capabilities that many SQL projects need - filtering by schema, cross-schema dependency analysis, and schema statistics.
 
 ### Implementation Tasks
 
-See `IMPLEMENTATION_PLAN.md` Phase 4 for full task list. Key commands to implement:
+See `IMPLEMENTATION_PLAN.md` Phase 5 for full task list. Key features to implement:
 
-#### Already Implemented (from Phase 2)
-- ✅ `analyze dead-branches`
-- ✅ `analyze orphans`
-- ✅ `analyze unrequired`
-- ✅ `analyze leaf-nodes`
-- ✅ `analyze root-nodes`
+#### Schema Commands to Implement
 
-#### Still To Implement
-1. **`analyze cycles`** - Enhanced cycle detection with clear reporting
-   - Show the cycle participants
-   - Show the edges that form the cycle
-   - Help users understand how to break the cycle
+1. **Schema Extraction** - Parse schema names from node names
+   - Support common patterns: `schema.table`, `schema_table`, etc.
+   - Handle files without schema (treat as default/no-schema)
+   - Store schema information in graph structure
 
-2. **`analyze missing`** - Report missing dependencies
-   - Files that are referenced but don't exist
-   - Helps identify broken dependencies
-   - Could suggest similar file names
+2. **`schema list`** - Show all schemas with statistics
+   ```bash
+   topcat schema list -i sql/ -e sql
+   ```
+   - Show schema names
+   - Count of files per schema
+   - Count of dependencies per schema
+   - Bar chart visualization
 
-3. **`analyze file <path>`** - Single file analysis
-   - Show all dependencies (direct and transitive)
-   - Show all dependents (what depends on this file)
-   - Show layer information
-   - Show if it's in a dead branch
+3. **`schema analyze <name>`** - Detailed schema view
+   ```bash
+   topcat schema analyze -i sql/ -e sql my_schema
+   ```
+   - Show all files in schema
+   - Show internal dependencies (within schema)
+   - Show external dependencies (to other schemas)
+   - Show which schemas depend on this one
 
-4. **Enhanced Output**
-   - Add progress bars for long operations (already have `indicatif`)
-   - Add `--quiet` mode for scripting
-   - Improve verbose output with more details
+4. **Schema Filtering** - Add to existing commands
+   ```bash
+   topcat analyze -i sql/ -e sql --schema my_schema dead-branches
+   topcat clean -i sql/ -e sql --schema my_schema orphans
+   ```
+   - Filter analysis to specific schema(s)
+   - Apply to all analyze and clean commands
+
+5. **Cross-Schema Analysis**
+   ```bash
+   topcat schema dependencies -i sql/ -e sql
+   ```
+   - Show which schemas depend on which
+   - Detect cross-schema cycles
+   - Visualize schema dependency graph
 
 ### Quick Start Commands
 
@@ -84,155 +97,160 @@ cargo test --lib --tests
 cargo clippy --all-targets
 
 # Test existing functionality
-./target/debug/topcat analyze -i tests/input/sql -e sql dead-branches
-./target/debug/topcat clean -i tests/input/sql -e sql dead-branches
-
-# After implementing Phase 4:
 ./target/debug/topcat analyze -i tests/input/sql -e sql cycles
 ./target/debug/topcat analyze -i tests/input/sql -e sql missing
 ./target/debug/topcat analyze -i tests/input/sql -e sql file tests/input/sql/my_schema/schema.sql
+
+# After implementing Phase 5:
+./target/debug/topcat schema list -i tests/input/sql -e sql
+./target/debug/topcat schema analyze -i tests/input/sql -e sql my_schema
+./target/debug/topcat analyze -i tests/input/sql -e sql --schema my_schema orphans
 ```
 
 ## Key Files Reference
 
-- **`IMPLEMENTATION_PLAN.md`** - Phase 4 has the detailed task breakdown
-- **`STATUS.md`** - Updated with Phase 3 completion
-- **`src/commands/analyze.rs`** - Where to add new analysis commands (605 lines)
-- **`src/analysis/mod.rs`** - Where analysis algorithms live
-- **`src/file_dag.rs`** - Core graph structure and cycle detection
-- **`tests/analysis_tests.rs`** - Integration test patterns to follow
+- **`IMPLEMENTATION_PLAN.md`** - Phase 5 has the detailed task breakdown
+- **`STATUS.md`** - Updated with Phase 4 completion
+- **`src/commands/analyze.rs`** - Analysis commands (885 lines, just updated)
+- **`src/file_dag.rs`** - Core graph structure (will need schema support)
+- **`src/main.rs`** - Add Schema command variant
+- **`tests/analysis_tests.rs`** - Integration test patterns to follow (988 lines)
 
 ## Important Context
 
-### Analysis Command Structure (from Phases 2 & 2.5)
+### Schema Command Structure (New for Phase 5)
 
-The analyze command follows this pattern:
+The schema command will follow this pattern:
 
 ```rust
 #[derive(Debug, Subcommand)]
-enum AnalyzeCommand {
-    DeadBranches,  // ✅ Implemented
-    Orphans,       // ✅ Implemented
-    Unrequired,    // ✅ Implemented
-    LeafNodes,     // ✅ Implemented
-    RootNodes,     // ✅ Implemented
-    Cycles,        // 🎯 To implement
-    Missing,       // 🎯 To implement
-    File { path: PathBuf },  // 🎯 To implement
+enum SchemaCommand {
+    /// List all schemas with statistics
+    List,
+    /// Analyze a specific schema in detail
+    Analyze { schema: String },
+    /// Show cross-schema dependencies
+    Dependencies,
 }
 
-impl AnalyzeArgs {
-    pub fn execute(&self) -> Result<(), TopCatError> {
-        // 1. Build graph
-        // 2. Setup external checker (optional)
-        // 3. Build root matcher (optional)
-        // 4. Route to specific command handler
-        match &self.command {
-            AnalyzeCommand::Cycles => self.analyze_cycles(&graph),
-            AnalyzeCommand::Missing => self.analyze_missing(&graph),
-            AnalyzeCommand::File { path } => self.analyze_file(&graph, path),
-            // ...
-        }
-    }
+#[derive(Debug, Args)]
+pub struct SchemaArgs {
+    // Common input/output args
+    #[arg(short = 'i', long = "input-dirs")]
+    input_dirs: Vec<PathBuf>,
+
+    // Schema pattern configuration
+    #[arg(long = "schema-separator", default_value = ".")]
+    schema_separator: String,
+
+    #[command(subcommand)]
+    command: SchemaCommand,
 }
 ```
 
-### Cycle Detection (Already Exists!)
+### Schema Extraction Strategy
 
-Topcat already has cycle detection in `src/file_dag.rs`:
+Common SQL patterns to support:
+- `schema.table` - Most common pattern
+- `schema_table` - Underscore separator
+- `schema::table` - PostgreSQL-style
+- No schema - Treat as "default" or "no_schema"
 
+Implementation approach:
+1. Add `schema: Option<String>` field to `FileNode`
+2. Extract schema during node creation based on pattern
+3. Create helper methods on `TCGraph`:
+   - `get_schemas() -> HashMap<String, Vec<FileNode>>`
+   - `filter_by_schema(&self, schema: &str) -> TCGraph`
+   - `get_cross_schema_deps() -> Vec<(String, String)>`
+
+### Schema Filtering for Existing Commands
+
+Add `--schema` flag to `AnalyzeArgs` and `CleanArgs`:
 ```rust
-pub fn get_sorted_files(&self) -> Result<Vec<PathBuf>, TopCatError> {
-    // Calls check_cycles() internally
-    // Returns TopCatError::CyclicDependency if cycles found
-}
-
-fn check_cycles(&self) -> Result<(), TopCatError> {
-    // Uses tarjan_scc to find strongly connected components
-    // Already formats nice error messages!
-}
+#[arg(long = "schema", help = "Filter to specific schema(s)")]
+schema_filter: Option<Vec<String>>,
 ```
 
-**Task**: Expose this as an `analyze cycles` command instead of only during concat operations.
-
-### Testing with TempDir
-
-Remember: `TempDir` creates hidden directories (`.tmpXXXX`), so tests must set `include_hidden: true` in Config!
-
+Then filter the graph before running analysis:
 ```rust
-let config = Config {
-    include_hidden: true,  // Required for TempDir!
-    // ...
-};
+let mut graph = self.build_graph()?;
+if let Some(schemas) = &self.schema_filter {
+    graph = graph.filter_by_schemas(schemas)?;
+}
 ```
 
-## Phase 4 Implementation Strategy
+## Phase 5 Implementation Strategy
 
-### 1. Cycles Command (Easiest)
-- Most of the work is already done in `file_dag.rs`
-- Just need to call `check_cycles()` and format the output
-- Can reuse existing error formatting from `TopCatError::CyclicDependency`
+### 1. Schema Extraction (Foundation)
+- Add schema field to FileNode
+- Implement schema extraction from node names
+- Add tests for various naming patterns
 
-### 2. Missing Dependencies Command (Medium)
-- Need to identify nodes referenced in `requires:` that don't exist in graph
-- Already tracked during graph building (see `MissingDependency` error)
-- Collect and report instead of erroring
+### 2. Schema List Command (Easy)
+- Implement `schema list` subcommand
+- Group files by schema
+- Show statistics with comfy-table
+- Add bar chart visualization
 
-### 3. Single File Analysis (Medium)
-- Use existing graph traversal methods
-- Show: dependencies (transitive), dependents (reverse lookup), layer, dead branch status
-- Good UX feature for understanding specific files
+### 3. Schema Analyze Command (Medium)
+- Implement `schema analyze <name>` subcommand
+- Show files in schema
+- Show internal vs external dependencies
+- Show reverse dependencies (who depends on this schema)
 
-### 4. Enhanced Output (Polish)
-- Progress bars for operations that take time
-- `--quiet` flag to suppress output (just return exit code)
-- Better verbose output with timing information
+### 4. Schema Filtering (Medium)
+- Add `--schema` flag to AnalyzeArgs and CleanArgs
+- Implement `filter_by_schema()` method on TCGraph
+- Update all commands to respect schema filter
 
-## After Phase 4: Future Phases
+### 5. Cross-Schema Dependencies (Medium)
+- Implement `schema dependencies` subcommand
+- Build schema-level dependency graph
+- Detect cross-schema cycles
+- Visualize dependencies
 
-### Phase 5: Schema Analysis
-- Schema extraction and filtering
-- Cross-schema dependency analysis
-- Visual statistics by schema
+## After Phase 5: Future Phases
 
 ### Phase 6: Export Capabilities
-- JSON export
-- DOT/GraphViz enhancements
-- GraphML support
+- JSON export with full metadata
+- Enhanced DOT/GraphViz with schema colors
+- GraphML format support
 - Mermaid diagram format
 
 ### Phase 7: Configuration & Polish
 - Auto-discovery of `.topcat.toml`
 - Shell completions (bash, zsh, fish)
 - Man pages
-- Performance optimizations
+- Performance optimizations for large codebases
 
 ### Phase 8: Documentation & Skills
-- Complete README update
-- User guide with examples
+- Complete README update with all commands
+- User guide with real-world examples
 - Create Claude Code skills for common workflows
 - API documentation
 
 ## Success Criteria
 
-Phase 4 is complete when:
-1. ✅ `analyze cycles` command works and shows clear cycle information
-2. ✅ `analyze missing` command reports missing dependencies
-3. ✅ `analyze file <path>` command shows comprehensive single-file analysis
-4. ✅ Progress bars work for long operations
-5. ✅ `--quiet` mode suppresses output appropriately
-6. ✅ All tests pass (expect 70+ tests after Phase 4)
-7. ✅ `cargo clippy` passes with zero warnings
-8. ✅ Manual testing confirms all new commands work correctly
-9. ✅ Integration tests cover new analysis types
-10. ✅ Documentation updated
+Phase 5 is complete when:
+1. ✅ Schema extraction works for common naming patterns
+2. ✅ `schema list` command shows all schemas with statistics
+3. ✅ `schema analyze <name>` shows detailed schema information
+4. ✅ `--schema` filter works on all analyze and clean commands
+5. ✅ `schema dependencies` shows cross-schema relationships
+6. ✅ Cross-schema cycle detection works
+7. ✅ All tests pass (expect 80+ tests after Phase 5)
+8. ✅ `cargo clippy` passes with zero warnings
+9. ✅ Manual testing confirms all new commands work correctly
+10. ✅ Integration tests cover schema operations
+11. ✅ Documentation updated
 
 ## Current Test Stats
 
 ```
-✅ All 63 tests passing
+✅ All 72 tests passing
    - 36 unit tests
-   - 16 analysis integration tests
+   - 25 analysis integration tests
    - 11 clean integration tests
 
 ✅ Zero clippy warnings
@@ -257,65 +275,59 @@ cargo clippy --all-targets
 # Build and test analyze command
 cargo build && ./target/debug/topcat analyze -i tests/input/sql -e sql cycles
 
-# Build and test clean command
-cargo build && ./target/debug/topcat clean -i tests/input/sql -e sql dead-branches
+# Build and test file analysis
+cargo build && ./target/debug/topcat analyze -i tests/input/sql -e sql file tests/input/sql/my_schema/schema.sql
 ```
 
-## Phase 4 Specific Notes
+## Phase 5 Specific Notes
 
-### Cycles Command Implementation Hints
+### Schema Extraction Implementation Hints
 
-The cycle detection already exists and produces excellent error messages. Example from existing code:
-
-```
-Cyclic dependency detected:
-  Cycle 1:
-    Participants:
-      - node_a (path/to/a.sql)
-      - node_b (path/to/b.sql)
-      - node_c (path/to/c.sql)
-    Edges:
-      - node_a -> node_b
-      - node_b -> node_c
-      - node_c -> node_a
-```
+The test data already has schema-prefixed nodes! Look at `tests/input/sql`:
+- Files in `my_schema/` have nodes like `my_other_schema`
+- Files in `my_other_schema/` exist
+- This is perfect for testing schema extraction
 
 **Implementation approach:**
-1. Call graph building (may fail with CyclicDependency error)
-2. Catch the error and extract cycle information
-3. Format as a table using `comfy-table`
-4. Show helpful suggestions for breaking cycles
+1. Add schema extraction logic to `FileNode::parse_header_metadata()`
+2. Look for common separators: `.`, `_`, `::`
+3. Store extracted schema in `FileNode.schema` field
+4. Default to `None` if no schema detected
 
-### Missing Dependencies Implementation Hints
+### Schema Statistics Implementation Hints
 
-Currently, missing dependencies cause graph building to fail. We need to:
-1. Modify graph building to collect missing deps instead of failing
-2. Store them in a separate collection
-3. Report them in `analyze missing` command
+For `schema list`, we need:
+1. Group all nodes by schema
+2. Count files per schema
+3. Count dependencies (internal and external)
+4. Format as table with bar charts
 
-Or alternatively:
-1. Try to build graph, catch MissingDependency errors
-2. Collect all missing references
-3. Format as a table
+Can use existing `comfy-table` for formatting and simple ASCII bar charts.
 
-### Single File Analysis Implementation Hints
+### Schema Filtering Implementation Hints
 
-For a given file path:
-1. Find the node in the graph
-2. Get its dependencies (direct from node.deps)
-3. Get transitive dependencies (follow the graph)
-4. Get dependents (use `build_dependents_map()`)
-5. Get transitive dependents (reverse follow)
-6. Check if in dead branches
-7. Show layer information
-8. Format everything nicely
+To filter by schema:
+1. Build full graph first
+2. Filter nodes to keep only those in target schema(s)
+3. Keep dependencies even if they're in other schemas (for analysis)
+4. Or optionally filter dependencies too (for isolated analysis)
+
+```rust
+impl TCGraph {
+    pub fn filter_by_schemas(&self, schemas: &[String]) -> Result<TCGraph, TopCatError> {
+        // Clone graph and filter nodes
+        // Decide: keep cross-schema deps or not?
+    }
+}
+```
 
 ## Contact/Handoff Info
 
 - All code compiles cleanly
-- All 63 tests passing
-- Phases 1, 2, 2.5, and 3 are production-ready
-- Clean command provides safe deletion with comprehensive safety features
-- IMPLEMENTATION_PLAN.md Phase 4 has everything needed for next implementation
+- All 72 tests passing (36 unit + 25 analysis + 11 clean)
+- Phases 1, 2, 2.5, 3, and 4 are production-ready
+- Analysis suite is complete with all 8 commands
+- Clean command provides safe deletion
+- IMPLEMENTATION_PLAN.md Phase 5 has everything needed for next implementation
 
-Good luck! Phase 4 completes the analysis suite! 🚀
+Good luck! Phase 5 adds powerful schema-aware capabilities! 🚀
