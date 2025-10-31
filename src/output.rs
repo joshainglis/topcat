@@ -69,11 +69,11 @@ impl FileOutput {
 
 impl OutputDestination for FileOutput {
     fn write_line(&mut self, content: &str) -> std::io::Result<()> {
-        writeln!(self.writer, "{}", content)
+        writeln!(self.writer, "{content}")
     }
 
     fn write_str(&mut self, content: &str) -> std::io::Result<()> {
-        write!(self.writer, "{}", content)
+        write!(self.writer, "{content}")
     }
 }
 
@@ -81,12 +81,12 @@ struct ConsoleOutput;
 
 impl OutputDestination for ConsoleOutput {
     fn write_line(&mut self, content: &str) -> std::io::Result<()> {
-        println!("{}", content);
+        println!("{content}");
         Ok(())
     }
 
     fn write_str(&mut self, content: &str) -> std::io::Result<()> {
-        print!("{}", content);
+        print!("{content}");
         Ok(())
     }
 }

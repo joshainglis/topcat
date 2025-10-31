@@ -16,10 +16,7 @@ use crate::stable_topo::StableTopo;
 use crate::{config, io_utils};
 
 fn string_slice_to_array<T: Hash + Eq + Clone>(option: Option<&[T]>) -> Option<HashSet<T>> {
-    match option {
-        Some(arr) => Some(arr.iter().cloned().collect()),
-        None => None,
-    }
+    option.map(|arr| arr.iter().cloned().collect())
 }
 
 fn collect_files(
@@ -42,13 +39,13 @@ fn filter_files<'a>(
     include_extensions: &'a Option<HashSet<String>>,
     exclude_extensions: &'a Option<HashSet<String>>,
 ) -> impl Iterator<Item = &'a PathBuf> + 'a {
-    debug!("files: {:?}", files);
-    debug!("include files: {:?}", include_file_set);
-    debug!("exclude files: {:?}", exclude_file_set);
-    debug!("include extensions: {:?}", include_extensions);
-    debug!("exclude extensions: {:?}", exclude_extensions);
+    debug!("files: {files:?}");
+    debug!("include files: {include_file_set:?}");
+    debug!("exclude files: {exclude_file_set:?}");
+    debug!("include extensions: {include_extensions:?}");
+    debug!("exclude extensions: {exclude_extensions:?}");
     files.iter().filter(move |path| {
-        trace!("checking filters for path: {:?}", path);
+        trace!("checking filters for path: {path:?}");
         if let Some(include) = include_extensions {
             if !include.is_empty() {
                 let ext = match path.extension() {
@@ -57,8 +54,7 @@ fn filter_files<'a>(
                 };
                 if !include.contains(&ext) {
                     debug!(
-                        "Excluding file {:?} as its extension {:?} isn't in the include set: {:?}",
-                        path, ext, include
+                        "Excluding file {path:?} as its extension {ext:?} isn't in the include set: {include:?}"
                     );
                     return false;
                 }
@@ -72,22 +68,21 @@ fn filter_files<'a>(
                 };
                 if exclude.contains(&ext) {
                     debug!(
-                        "Excluding file {:?} as its extension '{:?}' is in the exclude set: {:?}",
-                        path, ext, exclude
+                        "Excluding file {path:?} as its extension '{ext:?}' is in the exclude set: {exclude:?}"
                     );
                     return false;
                 }
             }
         }
         if let Some(include) = include_file_set {
-            if !include.is_empty() && !include.contains::<PathBuf>(&*path) {
-                debug!("Excluding file as it isn't in the include set: {:?}", path);
+            if !include.is_empty() && !include.contains::<PathBuf>(path) {
+                debug!("Excluding file as it isn't in the include set: {path:?}");
                 return false;
             }
         }
         if let Some(exclude) = exclude_file_set {
-            if !exclude.is_empty() && exclude.contains::<PathBuf>(&*path) {
-                debug!("Excluding file as it is in the exclude set: {:?}", path);
+            if !exclude.is_empty() && exclude.contains::<PathBuf>(path) {
+                debug!("Excluding file as it is in the exclude set: {path:?}");
                 return false;
             }
         }
@@ -96,9 +91,9 @@ fn filter_files<'a>(
 }
 
 fn handle_file_node_error(e: FileNodeError) -> Result<(), TopCatError> {
-    return match e {
+    match e {
         FileNodeError::NoNameDefined(p) => {
-            info!("Ignoring {:?}: No name defined in file header", p);
+            info!("Ignoring {p:?}: No name defined in file header");
             Ok(())
         }
         FileNodeError::TooManyNames(p, s) => Err(TopCatError::InvalidFileHeader(
@@ -107,9 +102,9 @@ fn handle_file_node_error(e: FileNodeError) -> Result<(), TopCatError> {
         )),
         FileNodeError::InvalidLayer(p, layer) => Err(TopCatError::InvalidFileHeader(
             p,
-            format!("Invalid layer '{}' declared", layer),
+            format!("Invalid layer '{layer}' declared"),
         )),
-    };
+    }
 }
 
 fn add_nodes_to_graphs(
@@ -168,7 +163,11 @@ fn validate_dependencies(
                     file_node.name.clone(),
                     format!(
                         "Node in layer '{}' (index {}) cannot depend on node '{}' in layer '{}' (index {})",
-                        file_node.layer, file_layer_idx, dep.clone(), dep_node.layer, dep_layer_idx
+                        file_node.layer,
+                        file_layer_idx,
+                        dep.clone(),
+                        dep_node.layer,
+                        dep_layer_idx
                     ),
                 ));
             }
@@ -309,7 +308,7 @@ impl TCGraph {
         for file in filtered_files {
             let file_node = match FileNode::from_file(
                 &self.comment_str,
-                &file,
+                file,
                 &self.layers,
                 &self.fallback_layer,
             ) {
@@ -363,8 +362,7 @@ impl TCGraph {
         while let Some(node_name) = queue.pop_front() {
             let file_node = self.name_map.get(&node_name).ok_or_else(|| {
                 TopCatError::UnknownError(format!(
-                    "Node '{}' not found in name_map during dependency traversal.",
-                    node_name
+                    "Node '{node_name}' not found in name_map during dependency traversal."
                 ))
             })?;
 
@@ -390,9 +388,10 @@ impl TCGraph {
         if !self.graph_is_built {
             return Err(TopCatError::GraphMissing);
         }
-        let graph = self.layer_graphs.get(layer_name).ok_or_else(|| {
-            TopCatError::UnknownError(format!("Layer '{}' not found", layer_name))
-        })?;
+        let graph = self
+            .layer_graphs
+            .get(layer_name)
+            .ok_or_else(|| TopCatError::UnknownError(format!("Layer '{layer_name}' not found")))?;
         let dot = Dot::with_attr_getters(
             graph,
             &[Config::EdgeNoLabel, Config::NodeNoLabel],
@@ -408,48 +407,44 @@ impl TCGraph {
         }
         info!("Getting sorted files");
 
-        let required_node_names: Option<HashSet<String>> =
-            if let Some(subdir_path) = &self.subdir_filter {
-                info!("Applying subdirectory filter: {:?}", subdir_path);
-                let canonical_subdir_path =
-                    subdir_path.canonicalize().map_err(|e| TopCatError::Io(e))?;
+        let required_node_names: Option<HashSet<String>> = if let Some(subdir_path) =
+            &self.subdir_filter
+        {
+            info!("Applying subdirectory filter: {subdir_path:?}");
+            let canonical_subdir_path = subdir_path.canonicalize().map_err(TopCatError::Io)?;
 
-                let initial_nodes: HashSet<String> = self
-                    .name_map
-                    .values()
-                    .filter_map(|node| {
-                        node.path
-                            .canonicalize()
-                            .ok()
-                            .and_then(|canonical_node_path| {
-                                if canonical_node_path.starts_with(&canonical_subdir_path) {
-                                    Some(node.name.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                    })
-                    .collect();
+            let initial_nodes: HashSet<String> = self
+                .name_map
+                .values()
+                .filter_map(|node| {
+                    node.path
+                        .canonicalize()
+                        .ok()
+                        .and_then(|canonical_node_path| {
+                            if canonical_node_path.starts_with(&canonical_subdir_path) {
+                                Some(node.name.clone())
+                            } else {
+                                None
+                            }
+                        })
+                })
+                .collect();
 
-                if initial_nodes.is_empty() {
-                    info!(
-                        "No files are found within the specified subdirectory filter: {:?}",
-                        subdir_path
-                    );
-                    return Ok(Vec::new());
-                }
+            if initial_nodes.is_empty() {
+                info!(
+                    "No files are found within the specified subdirectory filter: {subdir_path:?}"
+                );
+                return Ok(Vec::new());
+            }
 
-                debug!("Initial nodes from subdir: {:?}", initial_nodes);
-                Some(self.find_required_nodes(&initial_nodes)?)
-            } else {
-                None
-            };
+            debug!("Initial nodes from subdir: {initial_nodes:?}");
+            Some(self.find_required_nodes(&initial_nodes)?)
+        } else {
+            None
+        };
 
         if let Some(required) = &required_node_names {
-            debug!(
-                "Total required nodes (including dependencies): {:?}",
-                required
-            );
+            debug!("Total required nodes (including dependencies): {required:?}");
         }
 
         let mut sorted_files = Vec::new();
@@ -464,8 +459,8 @@ impl TCGraph {
                 graph.edge_count()
             );
 
-            let mut topo = StableTopo::new(graph);
-            while let Some(node_idx) = topo.next() {
+            let topo = StableTopo::new(graph);
+            for node_idx in topo {
                 let file_node = match graph.node_weight(node_idx) {
                     Some(x) => x,
                     None => return Err(TopCatError::UnknownError("Node not found".to_string())),

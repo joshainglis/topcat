@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use crate::exceptions::FileNodeError;
 
 fn get_file_headers(path: &PathBuf, comment_str: &str) -> Vec<String> {
-    let file = match File::open(&path) {
-        Err(why) => panic!("couldn't open {}: {}", path.display(), why.to_string()),
+    let file = match File::open(path) {
+        Err(why) => panic!("couldn't open {}: {why}", path.display()),
         Ok(file) => file,
     };
 
@@ -100,11 +100,7 @@ impl FileNode {
         line.split(|c: char| c.is_whitespace() || c == ',')
             .filter_map(|x| {
                 let x = x.trim().to_string();
-                if !x.is_empty() {
-                    Some(x)
-                } else {
-                    None
-                }
+                if !x.is_empty() { Some(x) } else { None }
             })
             .collect()
     }
@@ -114,15 +110,15 @@ impl FileNode {
         layers: &[String],
         fallback_layer: &str,
     ) -> Result<FileNode, FileNodeError> {
-        let file_data = get_file_headers(&path, comment_str);
-        let name_str = format!("{} name:", comment_str);
-        let dep_str = format!("{} requires:", comment_str);
-        let drop_str = format!("{} dropped_by:", comment_str);
-        let layer_str = format!("{} layer:", comment_str);
+        let file_data = get_file_headers(path, comment_str);
+        let name_str = format!("{comment_str} name:");
+        let dep_str = format!("{comment_str} requires:");
+        let drop_str = format!("{comment_str} dropped_by:");
+        let layer_str = format!("{comment_str} layer:");
         // Keep backward compatibility with old headers
-        let prepend_str = format!("{} is_initial", comment_str);
-        let append_str = format!("{} is_final", comment_str);
-        let ensure_exists_str = format!("{} exists:", comment_str);
+        let prepend_str = format!("{comment_str} is_initial");
+        let append_str = format!("{comment_str} is_final");
+        let ensure_exists_str = format!("{comment_str} exists:");
 
         let mut name = String::new();
         let mut deps = HashSet::new();

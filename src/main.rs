@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::string::ToString;
 
 use env_logger::Builder;
-use log::{error, info, LevelFilter};
+use log::{LevelFilter, error, info};
 use structopt::StructOpt;
 
 use file_dag::TCGraph;
@@ -169,10 +169,7 @@ fn main() -> Result<(), TopCatError> {
 
     // Validate that fallback layer exists in layers
     if !layers.contains(&fallback_layer) {
-        eprintln!(
-            "Error: Fallback layer '{}' is not in the layers list: {:?}",
-            fallback_layer, layers
-        );
+        eprintln!("Error: Fallback layer '{fallback_layer}' is not in the layers list: {layers:?}");
         std::process::exit(1);
     }
 
@@ -203,7 +200,7 @@ fn main() -> Result<(), TopCatError> {
             info!("Graph built successfully!");
         }
         Err(e) => {
-            eprintln!("Error Encountered:\n{}\n\nExiting.", e);
+            eprintln!("Error Encountered:\n{e}\n\nExiting.");
             std::process::exit(1);
         }
     }
@@ -223,7 +220,7 @@ fn main() -> Result<(), TopCatError> {
         Err(e) => {
             let mut map = HashMap::new();
             map.insert(1, e);
-            error!("Initialization Failure:\n{:#?}\n\nExiting.", map);
+            error!("Initialization Failure:\n{map:#?}\n\nExiting.");
             std::process::exit(1);
         }
     }

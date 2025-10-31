@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
+use petgraph::Incoming;
 use petgraph::data::DataMap;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::IntoNeighborsDirected;
 use petgraph::visit::Reversed;
 use petgraph::visit::{GraphBase, IntoNeighbors, IntoNodeIdentifiers, Visitable};
-use petgraph::Incoming;
 
 /// `StableTopo` represents a stable topological sort of a directed graph.
 /// It is implemented using a depth-first search (DFS) algorithm.
@@ -96,11 +96,11 @@ where
         self.tovisit.sort_unstable_by(|a, b| {
             match self.graph.node_weight(*a) {
                 Some(x) => x,
-                None => panic!("Node not found in graph: {:?}", a),
+                None => panic!("Node not found in graph: {a:?}"),
             }
             .cmp(match self.graph.node_weight(*b) {
                 Some(x) => x,
-                None => panic!("Node not found in graph: {:?}", b),
+                None => panic!("Node not found in graph: {b:?}"),
             })
         });
 
@@ -125,11 +125,11 @@ where
             neighbors.sort_unstable_by(|a, b| {
                 match self.graph.node_weight(*a) {
                     Some(x) => x,
-                    None => panic!("Node not found in graph: {:?}", a),
+                    None => panic!("Node not found in graph: {a:?}"),
                 }
                 .cmp(match self.graph.node_weight(*b) {
                     Some(x) => x,
-                    None => panic!("Node not found in graph: {:?}", b),
+                    None => panic!("Node not found in graph: {b:?}"),
                 })
             });
             self.tovisit.extend(neighbors);

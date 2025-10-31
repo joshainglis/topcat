@@ -12,7 +12,7 @@ fn is_hidden_dir_or_file(path: &Path) -> Result<bool, io::Error> {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Invalid file name",
-            ))
+            ));
         }
     };
     Ok(file_or_dir_name.to_string_lossy().starts_with('.'))
@@ -32,7 +32,7 @@ pub fn walk_dir(dir: &Path, include_hidden: bool) -> io::Result<HashSet<PathBuf>
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(e) => {
-            error!("Read dir failed: {}", e);
+            error!("Read dir failed: {e}");
             return Ok(files);
         }
     };
@@ -51,7 +51,7 @@ pub fn walk_dir(dir: &Path, include_hidden: bool) -> io::Result<HashSet<PathBuf>
                     files.extend(subdir_files);
                 }
             }
-            Err(e) => error!("Read dir failed: {}", e),
+            Err(e) => error!("Read dir failed: {e}"),
         }
     }
 
@@ -67,7 +67,7 @@ pub fn glob_files(glob_patterns: &[String]) -> Result<HashSet<PathBuf>, glob::Pa
             if let Ok(path) = entry {
                 paths.insert(path);
             } else if let Err(e) = entry {
-                error!("Failed to read entry: {:?}", e);
+                error!("Failed to read entry: {e:?}");
             }
         }
     }
@@ -171,7 +171,7 @@ mod tests {
         let glob_pattern = format!("{}/*.txt", working_dir_path.display());
 
         // Call the glob_files function with the glob pattern
-        let result = glob_files(&vec![glob_pattern]);
+        let result = glob_files(&[glob_pattern]);
 
         // Assert the expected files are returned
         match result {
@@ -179,7 +179,7 @@ mod tests {
                 assert!(files.contains(&file1_path));
                 assert!(files.contains(&file2_path));
             }
-            Err(e) => panic!("Error occurred: {:?}", e),
+            Err(e) => panic!("Error occurred: {e:?}"),
         }
     }
 }

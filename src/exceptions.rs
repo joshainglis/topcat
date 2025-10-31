@@ -33,15 +33,12 @@ impl fmt::Display for TopCatError {
             ),
             Self::MissingExist(x, s) => write!(
                 f,
-                "MissingExist: {} expects {} to exist but it is not found",
-                x, s
+                "MissingExist: {x} expects {s} to exist but it is not found"
             ),
-            Self::MissingDependency(x, s) => write!(
-                f,
-                "MissingDependency: {} depends on {} but it is missing",
-                x, s
-            ),
-            Self::InvalidDependency(x, s) => write!(f, "InvalidDependency: {}: {}", x, s),
+            Self::MissingDependency(x, s) => {
+                write!(f, "MissingDependency: {x} depends on {s} but it is missing")
+            }
+            Self::InvalidDependency(x, s) => write!(f, "InvalidDependency: {x}: {s}"),
             Self::CyclicDependency(x) => {
                 let mut error_message = "Cyclic dependency detected:\n".to_string();
                 for (i, cycle) in x.iter().enumerate() {
@@ -63,10 +60,10 @@ impl fmt::Display for TopCatError {
                     }
                 }
 
-                write!(f, "{}", error_message)
+                write!(f, "{error_message}")
             }
-            Self::Io(err) => write!(f, "IO error: {}", err),
-            Self::UnknownError(s) => write!(f, "UnknownError: {}", s),
+            Self::Io(err) => write!(f, "IO error: {err}"),
+            Self::UnknownError(s) => write!(f, "UnknownError: {s}"),
         }
     }
 }
