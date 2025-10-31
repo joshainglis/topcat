@@ -2,7 +2,9 @@
 // This module will contain algorithms for finding orphans, unrequired files, dead branches, etc.
 
 pub mod external_usage;
+pub mod root_matcher;
 
+use self::root_matcher::RootNodeMatcher;
 use crate::file_dag::TCGraph;
 use std::collections::{HashMap, HashSet};
 
@@ -22,7 +24,8 @@ pub trait GraphAnalyzer {
     fn find_root_nodes(&self) -> HashSet<String>;
 
     /// Find complete dead branches (subtrees that can be trimmed together)
-    fn find_dead_branches(&self) -> HashSet<String>;
+    /// Optionally accepts a RootNodeMatcher to protect certain nodes from being marked as dead
+    fn find_dead_branches(&self, root_matcher: Option<&RootNodeMatcher>) -> HashSet<String>;
 }
 
 // Implementation of GraphAnalyzer for TCGraph
@@ -83,9 +86,15 @@ impl GraphAnalyzer for TCGraph {
             .collect()
     }
 
-    fn find_dead_branches(&self) -> HashSet<String> {
+    fn find_dead_branches(&self, root_matcher: Option<&RootNodeMatcher>) -> HashSet<String> {
         // Start with leaf nodes (files with dependencies but no dependents)
         let mut dead_nodes = self.find_leaf_nodes();
+
+        // Remove root nodes from initial leaf nodes
+        if let Some(matcher) = root_matcher {
+            let node_to_path = self.build_node_to_path_map();
+            dead_nodes = matcher.filter_non_roots(&dead_nodes, &node_to_path);
+        }
 
         if dead_nodes.is_empty() {
             return dead_nodes;
@@ -105,6 +114,13 @@ impl GraphAnalyzer for TCGraph {
                 // Skip nodes already identified as dead
                 if dead_nodes.contains(&node.name) {
                     continue;
+                }
+
+                // Skip root nodes (protected from deletion)
+                if let Some(matcher) = root_matcher {
+                    if matcher.is_root(&node.name, &node.path) {
+                        continue;
+                    }
                 }
 
                 // Get dependents of this node
@@ -148,5 +164,14 @@ impl TCGraph {
         }
 
         dependents
+    }
+
+    /// Build a map from node names to their file paths
+    /// Used by RootNodeMatcher to check path-based patterns
+    pub fn build_node_to_path_map(&self) -> HashMap<String, std::path::PathBuf> {
+        self.get_all_nodes()
+            .iter()
+            .map(|node| (node.name.clone(), node.path.clone()))
+            .collect()
     }
 }

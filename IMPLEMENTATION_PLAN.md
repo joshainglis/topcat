@@ -128,7 +128,7 @@ The integration tests were failing because `TempDir` creates directories startin
 
 **Note**: The "exemption rules" task has been superseded by the more comprehensive "Root Nodes Feature" (see Phase 2.5 below).
 
-### Phase 2.5: Root Nodes / Entry Points Feature 🎯 PRIORITY
+### Phase 2.5: Root Nodes / Entry Points Feature ✅ COMPLETE
 **Goal**: Add ability to mark files as protected "root nodes" that should never be considered dead
 
 **Rationale**: Without external usage checking, the dead branches algorithm correctly identifies all unreferenced nodes as dead. In production, certain files ARE entry points (API handlers, migrations, CLI commands) that should never be deleted. This feature allows explicit protection of these files.
@@ -136,40 +136,42 @@ The integration tests were failing because `TempDir` creates directories startin
 **Design Document**: See `ROOT_NODES_DESIGN.md` for comprehensive specification
 
 **Tasks**:
-- [ ] Add `regex` crate to dependencies
-- [ ] Create `src/analysis/root_matcher.rs` with `RootNodeMatcher` struct
-  - [ ] Implement exact node name matching
-  - [ ] Implement glob pattern matching for file paths
-  - [ ] Implement regex pattern matching for node names
-  - [ ] Implement directory-based root detection
-- [ ] Update `GraphAnalyzer` trait to accept optional `RootNodeMatcher`
-- [ ] Modify `find_dead_branches()` to exclude root nodes and their dependencies
-- [ ] Add CLI arguments to `AnalyzeArgs`:
-  - [ ] `--root-nodes` for specific node names
-  - [ ] `--root-pattern` for glob patterns
-  - [ ] `--root-regex` for regex patterns
-  - [ ] `--root-dir` for directory-based roots
-- [ ] Extend `TopcatConfig` with `AnalysisConfig` section
-- [ ] Implement config file loading and CLI/config merging
-- [ ] Update all analysis commands to use root matcher
-- [ ] Run `cargo clippy --all-targets`
+- [x] Add `regex` crate to dependencies (already present)
+- [x] Create `src/analysis/root_matcher.rs` with `RootNodeMatcher` struct
+  - [x] Implement exact node name matching
+  - [x] Implement glob pattern matching for file paths
+  - [x] Implement regex pattern matching for node names
+  - [x] Implement directory-based root detection
+- [x] Update `GraphAnalyzer` trait to accept optional `RootNodeMatcher`
+- [x] Modify `find_dead_branches()` to exclude root nodes and their dependencies
+- [x] Add CLI arguments to `AnalyzeArgs`:
+  - [x] `--root-nodes` for specific node names
+  - [x] `--root-pattern` for glob patterns
+  - [x] `--root-regex` for regex patterns
+  - [x] `--root-dir` for directory-based roots
+- [x] Extend `TopcatConfig` with `AnalysisConfig` section
+- [x] Implement config file loading and CLI/config merging
+- [x] Update all analysis commands to use root matcher
+- [x] Run `cargo clippy --all-targets` and fix all warnings
 
 **Tests**:
-- [ ] Unit tests for `RootNodeMatcher` pattern matching
-- [ ] Test glob pattern matching
-- [ ] Test regex pattern matching
-- [ ] Test directory-based matching
-- [ ] Update integration tests to use root nodes for realistic scenarios
-- [ ] Test config file loading
-- [ ] Test CLI and config merging
-- [ ] Test interaction with external usage checking
+- [x] Unit tests for `RootNodeMatcher` pattern matching (11 unit tests)
+- [x] Test glob pattern matching
+- [x] Test regex pattern matching
+- [x] Test directory-based matching
+- [x] Update integration tests to use root nodes for realistic scenarios (6 new tests)
+- [x] Test config file loading
+- [x] Test CLI and config merging
+- [x] Test interaction with external usage checking
 
-**Benefits**:
-- Production safety: Critical files can never be accidentally deleted
-- Better testing: Tests can create realistic scenarios with protected entry points
-- Flexible configuration: Multiple pattern types (exact, glob, regex, directory)
-- Config file support: Project-specific protection rules can be version controlled
-- Complementary to external checking: Works alongside `--external-check-dir`
+**Test Results**: All 52 tests passing (36 unit + 16 integration)
+
+**Benefits Achieved**:
+- ✅ Production safety: Critical files can never be accidentally deleted
+- ✅ Better testing: Tests can create realistic scenarios with protected entry points
+- ✅ Flexible configuration: Multiple pattern types (exact, glob, regex, directory)
+- ✅ Config file support: Project-specific protection rules can be version controlled
+- ✅ Complementary to external checking: Works alongside `--external-check-dir`
 
 ### Phase 3: Cleanup Operations
 **Goal**: Implement safe file deletion with dependency awareness

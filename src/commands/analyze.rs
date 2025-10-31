@@ -7,6 +7,7 @@ use log::LevelFilter;
 
 use topcat::analysis::GraphAnalyzer;
 use topcat::analysis::external_usage::ExternalUsageChecker;
+use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::config;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
@@ -127,6 +128,35 @@ pub struct AnalyzeArgs {
     )]
     external_check_patterns: Vec<String>,
 
+    // Root Node Configuration
+    #[arg(
+        long = "root-nodes",
+        help = "Specific node names to always treat as roots (can specify multiple times)",
+        value_name = "NODE"
+    )]
+    root_nodes: Vec<String>,
+
+    #[arg(
+        long = "root-pattern",
+        help = "Glob patterns for root files (e.g., '**/api/*.sql', can specify multiple times)",
+        value_name = "PATTERN"
+    )]
+    root_patterns: Vec<String>,
+
+    #[arg(
+        long = "root-regex",
+        help = "Regex patterns for root node names (e.g., '^api_.*', can specify multiple times)",
+        value_name = "REGEX"
+    )]
+    root_regex: Vec<String>,
+
+    #[arg(
+        long = "root-dir",
+        help = "Directories whose files are all roots (can specify multiple times)",
+        value_name = "DIR"
+    )]
+    root_dirs: Vec<PathBuf>,
+
     #[command(subcommand)]
     command: AnalyzeCommand,
 }
@@ -183,10 +213,13 @@ impl AnalyzeArgs {
             None
         };
 
+        // Build root matcher from CLI args and config
+        let root_matcher = self.build_root_matcher()?;
+
         // Execute the requested analysis
         match &self.command {
             AnalyzeCommand::DeadBranches => {
-                self.analyze_dead_branches(&graph, external_checker.as_ref())
+                self.analyze_dead_branches(&graph, external_checker.as_ref(), root_matcher.as_ref())
             }
             AnalyzeCommand::Orphans => self.analyze_orphans(&graph, external_checker.as_ref()),
             AnalyzeCommand::Unrequired => {
@@ -281,15 +314,67 @@ impl AnalyzeArgs {
         Ok(config)
     }
 
+    fn build_root_matcher(&self) -> Result<Option<RootNodeMatcher>, TopCatError> {
+        // Load from config file if specified
+        let mut config_roots = if let Some(ref config_path) = self.sql_config_file {
+            let config = sql_config::TopcatConfig::from_file(config_path)
+                .map_err(|e| TopCatError::ConfigError(format!("Failed to load config: {e}")))?;
+            config.analysis
+        } else {
+            sql_config::AnalysisConfig::default()
+        };
+
+        // Merge CLI args (CLI extends config)
+        if !self.root_nodes.is_empty() {
+            config_roots.root_nodes.extend(self.root_nodes.clone());
+        }
+        if !self.root_patterns.is_empty() {
+            config_roots
+                .root_patterns
+                .extend(self.root_patterns.clone());
+        }
+        if !self.root_regex.is_empty() {
+            config_roots.root_regex.extend(self.root_regex.clone());
+        }
+        if !self.root_dirs.is_empty() {
+            config_roots.root_dirs.extend(
+                self.root_dirs
+                    .iter()
+                    .map(|p| p.to_string_lossy().to_string()),
+            );
+        }
+
+        // Only create matcher if any patterns were specified
+        if config_roots.root_nodes.is_empty()
+            && config_roots.root_patterns.is_empty()
+            && config_roots.root_regex.is_empty()
+            && config_roots.root_dirs.is_empty()
+        {
+            return Ok(None);
+        }
+
+        let dirs: Vec<PathBuf> = config_roots.root_dirs.iter().map(PathBuf::from).collect();
+
+        RootNodeMatcher::new(
+            config_roots.root_nodes,
+            config_roots.root_patterns,
+            config_roots.root_regex,
+            dirs,
+        )
+        .map(Some)
+        .map_err(TopCatError::ConfigError)
+    }
+
     fn analyze_dead_branches(
         &self,
         graph: &TCGraph,
         external_checker: Option<&ExternalUsageChecker>,
+        root_matcher: Option<&RootNodeMatcher>,
     ) -> Result<(), TopCatError> {
         println!("\n🌳 Dead Branches Analysis");
         println!("═══════════════════════════════════════════════════════════\n");
 
-        let mut dead_branches = graph.find_dead_branches();
+        let mut dead_branches = graph.find_dead_branches(root_matcher);
         let leaf_nodes = graph.find_leaf_nodes();
 
         // Filter by external usage if checker is provided

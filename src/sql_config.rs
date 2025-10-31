@@ -104,11 +104,34 @@ pub enum HeaderUpdateMode {
     Generate,
 }
 
+/// Configuration for analysis features (root node protection, etc.)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AnalysisConfig {
+    /// Specific nodes to always treat as root/entry points
+    #[serde(default)]
+    pub root_nodes: Vec<String>,
+
+    /// Glob patterns for root files
+    #[serde(default)]
+    pub root_patterns: Vec<String>,
+
+    /// Regex patterns for root node names
+    #[serde(default)]
+    pub root_regex: Vec<String>,
+
+    /// Directories where all files are considered roots
+    #[serde(default)]
+    pub root_dirs: Vec<String>,
+}
+
 /// Full TOML configuration file structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TopcatConfig {
     #[serde(default)]
     pub sql_discovery: SqlDiscoveryConfig,
+
+    #[serde(default)]
+    pub analysis: AnalysisConfig,
 }
 
 impl TopcatConfig {
@@ -199,6 +222,7 @@ mod tests {
                 schema_pattern: Some("old_pattern".to_string()),
                 ..Default::default()
             },
+            analysis: AnalysisConfig::default(),
         };
 
         let overrides = SqlDiscoveryConfig {

@@ -1,58 +1,83 @@
 # Quick Pickup Guide for Next Session
 
 ## TL;DR Status
-- ✅ **Phase 1 & 2 COMPLETE**: All analysis features working perfectly!
-- ✅ **All Tests Passing**: 36/36 tests (26 existing + 10 new integration tests)
-- 🎯 **Next Task**: Implement Phase 2.5 - Root Nodes / Entry Points Feature
+- ✅ **Phase 1, 2 & 2.5 COMPLETE**: All analysis features working perfectly with root node protection!
+- ✅ **All Tests Passing**: 52/52 tests (36 unit + 16 integration)
+- 🎯 **Next Task**: Implement Phase 3 - Cleanup Operations (File Deletion)
 
 ## What Just Happened
 
-### Major Win: Test Issue Resolved! 🎉
-The integration tests were failing because `TempDir` creates directories starting with a dot (e.g., `.tmpXXXX`), and topcat's `walk_dir` was correctly treating these as hidden and skipping them.
+### Major Win: Root Nodes Feature Complete! 🎉
+Phase 2.5 successfully implemented comprehensive root node protection with 4 pattern matching methods:
+- Exact node names (`--root-nodes`)
+- Glob patterns (`--root-pattern`)
+- Regex patterns (`--root-regex`)
+- Directory-based (`--root-dir`)
 
-**The Fix**: Set `include_hidden: true` in test Config.
+**All 52 tests passing!** Zero clippy warnings. Production-ready.
 
-### Phase 2 Complete
-All 5 analysis commands are fully implemented and tested:
-- ✅ `topcat analyze dead-branches`
-- ✅ `topcat analyze orphans`
-- ✅ `topcat analyze unrequired`
-- ✅ `topcat analyze leaf-nodes`
-- ✅ `topcat analyze root-nodes`
+### Phase 2.5 Complete Summary
+All root node protection features are fully implemented and tested:
+- ✅ `RootNodeMatcher` struct with 4 pattern types
+- ✅ CLI arguments for all pattern types
+- ✅ Config file support (`topcat.toml` with `[analysis]` section)
+- ✅ CLI + config merging
+- ✅ Integration with `find_dead_branches()` algorithm
+- ✅ 11 unit tests + 6 integration tests
+- ✅ All existing tests updated
+- ✅ Zero clippy warnings
 
-Plus external usage checking with `--external-check-dir` and `--external-check-pattern`.
+**Benefits Delivered**:
+- Production safety: Critical entry points can never be accidentally deleted
+- Flexible configuration: Multiple pattern types for different use cases
+- Version control: Config file can be committed to repository
+- Better testing: Realistic scenarios with protected nodes
 
-## Next Priority: Root Nodes Feature 🎯
+## Next Priority: Phase 3 - Cleanup Operations 🎯
 
-**See `ROOT_NODES_DESIGN.md` for full specification.**
+**Goal**: Implement safe file deletion with dependency awareness
 
 ### The Need
-Without external usage checking, the dead branches algorithm correctly identifies all unreferenced nodes as dead. However, certain files ARE entry points (API handlers, migrations, CLI commands) that should never be deleted.
+Currently topcat can ANALYZE dead branches, but cannot DELETE them. Phase 3 adds the ability to safely remove dead files with:
+- Dry-run preview
+- Confirmation prompts
+- Force mode for automation
+- Dependency tree visualization before deletion
 
-### The Solution
-Implement protected "root nodes" that can be specified via:
-- Specific node names: `--root-nodes api_main,worker_main`
-- Glob patterns: `--root-pattern "**/api/*.sql"`
-- Regex patterns: `--root-regex "^api_.*"`
-- Directory-based: `--root-dir sql/entry_points/`
-- Config file: `topcat.toml` with `[analysis]` section
+### Implementation Tasks
 
-### Implementation Checklist
+See `IMPLEMENTATION_PLAN.md` Phase 3 for full task list. Key steps:
 
-See `IMPLEMENTATION_PLAN.md` Phase 2.5 for full task list. Key steps:
+1. **Create `clean` subcommand structure**
+   - Add `CleanCommand` enum
+   - Add `CleanArgs` struct with subcommands
+   - Integrate into main CLI
 
-1. **Add regex dependency** to `Cargo.toml`
-2. **Create `src/analysis/root_matcher.rs`** with `RootNodeMatcher` struct
-   - Exact node name matching
-   - Glob pattern matching for file paths
-   - Regex pattern matching for node names
-   - Directory-based root detection
-3. **Update `GraphAnalyzer` trait** to accept optional `RootNodeMatcher`
-4. **Modify `find_dead_branches()`** to exclude root nodes
-5. **Add CLI arguments** to `AnalyzeArgs`
-6. **Extend config file support** with `AnalysisConfig`
-7. **Update all analysis commands** to use root matcher
-8. **Write comprehensive tests**
+2. **Implement `clean dead-branches`**
+   - Add `--dry-run` flag (default: true for safety)
+   - Add `--force` flag to skip confirmation
+   - Show dependency tree visualization
+   - Implement confirmation prompt
+   - Safe file deletion with error handling
+
+3. **Add supporting commands**
+   - `clean unrequired` - Remove unrequired files
+   - `clean orphans` - Remove orphan files
+   - `clean targets <files>` - Remove specific files with dependency checking
+
+4. **Safety Features**
+   - Always show what will be deleted before deletion
+   - Require explicit confirmation (unless `--force`)
+   - Support dry-run mode (show only, don't delete)
+   - Detailed error handling and recovery
+   - Summary of deleted files
+
+5. **Testing**
+   - Unit tests for file deletion logic
+   - Integration tests with TempDir
+   - Test dry-run mode
+   - Test confirmation flow
+   - Test error scenarios
 
 ### Quick Start Commands
 
@@ -61,88 +86,110 @@ See `IMPLEMENTATION_PLAN.md` Phase 2.5 for full task list. Key steps:
 cargo build
 cargo test --lib --tests
 
-# Test the existing analyze commands
+# Test existing features
 ./target/debug/topcat analyze -i tests/input/sql -e sql dead-branches
-
-# After implementing root nodes:
 ./target/debug/topcat analyze -i tests/input/sql -e sql \
-  --root-nodes "api_main" \
-  --root-pattern "**/api/*.sql" \
+  --root-nodes my_other_schema.c \
   dead-branches
+
+# After implementing Phase 3:
+./target/debug/topcat clean dead-branches -i tests/input/sql -e sql --dry-run
+./target/debug/topcat clean dead-branches -i tests/input/sql -e sql --force
 ```
 
 ## Key Files Reference
 
-- **`ROOT_NODES_DESIGN.md`** - Complete feature specification (NEW!)
-- **`IMPLEMENTATION_PLAN.md`** - Phase 2.5 has the task breakdown
-- **`STATUS.md`** - Updated with test fix and current status
-- **`src/analysis/mod.rs`** - Where `GraphAnalyzer` trait lives
-- **`src/commands/analyze.rs`** - Where CLI arguments go
-- **`src/sql_config.rs`** - Where config file structs live
-- **`tests/analysis_tests.rs`** - Integration tests to update
+- **`IMPLEMENTATION_PLAN.md`** - Phase 3 has the task breakdown
+- **`STATUS.md`** - Updated with Phase 2.5 completion
+- **`ROOT_NODES_DESIGN.md`** - Complete spec for implemented root nodes feature
+- **`src/commands/analyze.rs`** - Reference for command structure
+- **`src/analysis/mod.rs`** - Where analysis algorithms live
+- **`tests/analysis_tests.rs`** - Integration test patterns to follow
 
 ## Important Context
 
-### Why Root Nodes Matter
-The current tests work by accepting that "everything is dead" in a closed system. But in production, this would be dangerous! Users need a way to protect entry points.
+### Root Nodes Feature (Just Completed)
+The root nodes feature allows protecting critical entry points from deletion:
 
-**Benefits**:
-1. **Production Safety** - Critical files can never be accidentally deleted
-2. **Better Testing** - Tests can create realistic scenarios
-3. **Flexible Configuration** - Multiple pattern types
-4. **Config File Support** - Project-specific rules can be version controlled
+```bash
+# Protect specific nodes
+topcat analyze -i sql/ -e sql --root-nodes api_main dead-branches
 
-### Test Expectations
-After implementing root nodes, update integration tests to use them. This will make tests more realistic:
+# Protect using patterns
+topcat analyze -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches
 
-```rust
-#[test]
-fn test_dead_branches_with_root_nodes() {
-    let dir = TempDir::new().unwrap();
-
-    // Create files...
-    create_test_file(&dir, "entry.sql", "-- name: entry\nSELECT 1;");
-    create_test_file(&dir, "dead.sql", "-- name: dead\nSELECT 1;");
-
-    let graph = build_test_graph(&dir);
-
-    // Protect entry point
-    let root_matcher = RootNodeMatcher::new(
-        vec!["entry".to_string()],
-        vec![],
-        vec![],
-        vec![],
-    ).unwrap();
-
-    let dead = graph.find_dead_branches(Some(&root_matcher));
-
-    // Only dead.sql should be dead now
-    assert_eq!(dead.len(), 1);
-    assert!(dead.contains("dead"));
-    assert!(!dead.contains("entry")); // Protected!
-}
+# Config file support
+[analysis]
+root_nodes = ["api_main", "worker_main"]
+root_patterns = ["**/api/*.sql"]
+root_regex = ["^api_.*"]
+root_dirs = ["sql/entry_points/"]
 ```
 
-## After Root Nodes: Phase 3
+This will be critical for Phase 3 - we must respect root nodes when deleting!
 
-Once root nodes are implemented and tested, move to Phase 3: Cleanup Operations
-- Implement `topcat clean dead-branches` command
-- Add dry-run support
-- Add file deletion with safety checks
-- Add confirmation prompts
+### Testing with TempDir
+Remember: `TempDir` creates hidden directories (`.tmpXXXX`), so tests must set `include_hidden: true` in Config.
+
+```rust
+let config = Config {
+    include_hidden: true,  // Required for TempDir!
+    // ...
+};
+```
+
+### Clean Command Design Principles
+
+1. **Safety First**: Dry-run should be default behavior
+2. **Clear Communication**: Always show what will happen before doing it
+3. **Respect Root Nodes**: Never delete protected entry points
+4. **Atomic Operations**: Either delete all or none (for consistency)
+5. **Detailed Feedback**: Show what was deleted, what failed, and why
+
+## After Phase 3: Future Phases
+
+### Phase 4: Comprehensive Analysis
+- Enhanced analysis commands
+- Cycle detection improvements
+- Missing dependency reporting
+- Single file analysis
+
+### Phase 5: Schema Analysis
+- Schema extraction and filtering
+- Cross-schema dependency analysis
+- Visual statistics by schema
+
+### Phase 6: Export Capabilities
+- JSON export
+- DOT/GraphViz enhancements
+- GraphML support
+- Mermaid diagram format
+
+### Phase 7: Configuration & Polish
+- Auto-discovery of `.topcat.toml`
+- Shell completions
+- Man pages
+- Performance optimizations
+
+### Phase 8: Documentation & Skills
+- Complete README update
+- User guide with examples
+- Create Claude Code skills for common workflows
+- API documentation
 
 ## Success Criteria
 
-Root Nodes feature is complete when:
-1. ✅ Can specify root nodes via all 4 methods (exact, glob, regex, dir)
-2. ✅ CLI arguments work
-3. ✅ Config file loading works
-4. ✅ CLI + config merging works correctly
-5. ✅ `find_dead_branches()` respects root nodes
-6. ✅ All unit tests pass
-7. ✅ Integration tests updated and passing
-8. ✅ Manual testing confirms protection works
-9. ✅ `cargo clippy` passes
+Phase 3 is complete when:
+1. ✅ `topcat clean dead-branches` command works
+2. ✅ Dry-run mode shows preview without deleting
+3. ✅ Force mode skips confirmation
+4. ✅ Interactive mode prompts for confirmation
+5. ✅ Root nodes are respected (protected files never deleted)
+6. ✅ Error handling is robust
+7. ✅ All tests pass (expect 60+ tests after Phase 3)
+8. ✅ `cargo clippy` passes
+9. ✅ Manual testing confirms safe deletion
+10. ✅ Integration tests cover deletion scenarios
 
 ## Useful Debug Commands
 
@@ -159,16 +206,19 @@ cargo test --lib --tests
 # Check for warnings
 cargo clippy --all-targets
 
-# Build and run
+# Build and test analyze command
 cargo build && ./target/debug/topcat analyze -i tests/input/sql -e sql dead-branches
+
+# Build and test clean command (after implementation)
+cargo build && ./target/debug/topcat clean dead-branches -i tests/input/sql -e sql --dry-run
 ```
 
 ## Contact/Handoff Info
 
 - All code compiles cleanly
-- All 36 tests passing
-- Phase 2 is production-ready pending root nodes enhancement
-- `ROOT_NODES_DESIGN.md` has everything needed for next implementation
-- IMPLEMENTATION_PLAN.md Phase 2.5 has the task breakdown
+- All 52 tests passing
+- Phase 1, 2, and 2.5 are production-ready
+- Root nodes feature provides essential safety for production use
+- IMPLEMENTATION_PLAN.md Phase 3 has everything needed for next implementation
 
-Good luck! The hard part (algorithm + external checking) is done. Root nodes is just the safety layer! 🚀
+Good luck! The foundation is solid. Phase 3 brings the actual cleanup capability! 🚀

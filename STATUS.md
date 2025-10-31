@@ -1,8 +1,8 @@
 # Topcat Dependency Analysis - Implementation Status
 
 **Date**: 2025-10-31
-**Session**: Phase 1 & 2 Implementation + Test Fixes
-**Status**: Phase 1 ✅ Complete, Phase 2 ✅ Complete (All Tests Passing!)
+**Session**: Phase 1, 2, & 2.5 Implementation Complete
+**Status**: Phase 1 ✅ Complete, Phase 2 ✅ Complete, Phase 2.5 ✅ Complete (All 52 Tests Passing!)
 
 ## What's Been Completed
 
@@ -101,7 +101,7 @@ let config = Config {
 
 3. **Code Quality**: Ran `cargo clippy --fix` and resolved all warnings.
 
-### Final Test Status
+### Final Test Status (Phase 2)
 - ✅ **All 36 tests passing** (26 existing + 10 new analysis tests)
 - ✅ External usage checker unit tests: PASSING
 - ✅ All existing topcat tests: PASSING (26 tests)
@@ -109,23 +109,68 @@ let config = Config {
 - ✅ Clippy warnings: ALL RESOLVED
 - ✅ Code formatted with `cargo fmt`
 
-## What's Next: Root Nodes Feature 🎯
+### Phase 2.5: Root Nodes / Entry Points Feature ✅ (Production Safety)
+**COMPLETE!** Successfully implemented protected "root nodes" to prevent critical entry points from being marked as dead.
 
-**Phase 2 is complete!** The next priority is implementing the **Root Nodes / Entry Points** feature.
-
-### The Need
+#### The Problem It Solves
 Without external usage checking, the dead branches algorithm correctly identifies all unreferenced nodes as dead. However, certain files ARE entry points (API handlers, migrations, CLI commands) that should never be deleted, even if nothing in the dependency graph depends on them.
 
-### The Solution
-Add the ability to mark files as protected "root nodes" via:
-- Specific node names (`--root-nodes api_main,worker_main`)
-- Glob patterns (`--root-pattern "**/api/*.sql"`)
-- Regex patterns (`--root-regex "^api_.*"`)
-- Directory-based (`--root-dir sql/entry_points/`)
+#### Implementation Completed
+Created comprehensive root node protection with **4 pattern matching methods**:
 
-See **`ROOT_NODES_DESIGN.md`** for the comprehensive feature specification.
+1. **Exact Node Names** (`--root-nodes`)
+   ```bash
+   topcat analyze -i sql/ -e sql --root-nodes api_main --root-nodes worker_main dead-branches
+   ```
 
-This feature will make dead branches detection production-ready and will also greatly simplify testing (no more "everything is dead" in closed test systems).
+2. **Glob Patterns** (`--root-pattern`)
+   ```bash
+   topcat analyze -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches
+   ```
+
+3. **Regex Patterns** (`--root-regex`)
+   ```bash
+   topcat analyze -i sql/ -e sql --root-regex "^api_.*" dead-branches
+   ```
+
+4. **Directory-Based** (`--root-dir`)
+   ```bash
+   topcat analyze -i sql/ -e sql --root-dir sql/entry_points/ dead-branches
+   ```
+
+#### Config File Support
+Users can now configure root nodes in `topcat.toml`:
+
+```toml
+[analysis]
+root_nodes = ["api_main", "worker_main"]
+root_patterns = ["**/api/*.sql", "**/workers/*.sql"]
+root_regex = ["^api_.*", "^worker_.*"]
+root_dirs = ["sql/entry_points/", "sql/migrations/"]
+```
+
+#### Files Created
+- **`src/analysis/root_matcher.rs`** (370 lines) - Complete RootNodeMatcher implementation with comprehensive unit tests
+- **Updated `src/analysis/mod.rs`** - Modified GraphAnalyzer trait to accept optional RootNodeMatcher
+- **Updated `src/sql_config.rs`** - Added AnalysisConfig struct for TOML configuration
+- **Updated `src/commands/analyze.rs`** - Added 4 CLI arguments and config merging logic
+- **Updated `tests/analysis_tests.rs`** - Added 6 comprehensive integration tests
+
+#### Test Results (Phase 2.5)
+- ✅ **All 52 tests passing** (36 unit + 16 integration)
+- ✅ 11 new unit tests for RootNodeMatcher (exact, glob, regex, directory matching)
+- ✅ 6 new integration tests for root node protection scenarios
+- ✅ All existing tests updated to pass `None` for root_matcher parameter
+- ✅ Zero clippy warnings
+- ✅ Clean build
+
+#### Benefits Delivered
+- ✅ **Production Safety**: Critical files can never be accidentally deleted
+- ✅ **Accurate Analysis**: Reduces false positives in dead branch detection
+- ✅ **Flexible Configuration**: 4 different pattern types for various use cases
+- ✅ **Version Control**: Config file can be committed to repository
+- ✅ **Better Testing**: Tests can create realistic scenarios with protected entry points
+- ✅ **Complementary**: Works seamlessly with `--external-check-dir` for maximum accuracy
 
 ## Common Mistakes & Lessons Learned
 
@@ -290,20 +335,13 @@ $ ./target/debug/topcat analyze -i tests/input/sql -e sql dead-branches
 - Progress bars appear for operations >100 items
 - Parallel scanning provides good speedup
 
-## What's Next - See ROOT_NODES_DESIGN.md
+## What's Next - Phase 3: Cleanup Operations 🎯
 
-**Phase 2 is COMPLETE!** All tests passing.
+**Phase 2.5 is COMPLETE!** All 52 tests passing. Root nodes feature is production-ready.
 
-### Next Priority: Phase 2.5 - Root Nodes Feature 🎯
+### Next Priority: Phase 3 - Cleanup Operations
 
-Implement the ability to mark files as protected "root nodes" that should never be considered dead. This makes the feature production-ready and simplifies testing.
-
-See **`ROOT_NODES_DESIGN.md`** for comprehensive specification.
-
-**Why This Matters**: Without this feature, entry points (API handlers, migrations, CLI commands) are incorrectly flagged as dead in closed systems. This feature allows explicit protection.
-
-### After Root Nodes: Phase 3 - Cleanup Operations
-Implement actual file deletion with safety features:
+Implement safe file deletion with dependency awareness:
 - `topcat clean dead-branches` subcommand
 - Dry-run support (`--dry-run`)
 - Force mode (`--force`)
@@ -354,34 +392,40 @@ cargo clippy --all-targets                    # Lint (clean except 1 dead_code w
 
 ## Known Limitations
 
-1. **No root nodes protection yet** - Entry points can be flagged as dead (Phase 2.5 will fix this)
-2. **Limited config file support** - Only SQL discovery configured via TOML currently
+1. ~~**No root nodes protection yet**~~ - ✅ FIXED in Phase 2.5! Entry points can now be protected
+2. **Limited config file support** - SQL discovery and analysis (root nodes) configured via TOML; other features not yet in config
 3. **No deletion capability** - Analysis only, can't actually delete files yet (Phase 3)
 4. **No schema filtering** - Can't limit analysis to specific schema (Phase 5)
 
 ## Code Quality Status
 
-- ✅ **All 36 tests passing** (26 existing + 10 new)
-- ✅ Cargo clippy clean (all warnings resolved)
+- ✅ **All 52 tests passing** (36 unit + 16 integration)
+- ✅ Cargo clippy clean (zero warnings)
 - ✅ Cargo build successful
 - ✅ Manual testing successful
 - ✅ Integration tests ALL PASSING
 - ✅ Code formatted with cargo fmt
+- ✅ Production-ready feature set
 
 ## Session Summary
 
-**Session Focus**: Phase 1 & 2 Implementation + Critical Test Fix
-**Hours Invested**: ~6-7 hours total
-**Lines Added**: ~2500+ lines (commands, analysis, tests, documentation)
+**Session Focus**: Phase 1, 2, & 2.5 Implementation Complete
+**Hours Invested**: ~8-9 hours total
+**Lines Added**: ~3200+ lines (commands, analysis, root matcher, tests, documentation)
 
 **Key Achievements**:
-1. ✅ Complete subcommand architecture migration
-2. ✅ Dead branches detection fully working with external usage checking
-3. ✅ All 5 analysis commands implemented and tested
-4. ✅ **Test Issue Resolved**: Found and fixed TempDir hidden directory issue
-5. ✅ All 36 tests passing
-6. ✅ Comprehensive ROOT_NODES_DESIGN.md created for next phase
+1. ✅ Complete subcommand architecture migration (Phase 1)
+2. ✅ Dead branches detection fully working with external usage checking (Phase 2)
+3. ✅ All 5 analysis commands implemented and tested (Phase 2)
+4. ✅ **Test Issue Resolved**: Found and fixed TempDir hidden directory issue (Phase 2)
+5. ✅ **Root Nodes Feature Complete**: 4 pattern types, config file support, production safety (Phase 2.5)
+6. ✅ All 52 tests passing (36 unit + 16 integration)
+7. ✅ Zero clippy warnings, clean build
 
-**Critical Insight**: The "dead branches" algorithm is working perfectly. The test failures were due to TempDir creating hidden directories (`.tmpXXXX`), which topcat correctly skips. The feature is production-ready pending the root nodes enhancement.
+**Critical Insights**:
+- The "dead branches" algorithm works perfectly and is production-ready
+- Root nodes feature provides essential protection for entry points
+- Flexible configuration (CLI + TOML) makes the tool adaptable to various workflows
+- Comprehensive test coverage ensures reliability
 
-**Next Session**: Implement Phase 2.5 (Root Nodes Feature) to make the tool production-safe.
+**Next Session**: Implement Phase 3 (Cleanup Operations) to add safe file deletion with `topcat clean` subcommand.
