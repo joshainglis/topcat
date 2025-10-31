@@ -31,13 +31,17 @@ debug = true
 [dependencies]
 petgraph = { version = "0.8.3" }
 glob = { version = "0.3.3" }
-structopt = { version = "0.3.26" }
+clap = { version = "4.5", features = ["derive", "cargo"] }
 log = { version = "0.4.28" }
 env_logger = { version = "0.11.8" }
 graph-cycles = { version = "0.3.0" }
 regex = { version = "1.12.2" }
 serde = { version = "1.0.228", features = ["derive"] }
 toml = { version = "0.9.8" }
+indicatif = { version = "0.17" }
+rayon = { version = "1.10" }
+cached = { version = "0.53" }
+comfy-table = { version = "7.1" }
 
 [dev-dependencies]
 tempfile = { version = "3.23.0" }
