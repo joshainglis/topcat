@@ -727,3 +727,6 @@ cython_debug/
 
 # Nix build output
 result
+
+# direnv
+.direnv
