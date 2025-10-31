@@ -7,6 +7,7 @@
 **Symptom**: Tests pass sometimes, fail others
 
 **Solutions**:
+
 ```bash
 # Run single-threaded
 cargo test -- --test-threads=1
@@ -29,6 +30,7 @@ fn test_with_timeout() {
 **Symptom**: Tests fail with "Permission denied" or "File not found"
 
 **Solutions**:
+
 ```rust
 // Ensure proper cleanup
 #[test]
@@ -62,6 +64,7 @@ fn write_with_retry(path: &Path, content: &str) -> Result<()> {
 **Symptom**: Tests fail with "out of memory" or segfaults
 
 **Debug steps**:
+
 ```bash
 # Run with memory limit
 ulimit -v 500000  # 500MB limit
@@ -81,6 +84,7 @@ RUST_MIN_STACK=8388608 cargo test  # 8MB stack
 **Problem**: Test output not showing
 
 **Solutions**:
+
 ```bash
 # Show all output
 cargo test -- --nocapture
@@ -97,6 +101,7 @@ RUST_LOG=debug cargo test -- --nocapture
 **Problem**: Debug output overwhelming
 
 **Solutions**:
+
 ```rust
 // Conditional debug output
 #[test]
@@ -122,6 +127,7 @@ fn test_with_conditional_output() {
 **Problem**: Tests fail on Windows due to CRLF
 
 **Solution**:
+
 ```rust
 // Normalize line endings
 fn normalize_line_endings(s: &str) -> String {
@@ -141,6 +147,7 @@ fn test_cross_platform() {
 **Problem**: Tests fail due to path separator differences
 
 **Solution**:
+
 ```rust
 use std::path::PathBuf;
 
@@ -161,12 +168,14 @@ fn test_paths() {
 ### Tests Pass Locally but Fail in CI
 
 **Common causes**:
+
 - Different environment variables
 - Missing dependencies
 - File permissions
 - Timezone differences
 
 **Debug steps**:
+
 ```yaml
 # Add debugging to CI
 - name: Debug environment
@@ -186,6 +195,7 @@ fn test_paths() {
 **Problem**: CI jobs timeout
 
 **Solutions**:
+
 ```yaml
 # Increase timeout
 - name: Run tests

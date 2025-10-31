@@ -23,6 +23,7 @@ criterion_main!(benches);
 ```
 
 Run benchmarks:
+
 ```bash
 cargo bench
 cargo bench -- --save-baseline before
@@ -122,8 +123,8 @@ let result = format!("{}{}", s1, s2);
 
 // Better:
 let mut result = String::with_capacity(s1.len() + s2.len());
-result.push_str(&s1);
-result.push_str(&s2);
+result.push_str( & s1);
+result.push_str( & s2);
 
 // HashMap capacity
 // Bad:
@@ -139,10 +140,10 @@ let mut map = HashMap::with_capacity(expected_size);
 use rayon::prelude::*;
 
 // Process files in parallel
-let results: Vec<_> = files
-    .par_iter()
-    .map(|file| process_file(file))
-    .collect();
+let results: Vec<_ > = files
+.par_iter()
+.map( | file| process_file(file))
+.collect();
 ```
 
 ## Load Testing

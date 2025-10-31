@@ -31,6 +31,7 @@ Migration Steps:
 **Migration Process**:
 
 1. **Diagnose Issue**
+
 ```markdown
 Testing Questions:
 - Does skill trigger at all?
@@ -40,6 +41,7 @@ Testing Questions:
 ```
 
 2. **Plan Fix**
+
 ```markdown
 Fix Strategy:
 - Update description with better keywords
@@ -49,6 +51,7 @@ Fix Strategy:
 ```
 
 3. **Implement and Test**
+
 ```markdown
 - Refactor skill with fixes
 - Test with fresh Claude instance
@@ -61,6 +64,7 @@ Fix Strategy:
 **Situation**: Skill has grown too large and covers too much
 
 **Before**: One large skill
+
 ```
 mega-skill/
 ├── SKILL.md (600 lines)
@@ -68,6 +72,7 @@ mega-skill/
 ```
 
 **After**: Focused skills
+
 ```
 skill-part-1/
 ├── SKILL.md (150 lines)
@@ -83,6 +88,7 @@ skill-part-3/
 ```
 
 **Split Strategy**:
+
 1. Identify natural boundaries
 2. Group related functionality
 3. Create separate skills
@@ -239,6 +245,7 @@ reference/
 ### Quantitative Metrics
 
 Before and after comparison:
+
 - SKILL.md line count
 - Number of reference files
 - Total skill size

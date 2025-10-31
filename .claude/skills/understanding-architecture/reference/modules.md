@@ -3,6 +3,7 @@
 ## Core Modules
 
 ### main.rs
+
 **Responsibility**: Entry point and workflow orchestration
 
 - Parses CLI arguments using `structopt`
@@ -10,9 +11,11 @@
 - Handles top-level error reporting
 
 ### file_node.rs
+
 **Responsibility**: File representation and metadata
 
 Key structures:
+
 ```rust
 pub struct FileNode {
     pub name: String,
@@ -26,14 +29,17 @@ pub struct FileNode {
 ```
 
 Functions:
+
 - `from_file()`: Parse file headers and create node
 - `merge_dependencies()`: Combine manual and discovered deps
 - `Ord` implementation: Define sort order
 
 ### file_dag.rs
+
 **Responsibility**: DAG construction and validation
 
 Key structures:
+
 ```rust
 pub struct TCGraph {
     layers: Vec<String>,
@@ -43,6 +49,7 @@ pub struct TCGraph {
 ```
 
 Functions:
+
 - `build_graph()`: Construct DAG from files
 - `validate()`: Check cycles and constraints
 - `add_edge()`: Add dependency relationships
@@ -50,6 +57,7 @@ Functions:
 ## Supporting Modules
 
 ### stable_topo.rs
+
 **Responsibility**: Deterministic topological sorting
 
 - Custom DFS implementation
@@ -57,6 +65,7 @@ Functions:
 - Layer constraint enforcement
 
 ### config.rs
+
 **Responsibility**: Configuration management
 
 - CLI argument definitions
@@ -64,6 +73,7 @@ Functions:
 - SQL discovery configuration integration
 
 ### output.rs
+
 **Responsibility**: File generation
 
 - Atomic file writing
@@ -71,6 +81,7 @@ Functions:
 - Separator and suffix management
 
 ### io_utils.rs
+
 **Responsibility**: File system operations
 
 - Directory traversal
@@ -78,6 +89,7 @@ Functions:
 - Hidden file filtering
 
 ### exceptions.rs
+
 **Responsibility**: Error handling
 
 - Custom error types

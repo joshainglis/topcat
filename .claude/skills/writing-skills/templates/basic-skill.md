@@ -48,6 +48,7 @@ Task Checklist:
 ## Advanced Topics
 
 For detailed information:
+
 - **Topic 1**: See [reference/topic1.md](reference/topic1.md)
 - **Topic 2**: See [reference/topic2.md](reference/topic2.md)
 - **Examples**: See [reference/examples.md](reference/examples.md)

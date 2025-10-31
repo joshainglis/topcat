@@ -7,6 +7,7 @@
 **Symptom**: Expected dependencies missing from discovered list
 
 **Diagnosis**:
+
 ```bash
 # Enable verbose mode to see discovery process
 topcat -i sql/ -o output.sql --enable-sql-discovery -v --dry
@@ -16,6 +17,7 @@ echo "schema_name" | grep -E "your_pattern"
 ```
 
 **Solutions**:
+
 - Adjust schema pattern to match naming convention
 - Add type/extension mappings for special cases
 - Use `!` prefix for dependencies that can't be discovered
@@ -25,6 +27,7 @@ echo "schema_name" | grep -E "your_pattern"
 **Symptom**: Error about circular dependencies after enabling discovery
 
 **Diagnosis**:
+
 ```bash
 # Visualize the dependency graph
 topcat -i sql/ -o output.sql -v 2>&1 | grep "digraph" -A 1000 > graph.dot
@@ -32,6 +35,7 @@ dot -Tpng graph.dot -o graph.png
 ```
 
 **Solutions**:
+
 - Use layers to break cycles
 - Review if manual dependencies were incorrect
 - Consider if objects truly have circular dependencies
@@ -41,6 +45,7 @@ dot -Tpng graph.dot -o graph.png
 **Symptom**: Discovery takes too long on large codebases
 
 **Solutions**:
+
 ```bash
 # Process in batches
 for dir in sql/*/; do

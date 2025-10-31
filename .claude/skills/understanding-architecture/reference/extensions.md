@@ -21,12 +21,12 @@ pub struct FileNode {
 ```rust
 // In file_node.rs::from_file()
 if line.starts_with("priority:") {
-    node.priority = Some(
-        line["priority:".len()..]
-            .trim()
-            .parse()
-            .unwrap_or(0)
-    );
+node.priority = Some(
+line["priority:".len()..]
+.trim()
+.parse()
+.unwrap_or(0)
+);
 }
 ```
 
@@ -35,7 +35,7 @@ if line.starts_with("priority:") {
 ```rust
 // In merge_dependencies() if needed
 if let Some(priority) = discovered_priority {
-    self.priority = Some(priority);
+self .priority = Some(priority);
 }
 ```
 
@@ -100,8 +100,8 @@ pub fn filter_by_author(
 
 ```rust
 // In main.rs or file_dag.rs
-if let Some(author) = &config.include_author {
-    files = filter_by_author(files, author);
+if let Some(author) = & config.include_author {
+files = filter_by_author(files, author);
 }
 ```
 

@@ -29,14 +29,14 @@ extension = "uuid-ossp"
 
 ## CLI Arguments Reference
 
-| Argument | Description | Example |
-|----------|-------------|---------|
-| `--enable-sql-discovery` | Enable automatic discovery | |
-| `--sql-config PATH` | Path to TOML config file | `--sql-config topcat.toml` |
-| `--schema-pattern REGEX` | Schema name pattern | `--schema-pattern "app_\\w+"` |
-| `--merge-strategy STRATEGY` | Dependency merge strategy | `--merge-strategy union` |
-| `--update-headers` | Update files in-place | |
-| `--generate-headers DIR` | Generate updated files to directory | `--generate-headers /tmp/updated` |
+| Argument                    | Description                         | Example                           |
+|-----------------------------|-------------------------------------|-----------------------------------|
+| `--enable-sql-discovery`    | Enable automatic discovery          |                                   |
+| `--sql-config PATH`         | Path to TOML config file            | `--sql-config topcat.toml`        |
+| `--schema-pattern REGEX`    | Schema name pattern                 | `--schema-pattern "app_\\w+"`     |
+| `--merge-strategy STRATEGY` | Dependency merge strategy           | `--merge-strategy union`          |
+| `--update-headers`          | Update files in-place               |                                   |
+| `--generate-headers DIR`    | Generate updated files to directory | `--generate-headers /tmp/updated` |
 
 ## Schema Pattern Examples
 

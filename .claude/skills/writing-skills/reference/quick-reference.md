@@ -32,6 +32,7 @@ skill-name/
 ## Naming Conventions
 
 ### Skill Names (Gerund Form)
+
 - ✅ `analyzing-data`
 - ✅ `building-interfaces`
 - ✅ `testing-applications`
@@ -39,6 +40,7 @@ skill-name/
 - ❌ `test-runner`
 
 ### File Names
+
 - Use lowercase
 - Separate words with hyphens
 - `.md` extension for documentation
@@ -53,6 +55,7 @@ description: |
 ```
 
 ### Examples
+
 ```yaml
 description: |
   Processes CSV files to generate statistical analyses.
@@ -62,12 +65,14 @@ description: |
 ## Content Priorities
 
 ### Must Have in SKILL.md
+
 1. Quick start / common usage
 2. Essential commands/code
 3. Basic workflow
 4. Links to references
 
 ### Move to References
+
 1. Detailed explanations
 2. Edge cases
 3. Comprehensive examples
@@ -77,23 +82,28 @@ description: |
 ## Common Patterns
 
 ### Checklist Pattern
+
 ```markdown
 \`\`\`
 Task Checklist:
+
 - [ ] Step 1: Action
 - [ ] Step 2: Action
 - [ ] Step 3: Action
-\`\`\`
+  \`\`\`
 ```
 
 ### Reference Pattern
+
 ```markdown
 For details, see:
+
 - **Topic**: See [reference/topic.md](reference/topic.md)
 - **Examples**: See [reference/examples.md](reference/examples.md)
 ```
 
 ### Command Pattern
+
 ```markdown
 ## Quick Commands
 
@@ -126,12 +136,14 @@ For details, see:
 ## Validation Rules
 
 ### Name Field
+
 - Max 64 characters
 - Lowercase letters, numbers, hyphens only
 - No XML tags
 - No reserved words ("anthropic", "claude")
 
 ### Description Field
+
 - Non-empty
 - Max 1024 characters
 - No XML tags

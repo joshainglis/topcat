@@ -33,6 +33,7 @@ User: [Same task as before]
 ```
 
 If skill doesn't trigger, refine the description:
+
 - Add more specific keywords
 - Include common task variations
 - Clarify when to use it
@@ -43,6 +44,7 @@ Observe Claude using the skill:
 
 ```markdown
 Questions to answer:
+
 - Does Claude follow the workflow?
 - Are all necessary steps completed?
 - Is the output correct?
@@ -65,6 +67,7 @@ Monitor which files get loaded:
 ### Scenario 1: Basic Task
 
 Test the most common use case:
+
 ```markdown
 "[Primary task the skill is designed for]"
 ```
@@ -74,6 +77,7 @@ Expected: Skill triggers, completes successfully
 ### Scenario 2: Edge Case
 
 Test boundary conditions:
+
 ```markdown
 "[Unusual but valid use case]"
 ```
@@ -83,6 +87,7 @@ Expected: Skill handles gracefully or indicates limitations
 ### Scenario 3: Adjacent Task
 
 Test something similar but outside scope:
+
 ```markdown
 "[Related task the skill shouldn't handle]"
 ```
@@ -94,6 +99,7 @@ Expected: Skill doesn't trigger inappropriately
 ### Haiku Testing
 
 Focus on clarity:
+
 - Are instructions explicit enough?
 - Does it need more guidance?
 - Are examples clear?
@@ -101,12 +107,14 @@ Focus on clarity:
 ### Sonnet Testing
 
 Balance check:
+
 - Is the skill efficient?
 - Good balance of freedom vs structure?
 
 ### Opus Testing
 
 Avoid over-explaining:
+
 - Remove unnecessary context
 - Trust Opus's reasoning
 - Focus on domain-specific knowledge
@@ -116,24 +124,28 @@ Avoid over-explaining:
 ### Common Refinements
 
 1. **Skill doesn't trigger**
-   - Add keywords to description
-   - Make triggers more explicit
-   - Include "Use when..." phrases
+
+- Add keywords to description
+- Make triggers more explicit
+- Include "Use when..." phrases
 
 2. **Missing information**
-   - Add to SKILL.md if essential
-   - Create reference file if detailed
-   - Include examples if unclear
+
+- Add to SKILL.md if essential
+- Create reference file if detailed
+- Include examples if unclear
 
 3. **Too verbose**
-   - Remove obvious explanations
-   - Extract details to references
-   - Use examples over descriptions
+
+- Remove obvious explanations
+- Extract details to references
+- Use examples over descriptions
 
 4. **Wrong behavior**
-   - Clarify ambiguous instructions
-   - Add validation steps
-   - Provide explicit workflows
+
+- Clarify ambiguous instructions
+- Add validation steps
+- Provide explicit workflows
 
 ## Testing Checklist
 
@@ -155,10 +167,10 @@ Compare skill versions:
 1. Create variant A and variant B
 2. Test same tasks with each
 3. Measure:
-   - Task completion success
-   - Token usage
-   - Time to complete
-   - Error frequency
+  - Task completion success
+  - Token usage
+  - Time to complete
+  - Error frequency
 4. Choose better performer
 ```
 
@@ -168,6 +180,7 @@ Compare skill versions:
 
 ```markdown
 Debug steps:
+
 1. Check description keywords
 2. Verify name format (lowercase, hyphens)
 3. Test with explicit mention: "use the [skill-name] skill"
@@ -178,6 +191,7 @@ Debug steps:
 
 ```markdown
 Debug steps:
+
 1. Read through SKILL.md as Claude would
 2. Check for ambiguous instructions
 3. Verify examples match instructions
@@ -188,6 +202,7 @@ Debug steps:
 
 ```markdown
 Debug steps:
+
 1. Check SKILL.md line count (<200 ideal)
 2. Monitor which references load
 3. Look for redundant content

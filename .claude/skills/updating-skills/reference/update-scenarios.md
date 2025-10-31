@@ -5,6 +5,7 @@
 ### Feedback: "Skill doesn't work for my use case"
 
 **Analysis Process**:
+
 ```markdown
 1. Understand the gap:
    - What specifically doesn't work?
@@ -26,6 +27,7 @@
 ### Feedback: "Skill is confusing"
 
 **Clarity Improvements**:
+
 ```markdown
 Refactoring for Clarity:
 - [ ] Simplify language
@@ -56,6 +58,7 @@ Refactoring for Clarity:
 ### Adding Support for New Versions
 
 **Wrong way**: Adding version-specific sections
+
 ```markdown
 ## For Version 2.x
 [Instructions]
@@ -68,6 +71,7 @@ Refactoring for Clarity:
 ```
 
 **Right way**: Current with compatibility notes
+
 ```markdown
 ## Setup
 
@@ -146,6 +150,7 @@ fdupes -r .claude/skills/
 
 ```markdown
 Consolidation Steps:
+
 1. Identify all duplicates
 2. Determine authoritative source
 3. Create single reference
@@ -167,6 +172,7 @@ Consolidation Steps:
 
 ```markdown
 Breaking Change Process:
+
 1. Document what will break
 2. Provide migration path
 3. Keep old version available temporarily
@@ -211,6 +217,7 @@ Emergency Fix Process:
 ### Batch Updates
 
 Better to batch multiple improvements:
+
 - Less disruption for users
 - Holistic refactoring opportunity
 - Single testing cycle

@@ -39,6 +39,7 @@ command --with parameters
 ```
 
 Expected output:
+
 ```
 [Example of successful output]
 ```
@@ -53,6 +54,7 @@ command --with parameters
 ```
 
 If errors occur:
+
 - Check [specific thing]
 - Verify [requirement]
 - See [reference/troubleshooting.md](reference/troubleshooting.md)
@@ -76,6 +78,7 @@ validate-output output-file
 ```
 
 Success criteria:
+
 - [ ] Criterion 1 met
 - [ ] Criterion 2 met
 - [ ] No errors in log

@@ -27,6 +27,7 @@ CLAUDE.md Update Checklist:
 ## What Belongs in CLAUDE.md
 
 ### ✅ Include
+
 - Project overview and purpose
 - Quick start commands
 - Core workflow guidance
@@ -35,6 +36,7 @@ CLAUDE.md Update Checklist:
 - Critical behavioral instructions
 
 ### ❌ Move to Skills
+
 - Detailed procedures
 - Comprehensive examples
 - Troubleshooting guides
@@ -62,12 +64,14 @@ Should this go in CLAUDE.md?
 ### Pattern: Extract to Skills
 
 **Before**: Detailed instructions in CLAUDE.md
+
 ```markdown
 ## Database Migrations
 [50 lines of detailed migration instructions]
 ```
 
 **After**: Overview with skill reference
+
 ```markdown
 ## Database Migrations
 Use `migrating-database` skill for detailed workflows.
@@ -87,6 +91,7 @@ Basic command: `migrate up`
 ## Quality Metrics
 
 After updates, verify:
+
 - [ ] Under 300 lines (ideal) or 500 (maximum)
 - [ ] No duplicate information
 - [ ] Clear section hierarchy
@@ -103,6 +108,7 @@ After updates, verify:
 5. **Verbose descriptions** - Be concise
 
 For detailed guidance:
+
 - **Structure patterns**: See [reference/structure.md](reference/structure.md)
 - **Content guidelines**: See [reference/content.md](reference/content.md)
 - **Migration examples**: See [reference/examples.md](reference/examples.md)

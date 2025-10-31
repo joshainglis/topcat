@@ -3,6 +3,7 @@
 ## Pattern 1: Extracting to References
 
 ### Before (Bloated SKILL.md)
+
 ```markdown
 # SKILL.md (450 lines)
 ## Overview
@@ -19,6 +20,7 @@
 ```
 
 ### After (Refactored)
+
 ```markdown
 # SKILL.md (150 lines)
 ## Overview
@@ -40,6 +42,7 @@
 ### Identifying Redundancy
 
 Look for:
+
 - Similar instructions in multiple places
 - Repeated examples with minor variations
 - Multiple explanations of same concept
@@ -74,15 +77,18 @@ pandas.read_csv(file, delimiter=delimiter)
 Reorganize content by:
 
 1. **Frequency of use**
-   - Most common → SKILL.md
-   - Occasional → reference/
-   - Rare → reference/advanced/
+
+- Most common → SKILL.md
+- Occasional → reference/
+- Rare → reference/advanced/
 
 2. **User journey**
-   - Setup → Quick start → Common tasks → Advanced
+
+- Setup → Quick start → Common tasks → Advanced
 
 3. **Complexity**
-   - Simple examples → Complex scenarios → Edge cases
+
+- Simple examples → Complex scenarios → Edge cases
 
 ### Example Restructure
 
@@ -111,6 +117,7 @@ See [reference/advanced-examples.md](reference/advanced-examples.md)
 ### When to Update Description
 
 Update when:
+
 - New major feature added
 - Scope significantly changed
 - New triggers needed
@@ -135,9 +142,11 @@ description: Processes structured data formats including JSON, XML, and YAML for
 
 ```markdown
 # SKILL.md
+
 [Original content]
 
 ## New Feature Added in Update
+
 [New content tacked on end]
 ```
 
@@ -145,11 +154,14 @@ description: Processes structured data formats including JSON, XML, and YAML for
 
 ```markdown
 # SKILL.md
+
 ## Core Features
+
 - Original capability
 - **New capability** (integrated naturally)
 
 ## Workflows
+
 [Updated workflow including new feature where relevant]
 ```
 

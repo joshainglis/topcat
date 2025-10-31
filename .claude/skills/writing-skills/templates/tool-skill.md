@@ -14,11 +14,11 @@ install-command toolname
 
 ## Quick Reference
 
-| Command | Purpose | Example |
-|---------|---------|---------|
-| `tool init` | Initialize project | `tool init myproject` |
-| `tool run` | Execute operation | `tool run --input file` |
-| `tool test` | Run tests | `tool test --coverage` |
+| Command     | Purpose            | Example                 |
+|-------------|--------------------|-------------------------|
+| `tool init` | Initialize project | `tool init myproject`   |
+| `tool run`  | Execute operation  | `tool run --input file` |
+| `tool test` | Run tests          | `tool test --coverage`  |
 
 ## Common Operations
 

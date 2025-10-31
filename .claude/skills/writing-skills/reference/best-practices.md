@@ -5,12 +5,14 @@
 ### 1. Concise is Key
 
 The context window is shared with:
+
 - System prompt
 - Conversation history
 - Other skills' metadata
 - User requests
 
 **Before adding content, ask:**
+
 - Does Claude really need this?
 - Can I assume Claude knows this?
 - Does this justify its token cost?
@@ -28,11 +30,13 @@ Only loaded content costs tokens.
 ### 3. Clear Triggering
 
 **Good description:**
+
 ```yaml
 description: Analyzes Python code for security vulnerabilities and generates remediation reports. Use when auditing code security, reviewing dependencies, or preparing security documentation.
 ```
 
 **Bad description:**
+
 ```yaml
 description: Helps with security stuff
 ```
@@ -42,6 +46,7 @@ description: Helps with security stuff
 ### Naming Conventions
 
 Use gerund form (verb + -ing):
+
 - ✅ `analyzing-data`
 - ✅ `building-interfaces`
 - ✅ `testing-apis`
@@ -51,6 +56,7 @@ Use gerund form (verb + -ing):
 ### File Organization
 
 Keep references one level deep:
+
 ```
 skill/
 ├── SKILL.md           # Links to all references
@@ -61,6 +67,7 @@ skill/
 ```
 
 Avoid:
+
 ```
 SKILL.md → guide.md → details.md → more.md  # Too deep
 ```
@@ -68,12 +75,14 @@ SKILL.md → guide.md → details.md → more.md  # Too deep
 ### Content Distribution
 
 **SKILL.md** (100-200 lines):
+
 - Quick start
 - Essential workflows
 - Common commands
 - Links to references
 
 **Reference files**:
+
 - Detailed explanations
 - Comprehensive examples
 - Edge cases
@@ -114,12 +123,13 @@ Effective for complex tasks:
 Copy this checklist:
 \`\`\`
 Migration Progress:
+
 - [ ] Backup current data
 - [ ] Validate schema changes
 - [ ] Run migration script
 - [ ] Verify data integrity
 - [ ] Update documentation
-\`\`\`
+  \`\`\`
 ```
 
 ### Conditional Pattern
@@ -130,9 +140,9 @@ Guide through decision trees:
 ## Processing Workflow
 
 1. Determine file type:
-   - **CSV?** → Use pandas workflow
-   - **JSON?** → Use json workflow
-   - **XML?** → Use xml workflow
+  - **CSV?** → Use pandas workflow
+  - **JSON?** → Use json workflow
+  - **XML?** → Use xml workflow
 
 2. Follow appropriate workflow below...
 ```
@@ -145,15 +155,18 @@ Be explicit about intent:
 
 ```markdown
 # Execute the script (preferred for deterministic operations)
+
 Run: `python scripts/validate.py input.json`
 
 # Read for reference (only when logic understanding needed)
+
 See implementation in `scripts/validate.py`
 ```
 
 ### Utility Scripts
 
 Provide scripts for:
+
 - Complex validations
 - Repetitive operations
 - Error-prone tasks
@@ -176,9 +189,9 @@ Provide scripts for:
 1. Fresh Claude instance with skill
 2. Give realistic task
 3. Observe:
-   - Does skill trigger?
-   - Are instructions followed?
-   - Is output correct?
+  - Does skill trigger?
+  - Are instructions followed?
+  - Is output correct?
 ```
 
 ## Common Optimizations
@@ -186,12 +199,14 @@ Provide scripts for:
 ### Reduce Redundancy
 
 Before:
+
 ```markdown
 Python is a programming language. To read files in Python,
 you need to import the appropriate modules...
 ```
 
 After:
+
 ```markdown
 Read files with: `Path('file').read_text()`
 ```
@@ -199,12 +214,14 @@ Read files with: `Path('file').read_text()`
 ### Use Examples Over Explanation
 
 Before:
+
 ```markdown
 The configuration file should have a section called database
 with fields for host, port, username, and password...
 ```
 
 After:
+
 ```toml
 [database]
 host = "localhost"

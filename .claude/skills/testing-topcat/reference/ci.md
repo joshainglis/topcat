@@ -19,31 +19,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Setup Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
 
-    - name: Cache cargo
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Run tests
-      run: cargo test --all-features
+      - name: Run tests
+        run: cargo test --all-features
 
-    - name: Run clippy
-      run: cargo clippy -- -D warnings
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
 
-    - name: Check formatting
-      run: cargo fmt -- --check
+      - name: Check formatting
+        run: cargo fmt -- --check
 ```
 
 ### Multi-Platform Testing
@@ -51,26 +51,26 @@ jobs:
 ```yaml
 name: Cross-Platform Tests
 
-on: [push, pull_request]
+on: [ push, pull_request ]
 
 jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable, beta, nightly]
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        rust: [ stable, beta, nightly ]
 
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
-        override: true
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          override: true
 
-    - run: cargo test --all-features
+      - run: cargo test --all-features
 
     continue-on-error: ${{ matrix.rust == 'nightly' }}
 ```
@@ -80,25 +80,25 @@ jobs:
 ```yaml
 name: Coverage
 
-on: [push]
+on: [ push ]
 
 jobs:
   coverage:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Install tarpaulin
-      run: cargo install cargo-tarpaulin
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
 
-    - name: Generate coverage
-      run: cargo tarpaulin --out Xml
+      - name: Generate coverage
+        run: cargo tarpaulin --out Xml
 
-    - name: Upload to codecov
-      uses: codecov/codecov-action@v3
-      with:
-        files: ./cobertura.xml
+      - name: Upload to codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./cobertura.xml
 ```
 
 ## Pre-commit Hooks
@@ -180,28 +180,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Build release
-      run: cargo build --release
+      - name: Build release
+        run: cargo build --release
 
-    - name: Create Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
 
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./target/release/topcat
-        asset_name: topcat-linux-amd64
-        asset_content_type: application/octet-stream
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/release/topcat
+          asset_name: topcat-linux-amd64
+          asset_content_type: application/octet-stream
 ```

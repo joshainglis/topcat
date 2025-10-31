@@ -23,6 +23,7 @@ topcat -i sql/ -o output.sql --enable-sql-discovery --update-headers
 ## How Discovery Works
 
 Topcat analyzes SQL content to extract dependencies from:
+
 - CREATE/ALTER/DROP statements
 - Schema-qualified references (schema.table)
 - Function and procedure calls

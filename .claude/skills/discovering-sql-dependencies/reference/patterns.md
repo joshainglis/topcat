@@ -65,14 +65,16 @@ exclude_schemas = ["pg_catalog", "information_schema", "pg_toast"]
 
 ```sql
 -- Discovery handles multi-line CREATE statements
-CREATE TABLE schema.users (
-    id SERIAL PRIMARY KEY,
-    role_id INTEGER REFERENCES schema.roles(id),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE schema.users
+(
+  id         SERIAL PRIMARY KEY,
+  role_id    INTEGER REFERENCES schema.roles (id),
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 ```
 
 Extracted dependencies:
+
 - `schema.users` (object being created)
 - `schema.roles` (foreign key reference)
 
@@ -80,17 +82,15 @@ Extracted dependencies:
 
 ```sql
 -- Nested references are discovered
-SELECT * FROM (
-    SELECT u.* FROM app.users u
-    JOIN app.departments d ON u.dept_id = d.id
-    WHERE EXISTS (
-        SELECT 1 FROM app.permissions p
-        WHERE p.user_id = u.id
-    )
-) AS filtered_users;
+SELECT *
+FROM (SELECT u.*
+      FROM app.users       u
+      JOIN app.departments d ON u.dept_id = d.id
+      WHERE EXISTS (SELECT 1 FROM app.permissions p WHERE p.user_id = u.id)) AS filtered_users;
 ```
 
 Extracted dependencies:
+
 - `app.users`
 - `app.departments`
 - `app.permissions`

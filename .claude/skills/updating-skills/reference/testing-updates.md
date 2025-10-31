@@ -141,6 +141,7 @@ Load Test:
 
 ```markdown
 User Personas:
+
 1. Beginner: "How do I [basic task]?"
 2. Intermediate: "[Standard task] with [specific requirement]"
 3. Expert: "[Complex scenario] optimizing for [criterion]"
@@ -150,6 +151,7 @@ User Personas:
 
 ```markdown
 Phrasing Variations:
+
 - "I need to [task]"
 - "Help me [task]"
 - "Can you [task]"
@@ -163,6 +165,7 @@ Test skill interactions:
 
 ```markdown
 Integration Tests:
+
 - [ ] Skill works alongside related skills
 - [ ] No naming conflicts
 - [ ] Clear differentiation from similar skills
@@ -189,6 +192,7 @@ Complete Testing Flow:
 ### Skill Doesn't Trigger
 
 **Diagnosis**:
+
 ```markdown
 - Check description keywords
 - Verify description includes use cases
@@ -198,6 +202,7 @@ Complete Testing Flow:
 ### Wrong Behavior
 
 **Diagnosis**:
+
 ```markdown
 - Check if instructions are ambiguous
 - Verify examples match instructions
@@ -207,6 +212,7 @@ Complete Testing Flow:
 ### Performance Degradation
 
 **Diagnosis**:
+
 ```markdown
 - Check if SKILL.md grew too large
 - Look for redundant content

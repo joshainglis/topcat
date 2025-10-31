@@ -72,23 +72,31 @@ gdb target/debug/topcat
 ```json
 // .vscode/launch.json
 {
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug Topcat",
-            "cargo": {
-                "args": ["build", "--bin=topcat"],
-                "filter": {
-                    "name": "topcat",
-                    "kind": "bin"
-                }
-            },
-            "args": ["-i", "tests/input", "-o", "output.sql"],
-            "cwd": "${workspaceFolder}"
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug Topcat",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=topcat"
+        ],
+        "filter": {
+          "name": "topcat",
+          "kind": "bin"
         }
-    ]
+      },
+      "args": [
+        "-i",
+        "tests/input",
+        "-o",
+        "output.sql"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
 }
 ```
 
@@ -130,13 +138,13 @@ grep -E "(node1|node2|node3)" graph.dot > subgraph.dot
 ```rust
 // Add debug output to cycle detection
 match graph.validate() {
-    Err(TopCatError::CycleDetected { cycle, layer }) => {
-        eprintln!("Cycle found in layer {}:", layer);
-        for (i, node) in cycle.iter().enumerate() {
-            eprintln!("  {} -> {}", node, cycle[(i + 1) % cycle.len()]);
-        }
-    }
-    _ => {}
+Err(TopCatError::CycleDetected { cycle, layer }) => {
+eprintln ! ("Cycle found in layer {}:", layer);
+for (i, node) in cycle.iter().enumerate() {
+eprintln ! ("  {} -> {}", node, cycle[(i + 1) % cycle.len()]);
+}
+}
+_ => {}
 }
 ```
 

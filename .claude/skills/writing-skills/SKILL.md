@@ -44,16 +44,19 @@ description: What this skill does and when to use it. # max 1024 chars
 ## Writing Principles
 
 ### Be Concise
+
 - Keep SKILL.md under 200 lines (ideally ~100)
 - Assume Claude already knows basics
 - Challenge every paragraph's value
 
 ### Use Progressive Disclosure
+
 - Metadata → Main instructions → Reference files → Scripts
 - Only loaded content consumes tokens
 - Bundle comprehensive resources without penalty
 
 ### Set Appropriate Freedom
+
 - **High freedom**: Text instructions for flexible tasks
 - **Medium freedom**: Pseudocode with parameters
 - **Low freedom**: Exact scripts for fragile operations
@@ -61,28 +64,32 @@ description: What this skill does and when to use it. # max 1024 chars
 ## Common Patterns
 
 ### Workflow Pattern
+
 ```markdown
 ## Task Workflow
 
 Copy this checklist:
 \`\`\`
 Progress:
+
 - [ ] Step 1: Clear action
 - [ ] Step 2: Next action
 - [ ] Step 3: Final action
-\`\`\`
+  \`\`\`
 ```
 
 ### Reference Pattern
+
 ```markdown
 ## Quick Guide
+
 [Essential information here]
 
 **Details**: See [reference/details.md](reference/details.md)
 **Examples**: See [reference/examples.md](reference/examples.md)
 ```
 
-For templates, see [templates/](templates/).
+For templates, see [templates/](./templates/).
 For best practices, see [reference/best-practices.md](reference/best-practices.md).
 For anti-patterns, see [reference/anti-patterns.md](reference/anti-patterns.md).
 

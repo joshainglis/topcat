@@ -3,6 +3,7 @@
 ## Example 1: Simple Tool Skill
 
 ### SKILL.md
+
 ```markdown
 ---
 name: formatting-json
@@ -14,24 +15,30 @@ description: Formats, validates, and transforms JSON data including prettificati
 ## Quick Commands
 
 \`\`\`bash
+
 # Prettify
+
 jq '.' input.json > pretty.json
 
 # Minify
+
 jq -c '.' input.json > minified.json
 
 # Validate
+
 jq empty input.json && echo "Valid JSON"
 \`\`\`
 
 ## Common Transformations
 
 ### Extract Field
+
 \`\`\`bash
 jq '.data.items[]' input.json
 \`\`\`
 
 ### Filter Objects
+
 \`\`\`bash
 jq '.users[] | select(.age > 21)' users.json
 \`\`\`
@@ -42,6 +49,7 @@ For complex transformations, see [reference/transformations.md](reference/transf
 ## Example 2: Workflow Skill
 
 ### SKILL.md
+
 ```markdown
 ---
 name: deploying-containers
@@ -56,13 +64,14 @@ Copy this checklist:
 
 \`\`\`
 Deployment Progress:
+
 - [ ] Build image: docker build -t app:latest .
 - [ ] Test locally: docker run --rm app:latest test
 - [ ] Tag for registry: docker tag app:latest registry/app:v1.0
 - [ ] Push to registry: docker push registry/app:v1.0
 - [ ] Deploy to environment: kubectl apply -f deployment.yaml
 - [ ] Verify deployment: kubectl rollout status deployment/app
-\`\`\`
+  \`\`\`
 
 ## Quick Reference
 
@@ -78,6 +87,7 @@ For troubleshooting, see [reference/debugging.md](reference/debugging.md)
 ## Example 3: Analysis Skill
 
 ### SKILL.md
+
 ```markdown
 ---
 name: analyzing-performance
@@ -89,11 +99,14 @@ description: Analyzes application performance using profiling tools and metrics.
 ## Quick Analysis
 
 \`\`\`bash
+
 # CPU profile (30 seconds)
+
 perf record -g -p $(pgrep appname) sleep 30
 perf report
 
 # Memory snapshot
+
 pmap -x $(pgrep appname)
 \`\`\`
 
@@ -101,15 +114,17 @@ pmap -x $(pgrep appname)
 
 \`\`\`
 Analysis Checklist:
+
 - [ ] Establish baseline metrics
 - [ ] Identify bottlenecks
 - [ ] Profile specific operations
 - [ ] Analyze results
 - [ ] Implement optimizations
 - [ ] Verify improvements
-\`\`\`
+  \`\`\`
 
 For detailed profiling guides:
+
 - **CPU Profiling**: See [reference/cpu-profiling.md](reference/cpu-profiling.md)
 - **Memory Analysis**: See [reference/memory-analysis.md](reference/memory-analysis.md)
 - **I/O Analysis**: See [reference/io-analysis.md](reference/io-analysis.md)
@@ -130,9 +145,10 @@ description: Constructs and optimizes BigQuery analytics queries for business me
 ## Common Queries
 
 ### Daily Active Users
+
 \`\`\`sql
 SELECT DATE(timestamp) as date,
-       COUNT(DISTINCT user_id) as dau
+COUNT(DISTINCT user_id) as dau
 FROM events.activity
 WHERE DATE(timestamp) >= CURRENT_DATE() - 30
 GROUP BY date
@@ -153,6 +169,7 @@ ORDER BY date DESC
 ```
 
 ### reference/cohorts.md
+
 ```markdown
 # Cohort Analysis Queries
 
@@ -160,19 +177,19 @@ ORDER BY date DESC
 
 \`\`\`sql
 WITH cohorts AS (
-  SELECT user_id,
-         DATE_TRUNC(MIN(DATE(first_seen)), WEEK) as cohort_week
-  FROM users
-  GROUP BY user_id
+SELECT user_id,
+DATE_TRUNC(MIN(DATE(first_seen)), WEEK) as cohort_week
+FROM users
+GROUP BY user_id
 ),
 activities AS (
-  SELECT user_id,
-         DATE_TRUNC(DATE(timestamp), WEEK) as activity_week
-  FROM events.activity
+SELECT user_id,
+DATE_TRUNC(DATE(timestamp), WEEK) as activity_week
+FROM events.activity
 )
 SELECT c.cohort_week,
-       DATE_DIFF(a.activity_week, c.cohort_week, WEEK) as weeks_since,
-       COUNT(DISTINCT a.user_id) as users
+DATE_DIFF(a.activity_week, c.cohort_week, WEEK) as weeks_since,
+COUNT(DISTINCT a.user_id) as users
 FROM cohorts c
 JOIN activities a ON c.user_id = a.user_id
 GROUP BY cohort_week, weeks_since
@@ -183,6 +200,7 @@ ORDER BY cohort_week, weeks_since
 ## Example 5: Configuration Skill
 
 ### SKILL.md
+
 ```markdown
 ---
 name: configuring-nginx
@@ -194,26 +212,29 @@ description: Configures Nginx web server for various scenarios including reverse
 ## Common Configurations
 
 ### Basic Static Site
+
 \`\`\`nginx
 server {
-    listen 80;
-    server_name example.com;
-    root /var/www/html;
-    index index.html;
+listen 80;
+server_name example.com;
+root /var/www/html;
+index index.html;
 }
 \`\`\`
 
 ### Reverse Proxy
+
 \`\`\`nginx
 server {
-    listen 80;
-    server_name api.example.com;
+listen 80;
+server_name api.example.com;
 
     location / {
         proxy_pass http://localhost:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
+
 }
 \`\`\`
 
@@ -221,15 +242,17 @@ server {
 
 \`\`\`
 Nginx Setup:
+
 - [ ] Install: apt install nginx
 - [ ] Configure: Edit /etc/nginx/sites-available/site
 - [ ] Enable: ln -s ../sites-available/site ../sites-enabled/
 - [ ] Test: nginx -t
 - [ ] Reload: systemctl reload nginx
 - [ ] Verify: curl -I localhost
-\`\`\`
+  \`\`\`
 
 For advanced configurations:
+
 - **SSL/TLS**: See [reference/ssl.md](reference/ssl.md)
 - **Load Balancing**: See [reference/load-balancing.md](reference/load-balancing.md)
 - **Caching**: See [reference/caching.md](reference/caching.md)

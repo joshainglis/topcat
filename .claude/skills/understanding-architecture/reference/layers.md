@@ -25,12 +25,14 @@ pub struct TCGraph {
 ## Configuration
 
 ### Default Layers
+
 ```bash
 # Default configuration
 prepend → normal → append
 ```
 
 ### Custom Layers
+
 ```bash
 # Define custom layers
 topcat --layers "extensions,tables,views,functions,data"
@@ -41,13 +43,16 @@ topcat --layers "extensions,tables,views,functions,data"
 ```
 
 ### Backward Compatibility
+
 - `is_initial: true` → `layer: prepend`
 - `is_final: true` → `layer: append`
 
 ## Constraints
 
 ### Intra-layer Dependencies
+
 Files within same layer follow dependency order:
+
 ```sql
 -- name: table_a
 -- layer: tables
@@ -55,7 +60,9 @@ Files within same layer follow dependency order:
 ```
 
 ### Cross-layer Dependencies
+
 Dependencies can only point backward:
+
 ```sql
 -- name: view_a
 -- layer: views
@@ -63,6 +70,7 @@ Dependencies can only point backward:
 ```
 
 Invalid cross-layer dependency:
+
 ```sql
 -- name: table_a
 -- layer: tables
@@ -72,6 +80,7 @@ Invalid cross-layer dependency:
 ## Implementation
 
 ### Layer Assignment
+
 ```rust
 impl FileNode {
     pub fn get_layer(&self, default: &str) -> String {
@@ -89,6 +98,7 @@ impl FileNode {
 ```
 
 ### Validation
+
 ```rust
 fn validate_layer_deps(&self) -> Result<()> {
     for (name, (source_layer, _)) in &self.node_map {
@@ -108,16 +118,19 @@ fn validate_layer_deps(&self) -> Result<()> {
 ## Use Cases
 
 ### Database Migrations
+
 ```bash
 topcat --layers "extensions,schemas,tables,constraints,indexes,data"
 ```
 
 ### Application Deployment
+
 ```bash
 topcat --layers "infrastructure,database,application,configuration"
 ```
 
 ### Test Data
+
 ```bash
 topcat --layers "setup,fixtures,tests,cleanup"
 ```

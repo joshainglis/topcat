@@ -3,6 +3,7 @@
 ## Example 1: Feature Addition
 
 ### Scenario
+
 Adding new authentication feature to project
 
 ### ❌ Wrong: Just Append
@@ -31,8 +32,10 @@ topcat -i input/ -o output.sql
 ```
 
 ## Available Skills
+
 - **configuring-authentication**: Setup and management
-[other skills...]
+  [other skills...]
+
 ```
 
 ## Example 2: Growing Configuration Section
@@ -63,6 +66,7 @@ comment_prefix = "--"
 
 For SQL discovery, you can add:
 [40 more lines of configuration details]
+
 ```
 
 ### ✅ After: Concise with Skill Reference (15 lines)
@@ -83,6 +87,7 @@ schema_pattern = "app_\\w+"
 ```
 
 Details: See `configuring-topcat` skill
+
 ```
 
 ## Example 3: Consolidating Redundant Sections
@@ -94,25 +99,33 @@ Details: See `configuring-topcat` skill
 ```bash
 cargo build
 ```
+
 This builds a debug version...
 
 ## Building for Production
+
 ```bash
 cargo build --release
 ```
+
 This builds an optimized version...
 
 ## Building with Features
+
 ```bash
 cargo build --features sql_discovery
 ```
+
 This enables additional features...
 
 ## Testing the Build
+
 ```bash
 cargo test
 ```
+
 Run this after building...
+
 ```
 
 ### ✅ After: Unified Commands Section
@@ -146,9 +159,10 @@ Run this after building...
    ```
 
 3. Review the output
-   - Check the order is correct
-   - Verify all files are included
-   - Look for any warnings
+
+- Check the order is correct
+- Verify all files are included
+- Look for any warnings
 
 4. Generate the final migration
    ```bash
@@ -157,6 +171,7 @@ Run this after building...
 
 5. Apply the migration
    [20 more lines...]
+
 ```
 
 ### ✅ After: Quick Reference with Skill
@@ -169,6 +184,7 @@ topcat -i migrations/ -o migration.sql --enable-sql-discovery
 ```
 
 For workflows: Use `migrating-database` skill
+
 ```
 
 ## Example 5: Complete CLAUDE.md Refactor
@@ -222,20 +238,22 @@ myproject run input.txt
 ## Available Skills
 
 ### Usage
+
 - **getting-started**: Installation and setup
 - **common-workflows**: Typical usage patterns
 - **troubleshooting-myproject**: Problem resolution
 
 ### Development
+
 - **contributing-guide**: How to contribute
 - **understanding-internals**: Architecture details
 
 ## Commands
 
-| Task | Command |
-|------|---------|
-| Run | `myproject run <file>` |
-| Test | `myproject test` |
+| Task   | Command                              |
+|--------|--------------------------------------|
+| Run    | `myproject run <file>`               |
+| Test   | `myproject test`                     |
 | Config | `myproject config set <key> <value>` |
 
 ## Configuration
@@ -261,6 +279,7 @@ cargo fmt            # Format
 1. Always use X for Y
 2. Never do Z without W
 3. Follow pattern P for Q
+
 ```
 
 ## Example 6: Adding Emergency Information
@@ -287,6 +306,7 @@ FLAG UNTIL FIXED. THE BUG HAPPENS WHEN...
 - **v2.3.1**: Data loss with `--delete` flag. See `critical-issues` skill.
 
 ## Quick Start
+
 [rest of content unchanged]
 ```
 
@@ -300,9 +320,10 @@ FLAG UNTIL FIXED. THE BUG HAPPENS WHEN...
    ```
 
 2. **Identify Extraction Candidates**
-   - Sections over 20 lines
-   - Detailed procedures
-   - Troubleshooting guides
+
+- Sections over 20 lines
+- Detailed procedures
+- Troubleshooting guides
 
 3. **Create/Update Skills**
    ```bash
@@ -311,19 +332,22 @@ FLAG UNTIL FIXED. THE BUG HAPPENS WHEN...
    ```
 
 4. **Refactor CLAUDE.md**
-   - Replace extracted content with references
-   - Consolidate similar sections
-   - Convert prose to tables/lists
+
+- Replace extracted content with references
+- Consolidate similar sections
+- Convert prose to tables/lists
 
 5. **Verify Quality**
-   - Under 300 lines?
-   - No redundancy?
-   - Clear structure?
-   - Skills referenced?
+
+- Under 300 lines?
+- No redundancy?
+- Clear structure?
+- Skills referenced?
 
 ### Before/After Metrics
 
 Good refactor example:
+
 - **Before**: 650 lines, 15 sections, 3000 tokens
 - **After**: 280 lines, 8 sections, 1400 tokens
 - **Extracted**: 5 new skills created

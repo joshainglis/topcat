@@ -21,11 +21,13 @@
 
 ```markdown
 # Bad - Verbose
+
 To run the tests for this project, you'll need to use
 the cargo test command. This will execute all the test
 suites and show you the results.
 
 # Good - Concise
+
 Test: `cargo test` or `cargo test specific_test`
 ```
 
@@ -42,58 +44,69 @@ Test: `cargo test` or `cargo test specific_test`
 ### Always Extract
 
 1. **Procedures > 10 steps**
-   - Move to workflow skill
-   - Keep 2-line summary
+
+- Move to workflow skill
+- Keep 2-line summary
 
 2. **Domain-specific knowledge**
-   - Move to specialized skill
-   - Keep skill reference
+
+- Move to specialized skill
+- Keep skill reference
 
 3. **Troubleshooting guides**
-   - Move to skill reference
-   - Keep "See skill for errors"
+
+- Move to skill reference
+- Keep "See skill for errors"
 
 4. **Advanced features**
-   - Move to skill
-   - Keep basic usage only
+
+- Move to skill
+- Keep basic usage only
 
 ### Never Extract
 
 1. **Project identity**
-   - What the project is
-   - Primary purpose
-   - Key differentiator
+
+- What the project is
+- Primary purpose
+- Key differentiator
 
 2. **Orientation information**
-   - Available skills list
-   - Basic commands
-   - Project structure
+
+- Available skills list
+- Basic commands
+- Project structure
 
 3. **Critical constraints**
-   - Must-follow rules
-   - Security requirements
-   - Performance limits
+
+- Must-follow rules
+- Security requirements
+- Performance limits
 
 ## Content Priorities
 
 ### Level 1: Essential (Always include)
+
 - What the project does
 - How to run it
 - Available skills
 - Critical conventions
 
 ### Level 2: Important (Include if < 250 lines)
+
 - Common workflows
 - Key concepts
 - Development setup
 - Basic examples
 
 ### Level 3: Nice-to-have (Include if < 200 lines)
+
 - Architecture overview
 - Best practices
 - Quick troubleshooting
 
 ### Level 4: Extract to skills (Never include)
+
 - Detailed procedures
 - Comprehensive guides
 - Edge cases
@@ -107,6 +120,7 @@ Before adding to CLAUDE.md, check:
 
 ```markdown
 Questions:
+
 1. Does a skill already cover this?
    → Yes: Reference the skill
    → No: Continue
@@ -123,6 +137,7 @@ Questions:
 ### Within CLAUDE.md
 
 Look for:
+
 - Similar sections that could merge
 - Repeated information
 - Overlapping examples
@@ -131,6 +146,7 @@ Look for:
 ## Examples of Good Content
 
 ### Project Overview
+
 ```markdown
 ## Overview
 
@@ -140,6 +156,7 @@ SQL migrations.
 ```
 
 ### Quick Reference
+
 ```markdown
 ## Commands
 
@@ -151,6 +168,7 @@ SQL migrations.
 ```
 
 ### Skill Directory
+
 ```markdown
 ## Available Skills
 
@@ -162,6 +180,7 @@ SQL migrations.
 ## Examples of Bad Content
 
 ### Too Detailed
+
 ```markdown
 ## How It Works
 
@@ -172,6 +191,7 @@ used to build a directed acyclic graph. The graph is then...
 ```
 
 ### Tutorial Style
+
 ```markdown
 ## Learning Topological Sort
 
@@ -180,8 +200,10 @@ topological sorting. This is a graph algorithm that...
 ```
 
 ### Redundant with Skills
+
 ```markdown
 ## SQL Discovery (full guide here)
+
 [Same content as in discovering-sql-dependencies skill]
 ```
 
@@ -203,12 +225,14 @@ When updating CLAUDE.md content:
 Remember: CLAUDE.md loads EVERY time
 
 ### Cost Calculation
+
 - Average interaction: ~50-100 tokens for user query
 - CLAUDE.md at 300 lines: ~1500 tokens
 - CLAUDE.md at 600 lines: ~3000 tokens
 - Efficiency lost: 50% of context on documentation
 
 ### Optimization Goals
+
 - Keep under 300 lines (1500 tokens)
 - Extract details to skills (load on demand)
 - Use information density techniques
