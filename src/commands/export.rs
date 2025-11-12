@@ -344,6 +344,50 @@ impl ExportArgs {
         Ok(())
     }
 
+    /// Renders a single DOT schema subgraph with colored nodes.
+    fn render_dot_schema_subgraph(
+        output: &mut String,
+        schema_name: &str,
+        nodes: &[&FileNode],
+        color: &str,
+    ) {
+        output.push_str(&format!(
+            "    subgraph cluster_{} {{\n",
+            sanitize_schema_name(schema_name)
+        ));
+        output.push_str(&format!("        label=\"{schema_name}\";\n"));
+        output.push_str("        style=filled;\n");
+        output.push_str(&format!("        color={color};\n"));
+        output.push_str(&format!("        fillcolor={color};\n\n"));
+
+        for node in nodes {
+            output.push_str(&format!("        \"{}\";\n", node.name));
+        }
+
+        output.push_str("    }\n\n");
+    }
+
+    /// Renders DOT edges, marking cross-schema dependencies with dashed red lines.
+    fn render_dot_edges(
+        output: &mut String,
+        all_nodes: &[FileNode],
+        node_map: &HashMap<String, &FileNode>,
+    ) {
+        output.push_str("    // Dependencies\n");
+        for node in all_nodes {
+            for dep in &node.deps {
+                if is_cross_schema_edge(node, dep, node_map) {
+                    output.push_str(&format!(
+                        "    \"{}\" -> \"{}\" [color=red, style=dashed];\n",
+                        node.name, dep
+                    ));
+                } else {
+                    output.push_str(&format!("    \"{}\" -> \"{}\";\n", node.name, dep));
+                }
+            }
+        }
+    }
+
     /// Exports the graph to DOT format for GraphViz visualization.
     ///
     /// Generates a directed graph in DOT format with:
@@ -374,27 +418,13 @@ impl ExportArgs {
         // Group nodes by schema
         let schema_nodes = group_nodes_by_schema(&node_refs);
 
-        // Output nodes grouped by schema
+        // Render schema subgraphs
         let mut color_idx = 0;
         for (schema, nodes) in schema_nodes.iter() {
             if let Some(schema_name) = schema {
                 let color = SCHEMA_COLORS[color_idx % SCHEMA_COLORS.len()];
                 color_idx += 1;
-
-                output.push_str(&format!(
-                    "    subgraph cluster_{} {{\n",
-                    sanitize_schema_name(schema_name)
-                ));
-                output.push_str(&format!("        label=\"{schema_name}\";\n"));
-                output.push_str("        style=filled;\n");
-                output.push_str(&format!("        color={color};\n"));
-                output.push_str(&format!("        fillcolor={color};\n\n"));
-
-                for node in nodes {
-                    output.push_str(&format!("        \"{}\";\n", node.name));
-                }
-
-                output.push_str("    }\n\n");
+                Self::render_dot_schema_subgraph(&mut output, schema_name, nodes, color);
             } else {
                 // Nodes without schema
                 for node in nodes {
@@ -404,48 +434,18 @@ impl ExportArgs {
             }
         }
 
-        // Output edges
-        output.push_str("    // Dependencies\n");
-        for node in &all_nodes {
-            for dep in &node.deps {
-                if is_cross_schema_edge(node, dep, &node_map) {
-                    output.push_str(&format!(
-                        "    \"{}\" -> \"{}\" [color=red, style=dashed];\n",
-                        node.name, dep
-                    ));
-                } else {
-                    output.push_str(&format!("    \"{}\" -> \"{}\";\n", node.name, dep));
-                }
-            }
-        }
+        // Render edges
+        Self::render_dot_edges(&mut output, &all_nodes, &node_map);
 
         output.push_str("}\n");
-
         write_output_file(&self.output, &output)?;
 
         println!("Exported DOT to: {}", self.output.display());
         Ok(())
     }
 
-    /// Exports the graph to GraphML format for tools like Gephi or yEd.
-    ///
-    /// GraphML is an XML-based format that includes:
-    /// - Node attributes: schema, layer, path
-    /// - Edge attributes: type (e.g., "requires")
-    /// - Full graph structure with metadata
-    ///
-    /// The output can be imported into graph analysis tools for visualization
-    /// and further analysis.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if XML writing or file creation fails.
-    fn export_graphml(&self, graph: &TCGraph) -> Result<(), TopCatError> {
-        let file = File::create(&self.output)?;
-
-        let buf_writer = BufWriter::new(file);
-        let mut writer = Writer::new_with_indent(buf_writer, b' ', 2);
-
+    /// Writes the GraphML header (XML declaration and root element).
+    fn write_graphml_header(writer: &mut Writer<BufWriter<File>>) -> Result<(), TopCatError> {
         // Write XML declaration
         writer
             .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
@@ -463,7 +463,11 @@ impl ExportArgs {
             .write_event(Event::Start(graphml))
             .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
 
-        // Write key definitions for node/edge attributes
+        Ok(())
+    }
+
+    /// Writes GraphML key definitions for node and edge attributes.
+    fn write_graphml_keys(writer: &mut Writer<BufWriter<File>>) -> Result<(), TopCatError> {
         for (id, for_type, name, attr_type) in [
             ("d0", "node", "schema", "string"),
             ("d1", "node", "layer", "string"),
@@ -479,88 +483,79 @@ impl ExportArgs {
                 .write_event(Event::Empty(key))
                 .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
         }
+        Ok(())
+    }
 
-        // Write graph element
-        let mut graph_elem = BytesStart::new("graph");
-        graph_elem.push_attribute(("id", "G"));
-        graph_elem.push_attribute(("edgedefault", "directed"));
+    /// Writes a single GraphML node with all its data attributes.
+    fn write_graphml_node(
+        writer: &mut Writer<BufWriter<File>>,
+        node: &FileNode,
+        node_id: usize,
+    ) -> Result<(), TopCatError> {
+        let mut node_elem = BytesStart::new("node");
+        node_elem.push_attribute(("id", format!("n{node_id}").as_str()));
         writer
-            .write_event(Event::Start(graph_elem))
+            .write_event(Event::Start(node_elem.clone()))
             .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
 
-        // Get all nodes and build lookup map
-        let all_nodes = graph.get_all_nodes();
-        let node_id_map: HashMap<String, usize> = all_nodes
-            .iter()
-            .enumerate()
-            .map(|(i, n)| (n.name.clone(), i))
-            .collect();
-
-        // Write nodes
-        for (i, node) in all_nodes.iter().enumerate() {
-            let mut node_elem = BytesStart::new("node");
-            node_elem.push_attribute(("id", format!("n{i}").as_str()));
-            writer
-                .write_event(Event::Start(node_elem.clone()))
-                .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
-
-            // Write schema data if present
-            if let Some(ref schema) = node.schema {
-                let mut data = BytesStart::new("data");
-                data.push_attribute(("key", "d0"));
-                writer
-                    .write_event(Event::Start(data.clone()))
-                    .map_err(|e| {
-                        TopCatError::SerializationError(format!("XML write error: {e}"))
-                    })?;
-                writer
-                    .write_event(Event::Text(BytesText::new(schema)))
-                    .map_err(|e| {
-                        TopCatError::SerializationError(format!("XML write error: {e}"))
-                    })?;
-                writer
-                    .write_event(Event::End(BytesEnd::new("data")))
-                    .map_err(|e| {
-                        TopCatError::SerializationError(format!("XML write error: {e}"))
-                    })?;
-            }
-
-            // Write layer data
+        // Write schema data if present
+        if let Some(ref schema) = node.schema {
             let mut data = BytesStart::new("data");
-            data.push_attribute(("key", "d1"));
+            data.push_attribute(("key", "d0"));
             writer
                 .write_event(Event::Start(data.clone()))
                 .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
             writer
-                .write_event(Event::Text(BytesText::new(&node.layer)))
+                .write_event(Event::Text(BytesText::new(schema)))
                 .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
             writer
                 .write_event(Event::End(BytesEnd::new("data")))
-                .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
-
-            // Write path data
-            let mut data = BytesStart::new("data");
-            data.push_attribute(("key", "d2"));
-            writer
-                .write_event(Event::Start(data.clone()))
-                .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
-            writer
-                .write_event(Event::Text(BytesText::new(
-                    &node.path.display().to_string(),
-                )))
-                .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
-            writer
-                .write_event(Event::End(BytesEnd::new("data")))
-                .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
-
-            writer
-                .write_event(Event::End(BytesEnd::new("node")))
                 .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
         }
 
-        // Write edges
+        // Write layer data
+        let mut data = BytesStart::new("data");
+        data.push_attribute(("key", "d1"));
+        writer
+            .write_event(Event::Start(data.clone()))
+            .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
+        writer
+            .write_event(Event::Text(BytesText::new(&node.layer)))
+            .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
+        writer
+            .write_event(Event::End(BytesEnd::new("data")))
+            .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
+
+        // Write path data
+        let mut data = BytesStart::new("data");
+        data.push_attribute(("key", "d2"));
+        writer
+            .write_event(Event::Start(data.clone()))
+            .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
+        writer
+            .write_event(Event::Text(BytesText::new(
+                &node.path.display().to_string(),
+            )))
+            .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
+        writer
+            .write_event(Event::End(BytesEnd::new("data")))
+            .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
+
+        writer
+            .write_event(Event::End(BytesEnd::new("node")))
+            .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
+
+        Ok(())
+    }
+
+    /// Writes all GraphML edges for the graph.
+    fn write_graphml_edges(
+        writer: &mut Writer<BufWriter<File>>,
+        all_nodes: &[FileNode],
+        node_id_map: &HashMap<String, usize>,
+    ) -> Result<(), TopCatError> {
         let mut edge_id = 0;
-        for node in &all_nodes {
+        for node in all_nodes {
             let source_id = node_id_map
                 .get(&node.name)
                 .expect("node should exist in node_id_map");
@@ -606,19 +601,111 @@ impl ExportArgs {
                 }
             }
         }
+        Ok(())
+    }
 
-        // Close graph element
+    /// Exports the graph to GraphML format for tools like Gephi or yEd.
+    ///
+    /// GraphML is an XML-based format that includes:
+    /// - Node attributes: schema, layer, path
+    /// - Edge attributes: type (e.g., "requires")
+    /// - Full graph structure with metadata
+    ///
+    /// The output can be imported into graph analysis tools for visualization
+    /// and further analysis.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if XML writing or file creation fails.
+    fn export_graphml(&self, graph: &TCGraph) -> Result<(), TopCatError> {
+        let file = File::create(&self.output)?;
+        let buf_writer = BufWriter::new(file);
+        let mut writer = Writer::new_with_indent(buf_writer, b' ', 2);
+
+        // Write header and metadata
+        Self::write_graphml_header(&mut writer)?;
+        Self::write_graphml_keys(&mut writer)?;
+
+        // Write graph element
+        let mut graph_elem = BytesStart::new("graph");
+        graph_elem.push_attribute(("id", "G"));
+        graph_elem.push_attribute(("edgedefault", "directed"));
+        writer
+            .write_event(Event::Start(graph_elem))
+            .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
+
+        // Get all nodes and build lookup map
+        let all_nodes = graph.get_all_nodes();
+        let node_id_map: HashMap<String, usize> = all_nodes
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.name.clone(), i))
+            .collect();
+
+        // Write all nodes
+        for (i, node) in all_nodes.iter().enumerate() {
+            Self::write_graphml_node(&mut writer, node, i)?;
+        }
+
+        // Write all edges
+        Self::write_graphml_edges(&mut writer, &all_nodes, &node_id_map)?;
+
+        // Close graph and graphml elements
         writer
             .write_event(Event::End(BytesEnd::new("graph")))
             .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
-
-        // Close graphml element
         writer
             .write_event(Event::End(BytesEnd::new("graphml")))
             .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
 
         println!("Exported GraphML to: {}", self.output.display());
         Ok(())
+    }
+
+    /// Renders a single Mermaid schema subgraph.
+    fn render_mermaid_schema_subgraph(
+        output: &mut String,
+        schema_name: &str,
+        nodes: &[&FileNode],
+        node_id_map: &HashMap<String, String>,
+    ) {
+        output.push_str(&format!(
+            "    subgraph {}\n",
+            sanitize_schema_name(schema_name)
+        ));
+
+        for node in nodes {
+            let node_id = node_id_map
+                .get(&node.name)
+                .expect("node should exist in node_id_map");
+            output.push_str(&format!("        {}[\"{}\"]\n", node_id, node.name));
+        }
+
+        output.push_str("    end\n");
+    }
+
+    /// Renders Mermaid edges, marking cross-schema dependencies with dotted lines.
+    fn render_mermaid_edges(
+        output: &mut String,
+        all_nodes: &[FileNode],
+        node_id_map: &HashMap<String, String>,
+        node_map: &HashMap<String, &FileNode>,
+    ) {
+        for node in all_nodes {
+            let source_id = node_id_map
+                .get(&node.name)
+                .expect("node should exist in node_id_map");
+
+            for dep in &node.deps {
+                if let Some(target_id) = node_id_map.get(dep) {
+                    if is_cross_schema_edge(node, dep, node_map) {
+                        output.push_str(&format!("    {source_id} -.-> {target_id}\n"));
+                    } else {
+                        output.push_str(&format!("    {source_id} --> {target_id}\n"));
+                    }
+                }
+            }
+        }
     }
 
     /// Exports the graph to Mermaid diagram format.
@@ -642,7 +729,7 @@ impl ExportArgs {
         output.push_str("```mermaid\n");
         output.push_str("graph TD\n");
 
-        // Get all nodes and build lookup map
+        // Get all nodes and build lookup maps
         let all_nodes = graph.get_all_nodes();
         let node_refs: Vec<&FileNode> = all_nodes.iter().collect();
         let node_map: HashMap<String, &FileNode> =
@@ -658,22 +745,10 @@ impl ExportArgs {
             .map(|(i, n)| (n.name.clone(), format!("N{i}")))
             .collect();
 
-        // Output subgraphs by schema
+        // Render schema subgraphs
         for (schema, nodes) in schema_nodes.iter() {
             if let Some(schema_name) = schema {
-                output.push_str(&format!(
-                    "    subgraph {}\n",
-                    sanitize_schema_name(schema_name)
-                ));
-
-                for node in nodes {
-                    let node_id = node_id_map
-                        .get(&node.name)
-                        .expect("node should exist in node_id_map");
-                    output.push_str(&format!("        {}[\"{}\"]\n", node_id, node.name));
-                }
-
-                output.push_str("    end\n");
+                Self::render_mermaid_schema_subgraph(&mut output, schema_name, nodes, &node_id_map);
             } else {
                 // Nodes without schema
                 for node in nodes {
@@ -687,25 +762,10 @@ impl ExportArgs {
 
         output.push('\n');
 
-        // Output edges
-        for node in &all_nodes {
-            let source_id = node_id_map
-                .get(&node.name)
-                .expect("node should exist in node_id_map");
-
-            for dep in &node.deps {
-                if let Some(target_id) = node_id_map.get(dep) {
-                    if is_cross_schema_edge(node, dep, &node_map) {
-                        output.push_str(&format!("    {source_id} -.-> {target_id}\n"));
-                    } else {
-                        output.push_str(&format!("    {source_id} --> {target_id}\n"));
-                    }
-                }
-            }
-        }
+        // Render edges
+        Self::render_mermaid_edges(&mut output, &all_nodes, &node_id_map, &node_map);
 
         output.push_str("```\n");
-
         write_output_file(&self.output, &output)?;
 
         println!("Exported Mermaid diagram to: {}", self.output.display());
