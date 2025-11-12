@@ -1,103 +1,144 @@
 # Quick Pickup Guide for Next Session
 
 ## TL;DR Status
-- ✅ **Phases 1, 2, 2.5, 3, 4 & 5 COMPLETE**: Full analysis suite, cleanup operations, and schema analysis working perfectly!
+- ✅ **Phases 1, 2, 2.5, 3, 4, 5, & 6 COMPLETE**: Full analysis suite, cleanup operations, schema analysis, and export capabilities working perfectly!
 - ✅ **All Tests Passing**: 83/83 tests (40 unit + 25 analysis + 11 clean + 7 schema)
 - ✅ **Zero Clippy Warnings**: Clean, production-ready code
-- 🎯 **Next Task**: Implement Phase 6 - Export Capabilities
+- 🎯 **Next Task**: Implement Phase 7 - Configuration & Polish
 
 ## What Just Happened
 
-### Major Win: Phase 5 Complete! 🎉
+### Major Win: Phase 6 Complete! 🎉
 
-Successfully implemented comprehensive schema analysis features:
+Successfully implemented comprehensive graph export capabilities in 4 formats:
 
-**Schema Extraction & Commands:**
-- ✅ Automatic schema extraction from node names (`schema.table`, `schema::table`)
-- ✅ `schema list` - Display all schemas with statistics and bar charts
-- ✅ `schema analyze <name>` - Detailed schema view with dependencies
-- ✅ `schema dependencies` - Cross-schema dependency visualization
-- ✅ `--schema` filter for analyze and clean commands
+**Export Formats:**
+- ✅ **JSON** - Full metadata with statistics, node classification, schema info
+- ✅ **DOT** - GraphViz format with schema-colored subgraphs and cross-schema edges
+- ✅ **GraphML** - Standard XML format compatible with Gephi, yEd, Cytoscape
+- ✅ **Mermaid** - Markdown-embeddable diagrams with schema subgraphs
 
-**New features implemented:**
-- ✅ Added `schema: Option<String>` field to FileNode
-- ✅ 6 helper methods on TCGraph for schema operations
-- ✅ Beautiful table output with bar charts showing distribution
-- ✅ Color-coded cross-schema dependency tables
-- ✅ Internal vs external dependency analysis
-- ✅ Dependent schema tracking
+**Export Modes:**
+- ✅ `full` - Export entire graph (default)
+- ✅ `deps` - Export node + all transitive dependencies
+- ✅ `dependents` - Export node + all transitive dependents
+- ✅ `direct` - Export node + immediate neighbors only
+
+**Schema Filtering:**
+- ✅ `--schema` flag works with all export formats
+- ✅ Supports multi-schema filtering
 
 **Implementation stats:**
-- Created `src/commands/schema.rs` (265 lines)
-- Modified `src/file_node.rs` (+15 lines for schema extraction)
-- Modified `src/file_dag.rs` (+120 lines for schema helpers)
-- Created `tests/schema_tests.rs` with 7 comprehensive tests
-- All 83 tests passing
+- Created `src/commands/export.rs` (600 lines)
+- Modified `src/file_dag.rs` (+150 lines for traversal methods)
+- Added 3 new dependencies (serde_json, chrono, quick-xml)
+- All 83 tests still passing
 - Zero clippy warnings
+- Comprehensive manual testing of all formats and modes
 
-## Next Priority: Phase 6 - Export Capabilities 🎯
+## Next Priority: Phase 7 - Configuration & Polish 🎯
 
-**Goal**: Add graph export in multiple formats for visualization and integration
+**Goal**: Add configuration file support, shell completions, and performance optimizations
 
-### Why Phase 6 Now?
+### Why Phase 7 Now?
 
-With analysis, cleanup, and schema features complete, users need ways to export dependency graphs for visualization, documentation, and integration with other tools. Export capabilities enable:
-- Visual graph exploration with GraphViz/Gephi
-- Integration with documentation systems
-- API consumption via JSON
-- Lightweight diagrams via Mermaid
+With all core features complete (analysis, cleanup, schema, export), it's time to polish the tool for production use. Configuration auto-discovery will improve UX, shell completions will speed up CLI usage, and performance optimizations will scale to large codebases.
 
 ### Implementation Tasks
 
-See `IMPLEMENTATION_PLAN.md` Phase 6 for full task list. Key features to implement:
+See `IMPLEMENTATION_PLAN.md` Phase 7 for full task list. Key features to implement:
 
-#### Export Commands to Implement
+#### 1. Configuration Auto-Discovery
+```bash
+# Automatically find and use .topcat.toml
+topcat analyze -i sql/ -e sql dead-branches
+# ↑ Automatically loads .topcat.toml if present
+```
 
-1. **JSON Export** - Full metadata export
-   ```bash
-   topcat export json -i sql/ -e sql -o graph.json
-   ```
-   - Complete node metadata (name, path, layer, schema, dependencies)
-   - Edge information (source, target, type)
-   - Schema groupings
-   - Statistics (node counts, edge counts, schema counts)
+**Features:**
+- Search for `.topcat.toml` in current dir, then parent dirs
+- Merge config file settings with CLI arguments (CLI takes precedence)
+- Support all command options in config file:
+  - Input directories, extensions, layers
+  - Analysis config (root nodes, external checking)
+  - Export defaults
+  - Global comment string, fallback layer
 
-2. **Enhanced DOT Export** - GraphViz with schema colors
-   ```bash
-   topcat export dot -i sql/ -e sql -o graph.dot
-   ```
-   - Schema-based node coloring
-   - Layer-based subgraphs
-   - Edge styling based on dependency type
-   - Optional: filter by schema
+**Example `.topcat.toml`:**
+```toml
+[global]
+input_dirs = ["sql/", "migrations/"]
+include_extensions = ["sql"]
+comment_str = "--"
+layers = ["prepend", "normal", "append"]
+fallback_layer = "normal"
 
-3. **GraphML Export** - Standard graph format
-   ```bash
-   topcat export graphml -i sql/ -e sql -o graph.graphml
-   ```
-   - Compatible with Gephi, yEd, Cytoscape
-   - Node attributes (schema, layer, path)
-   - Edge attributes (dependency type)
+[analysis]
+root_nodes = ["api_main", "worker_main"]
+root_patterns = ["**/api/*.sql", "**/workers/*.sql"]
+root_regex = ["^api_.*", "^worker_.*"]
+root_dirs = ["sql/entry_points/"]
+external_check_dirs = ["src/api/", "src/workers/"]
+external_check_patterns = ["*.py", "*.rs"]
 
-4. **Mermaid Diagram** - Markdown-embeddable diagrams
-   ```bash
-   topcat export mermaid -i sql/ -e sql -o graph.md
-   ```
-   - Flowchart format for dependency graphs
-   - Schema-based subgraphs
-   - Clickable links to files
+[export]
+default_format = "json"
+default_mode = "full"
 
-5. **Export Modes** - Control what gets exported
-   ```bash
-   topcat export json -i sql/ -e sql --mode full -o graph.json
-   topcat export dot -i sql/ -e sql --mode deps --node my_schema.a -o deps.dot
-   topcat export json -i sql/ -e sql --mode dependents --node my_schema.a -o dependents.json
-   topcat export mermaid -i sql/ -e sql --mode direct --node my_schema.a -o direct.md
-   ```
-   - `full` - Complete graph (default)
-   - `deps` - Node and all its dependencies (transitive)
-   - `dependents` - Node and all its dependents (reverse transitive)
-   - `direct` - Node and direct neighbors only
+[sql_discovery]
+enabled = true
+schema_pattern = "(?:app|test)_\\w+"
+```
+
+#### 2. Shell Completions Generation
+```bash
+# Generate completions
+topcat completions bash > ~/.local/share/bash-completion/completions/topcat
+topcat completions zsh > ~/.zfunc/_topcat
+topcat completions fish > ~/.config/fish/completions/topcat.fish
+```
+
+**Features:**
+- Use clap's built-in completion generation
+- Support bash, zsh, fish, PowerShell
+- Complete subcommands, options, file paths
+- Context-aware completions
+
+#### 3. Man Page Generation
+```bash
+# Generate man page
+topcat man > /usr/local/share/man/man1/topcat.1
+man topcat
+```
+
+**Features:**
+- Generate from clap command structure
+- Include all subcommands and options
+- Examples section
+- See also section
+
+#### 4. Performance Optimizations
+
+**Targeted optimizations:**
+- Cache file metadata to avoid repeated reads
+- Lazy-load file contents (only when needed for analysis)
+- Optimize graph traversals for large DAGs (>1000 nodes)
+- Parallel processing where applicable
+- Memory-efficient data structures
+
+**Benchmarking:**
+- Add criterion benchmarks for key operations
+- Test with large synthetic graphs (10K+ nodes)
+- Profile with flamegraph
+- Target: <5s for 1000 file analysis
+
+#### 5. Config Validation & Error Messages
+
+**Better error handling:**
+- Validate `.topcat.toml` on load
+- Clear error messages for invalid config
+- Suggestions for fixes
+- Config file location in error messages
 
 ### Quick Start Commands
 
@@ -109,225 +150,118 @@ cargo clippy --all-targets
 
 # Test existing functionality
 ./target/debug/topcat schema --input-dirs tests/input/sql --include-exts sql list
-./target/debug/topcat analyze -i tests/input/sql -e sql --schema my_schema orphans
+./target/debug/topcat export -i tests/input/sql -e sql -o /tmp/graph.json json
 
-# After implementing Phase 6:
-./target/debug/topcat export json -i tests/input/sql -e sql -o /tmp/graph.json
-./target/debug/topcat export dot -i tests/input/sql -e sql -o /tmp/graph.dot
-./target/debug/topcat export mermaid -i tests/input/sql -e sql -o /tmp/graph.md
+# After implementing Phase 7:
+echo '[global]\ninput_dirs = ["tests/input/sql"]\ninclude_extensions = ["sql"]' > .topcat.toml
+./target/debug/topcat analyze dead-branches  # Uses .topcat.toml automatically
+./target/debug/topcat completions bash > topcat-completion.bash
 ```
 
 ## Key Files Reference
 
-- **`IMPLEMENTATION_PLAN.md`** - Phase 6 has the detailed task breakdown
-- **`STATUS.md`** - Updated with Phase 5 completion
-- **`src/file_dag.rs`** - Core graph structure (732 lines, includes schema methods)
-- **`src/main.rs`** - Add Export command variant
-- **`src/commands/`** - Create export.rs module
-- **`tests/`** - Add export integration tests
+- **`IMPLEMENTATION_PLAN.md`** - Phase 7 has the detailed task breakdown
+- **`STATUS.md`** - Updated with Phase 6 completion
+- **`src/main.rs`** - Add Completions and Man subcommands
+- **`src/config.rs`** - Extend for auto-discovery
+- **`Cargo.toml`** - Add clap_complete, criterion for benchmarks
 
 ## Important Context
 
-### Export Command Structure (New for Phase 6)
-
-The export command will follow this pattern:
+### Config Auto-Discovery Pattern
 
 ```rust
+impl Config {
+    /// Try to find .topcat.toml in current dir or parent dirs
+    pub fn discover() -> Option<PathBuf> {
+        let mut current = std::env::current_dir().ok()?;
+        loop {
+            let config_path = current.join(".topcat.toml");
+            if config_path.exists() {
+                return Some(config_path);
+            }
+            if !current.pop() {
+                break;
+            }
+        }
+        None
+    }
+
+    /// Load config from file and merge with CLI args
+    pub fn load_with_overrides(
+        file: &Path,
+        cli_args: &CliArgs
+    ) -> Result<Config, TopCatError> {
+        let file_config = Self::from_file(file)?;
+        // CLI args override file config
+        Ok(file_config.merge_with_cli(cli_args))
+    }
+}
+```
+
+### Shell Completions with Clap
+
+```rust
+use clap_complete::{generate, shells};
+
 #[derive(Debug, Subcommand)]
-enum ExportCommand {
-    /// Export as JSON with full metadata
-    Json,
-    /// Export as DOT format for GraphViz
-    Dot,
-    /// Export as GraphML for Gephi/yEd
-    Graphml,
-    /// Export as Mermaid diagram
-    Mermaid,
+enum Commands {
+    // ... existing commands ...
+
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: shells::Shell,
+    },
 }
 
-#[derive(Debug, Args)]
-pub struct ExportArgs {
-    // Common input args
-    #[arg(short = 'i', long = "input-dirs")]
-    input_dirs: Vec<PathBuf>,
-
-    #[arg(short = 'o', long = "output")]
-    output: PathBuf,
-
-    // Export mode
-    #[arg(long = "mode", default_value = "full")]
-    mode: ExportMode,
-
-    // Optional node for filtered exports
-    #[arg(long = "node")]
-    node: Option<String>,
-
-    // Optional schema filter
-    #[arg(long = "schema")]
-    schema: Option<Vec<String>>,
-
-    #[command(subcommand)]
-    command: ExportCommand,
-}
-
-#[derive(Debug, Clone)]
-enum ExportMode {
-    Full,
-    Deps,
-    Dependents,
-    Direct,
+fn generate_completions(shell: shells::Shell) {
+    let mut cmd = Cli::command();
+    generate(shell, &mut cmd, "topcat", &mut std::io::stdout());
 }
 ```
 
-### JSON Export Format
+### Benchmarking Structure
 
-Proposed structure for JSON exports:
+```rust
+// benches/graph_ops.rs
+use criterion::{criterion_group, criterion_main, Criterion};
 
-```json
-{
-  "metadata": {
-    "version": "0.2.4",
-    "generated_at": "2025-10-31T12:00:00Z",
-    "node_count": 6,
-    "edge_count": 8,
-    "schema_count": 3
-  },
-  "schemas": [
-    {
-      "name": "my_schema",
-      "node_count": 3,
-      "internal_deps": 2,
-      "external_deps": 1
-    }
-  ],
-  "nodes": [
-    {
-      "name": "my_schema.a",
-      "path": "sql/my_schema/a.sql",
-      "layer": "normal",
-      "schema": "my_schema",
-      "dependencies": ["my_schema.b"],
-      "dependents": [],
-      "node_type": "leaf"
-    }
-  ],
-  "edges": [
-    {
-      "source": "my_schema.a",
-      "target": "my_schema.b",
-      "type": "requires"
-    }
-  ]
+fn bench_dead_branches(c: &mut Criterion) {
+    let graph = create_large_test_graph(1000); // 1000 nodes
+
+    c.bench_function("find_dead_branches_1k", |b| {
+        b.iter(|| graph.find_dead_branches())
+    });
 }
+
+criterion_group!(benches, bench_dead_branches);
+criterion_main!(benches);
 ```
 
-### DOT Export with Schema Colors
-
-```dot
-digraph dependencies {
-    rankdir=LR;
-
-    // Schema: my_schema
-    subgraph cluster_my_schema {
-        label="my_schema";
-        style=filled;
-        color=lightblue;
-
-        "my_schema.a" [fillcolor=lightgreen, style=filled];
-        "my_schema.b" [fillcolor=lightgreen, style=filled];
-    }
-
-    // Dependencies
-    "my_schema.a" -> "my_schema.b";
-    "my_schema.a" -> "other_schema.c" [color=red, style=dashed];  // cross-schema
-}
-```
-
-### Mermaid Format
-
-```mermaid
-graph TD
-    subgraph my_schema
-        A[my_schema.a]
-        B[my_schema.b]
-    end
-
-    subgraph other_schema
-        C[other_schema.c]
-    end
-
-    A --> B
-    A -.-> C
-```
-
-## Phase 6 Implementation Strategy
-
-### 1. Create Export Module (Foundation)
-- Create `src/commands/export.rs`
-- Define ExportArgs, ExportCommand, ExportMode
-- Add to main.rs Commands enum
-- Implement basic graph building (reuse from analyze)
-
-### 2. JSON Export (Easy Start)
-- Implement JSON serialization using serde
-- Include all metadata
-- Add schema information
-- Add statistics
-- Test with various graph sizes
-
-### 3. DOT Export Enhancement (Medium)
-- Enhance existing DOT output in concat command
-- Add schema-based coloring
-- Add layer-based subgraphs
-- Add filtering options
-- Test visual output with GraphViz
-
-### 4. GraphML Export (Medium)
-- Research GraphML XML format
-- Implement node and edge serialization
-- Add attributes (schema, layer, path)
-- Test with Gephi/yEd
-
-### 5. Mermaid Export (Medium)
-- Implement Mermaid flowchart syntax
-- Add schema-based subgraphs
-- Handle large graphs (pagination/filtering)
-- Test in Markdown viewers
-
-### 6. Export Modes (Advanced)
-- Implement transitive dependency calculation
-- Implement reverse transitive (dependents)
-- Implement direct neighbors only
-- Add to all export formats
-
-## After Phase 6: Future Phases
-
-### Phase 7: Configuration & Polish
-- Auto-discovery of `.topcat.toml`
-- Shell completions (bash, zsh, fish)
-- Man pages
-- Performance optimizations for large codebases
+## After Phase 7: Future Phases
 
 ### Phase 8: Documentation & Skills
 - Complete README update with all commands
 - User guide with real-world examples
 - Create Claude Code skills for common workflows
 - API documentation
+- Video tutorials
 
 ## Success Criteria
 
-Phase 6 is complete when:
-1. ✅ JSON export works with complete metadata
-2. ✅ DOT export includes schema colors and filtering
-3. ✅ GraphML export is compatible with Gephi
-4. ✅ Mermaid export generates valid diagrams
-5. ✅ Export modes (full, deps, dependents, direct) work for all formats
-6. ✅ Schema filtering works in exports
-7. ✅ All tests pass (expect 90+ tests after Phase 6)
-8. ✅ `cargo clippy` passes with zero warnings
-9. ✅ Manual testing confirms exports are usable
-10. ✅ Integration tests cover export operations
-11. ✅ Documentation updated
+Phase 7 is complete when:
+1. ✅ `.topcat.toml` auto-discovery works from any subdirectory
+2. ✅ Config file merges correctly with CLI args (CLI takes precedence)
+3. ✅ Shell completions generate for bash, zsh, fish
+4. ✅ Completions work in actual shells (manual testing)
+5. ✅ Man page generates and displays correctly
+6. ✅ Performance benchmarks show <5s for 1000 files
+7. ✅ Config validation provides helpful error messages
+8. ✅ All tests pass (expect 85-90 tests after Phase 7)
+9. ✅ `cargo clippy` passes with zero warnings
+10. ✅ Manual testing confirms polish improvements
 
 ## Current Test Stats
 
@@ -354,91 +288,63 @@ cargo test --lib --tests
 # Check for warnings
 cargo clippy --all-targets
 
-# Build and test schema command
-cargo build && ./target/debug/topcat schema --input-dirs tests/input/sql --include-exts sql list
+# Run benchmarks (after Phase 7)
+cargo bench
 
-# Test schema filtering
-cargo build && ./target/debug/topcat analyze -i tests/input/sql -e sql --schema my_schema orphans
+# Test config discovery (after Phase 7)
+cd tests/input/sql && ../../../target/debug/topcat analyze dead-branches
 ```
 
-## Phase 6 Specific Notes
+## Phase 7 Specific Notes
 
-### Serde for JSON Export
-
-Add to Cargo.toml:
-```toml
-[dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-```
-
-Then derive Serialize on data structures:
-```rust
-#[derive(Debug, Serialize)]
-struct GraphExport {
-    metadata: Metadata,
-    schemas: Vec<SchemaInfo>,
-    nodes: Vec<NodeExport>,
-    edges: Vec<EdgeExport>,
-}
-```
-
-### GraphML XML Structure
-
-Basic structure:
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
-  <key id="d0" for="node" attr.name="schema" attr.type="string"/>
-  <key id="d1" for="node" attr.name="layer" attr.type="string"/>
-  <graph id="G" edgedefault="directed">
-    <node id="n0">
-      <data key="d0">my_schema</data>
-      <data key="d1">normal</data>
-    </node>
-    <edge source="n0" target="n1"/>
-  </graph>
-</graphml>
-```
-
-### Export Filtering Implementation
-
-For export modes, need to calculate subgraphs:
-
-```rust
-impl TCGraph {
-    pub fn get_transitive_dependencies(&self, node: &str) -> HashSet<String> {
-        // BFS/DFS from node following dependencies
-    }
-
-    pub fn get_transitive_dependents(&self, node: &str) -> HashSet<String> {
-        // BFS/DFS from node following reverse edges
-    }
-
-    pub fn get_direct_neighbors(&self, node: &str) -> (HashSet<String>, HashSet<String>) {
-        // Return (dependencies, dependents)
-    }
-}
-```
-
-## Dependencies to Add
+### Dependencies to Add
 
 ```toml
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-xml-rs = "0.8"  # For GraphML export
-chrono = "0.4"  # For timestamps in exports
+# For shell completions
+clap_complete = "4.5"
+
+[dev-dependencies]
+# For benchmarking
+criterion = "0.5"
+
+[[bench]]
+name = "graph_ops"
+harness = false
 ```
+
+### Config File Search Algorithm
+
+1. Start in current working directory
+2. Check for `.topcat.toml`
+3. If not found, move to parent directory
+4. Repeat until file found or filesystem root reached
+5. If found, load and merge with CLI args
+6. If not found, use CLI args only (existing behavior)
+
+### Performance Optimization Strategy
+
+1. **Profile First**: Use `cargo flamegraph` to find bottlenecks
+2. **Benchmark**: Establish baseline with criterion
+3. **Optimize**: Focus on hot paths identified by profiling
+4. **Verify**: Confirm improvements with benchmarks
+5. **Test**: Ensure optimizations don't break functionality
+
+**Common hotspots to check:**
+- File I/O (can we batch reads?)
+- Graph traversals (can we cache results?)
+- String allocations (can we use borrowed strings?)
+- HashMap operations (can we pre-allocate capacity?)
 
 ## Contact/Handoff Info
 
 - All code compiles cleanly
 - All 83 tests passing (40 unit + 25 analysis + 11 clean + 7 schema)
-- Phases 1, 2, 2.5, 3, 4, and 5 are production-ready
+- Phases 1, 2, 2.5, 3, 4, 5, and 6 are production-ready
 - Analysis suite complete with 8 commands
 - Clean command provides safe deletion
 - Schema analysis enables multi-schema organization
-- IMPLEMENTATION_PLAN.md Phase 6 has everything needed for next implementation
+- Export capabilities support 4 formats (JSON, DOT, GraphML, Mermaid)
+- IMPLEMENTATION_PLAN.md Phase 7 has everything needed for next implementation
 
-Good luck! Phase 6 adds powerful export capabilities for visualization and integration! 🚀
+Good luck! Phase 7 adds polish and production-readiness for real-world usage! 🚀

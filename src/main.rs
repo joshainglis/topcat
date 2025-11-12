@@ -23,6 +23,8 @@ enum Commands {
     Clean(commands::clean::CleanArgs),
     /// Analyze and manage schemas in the project
     Schema(commands::schema::SchemaArgs),
+    /// Export dependency graph in various formats
+    Export(commands::export::ExportArgs),
 }
 
 fn main() -> Result<(), TopCatError> {
@@ -33,5 +35,6 @@ fn main() -> Result<(), TopCatError> {
         Commands::Analyze(args) => args.execute(),
         Commands::Clean(args) => args.execute(),
         Commands::Schema(args) => args.execute(),
+        Commands::Export(args) => args.execute(),
     }
 }
