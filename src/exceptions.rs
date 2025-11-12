@@ -15,6 +15,7 @@ pub enum TopCatError {
     InvalidDependency(String, String),
     CyclicDependency(Vec<Vec<FileNode>>),
     ConfigError(String),
+    SerializationError(String),
     UnknownError(String),
 }
 
@@ -65,6 +66,7 @@ impl fmt::Display for TopCatError {
             }
             Self::Io(err) => write!(f, "IO error: {err}"),
             Self::ConfigError(s) => write!(f, "Configuration error: {s}"),
+            Self::SerializationError(s) => write!(f, "Serialization error: {s}"),
             Self::UnknownError(s) => write!(f, "UnknownError: {s}"),
         }
     }
