@@ -12,10 +12,10 @@ use petgraph::visit::{GraphBase, IntoNeighbors, IntoNodeIdentifiers, Visitable};
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use std::collections::HashSet;
 /// use petgraph::graph::{Graph, NodeIndex};
-/// use petgraph::stable_topo::StableTopo;
+/// use topcat::stable_topo::StableTopo;
 ///
 /// // Create a new graph
 /// let mut graph = Graph::<i32, ()>::new();

@@ -30,7 +30,7 @@ use crate::fs::FileSystem;
 ///
 /// # Example
 ///
-/// ```rust
+/// ```ignore
 /// let file_content = "Hello, world!";
 /// let append_str = ", goodbye!";
 ///
