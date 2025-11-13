@@ -1,3 +1,54 @@
+//! Analysis commands for dependency graph inspection.
+//!
+//! This module implements the `analyze` subcommand which provides various
+//! analyses of dependency graphs built from files with header metadata.
+//!
+//! # Available Analysis Types
+//!
+//! - **Dead Branches**: Find complete subtrees that can be removed together
+//! - **Orphans**: Files with no dependencies or dependents
+//! - **Unrequired**: Files not required by any other files
+//! - **Leaf Nodes**: Files with dependencies but no dependents
+//! - **Root Nodes**: Files with dependents but no dependencies
+//! - **Cycles**: Detect circular dependencies (invalid DAGs)
+//! - **Missing**: Find referenced but non-existent dependencies
+//! - **File**: Detailed analysis of a specific file
+//!
+//! # Architecture
+//!
+//! The module follows a layered design:
+//!
+//! 1. **CLI Layer** (`AnalyzeArgs`, `AnalyzeCommand`): Parses command-line arguments
+//! 2. **Configuration Layer**: Builds graph configuration from CLI args and config files
+//! 3. **Analysis Layer**: Performs graph algorithms to find patterns
+//! 4. **Display Layer** (`AnalysisLogger`): Formats and outputs results
+//!
+//! # Key Design Patterns
+//!
+//! - **Generic Analysis Function**: `analyze_and_display()` provides a reusable pattern
+//!   for analyses that filter nodes and display results in tables
+//! - **Performance Optimization**: `build_node_map()` creates O(1) lookup structures
+//!   to avoid O(n²) repeated linear searches
+//! - **External Usage Filtering**: Optional integration with `ExternalUsageChecker`
+//!   to filter out nodes that are actually used externally
+//! - **Schema Filtering**: Support for analyzing subsets of the graph by schema prefix
+//!
+//! # Examples
+//!
+//! ```bash
+//! # Find orphaned files
+//! topcat analyze -i sql/ -e sql orphans
+//!
+//! # Find dead branches with external usage checking
+//! topcat analyze -i sql/ -e sql \
+//!   --external-check-dir src/ \
+//!   --external-check-pattern "*.py" \
+//!   dead-branches
+//!
+//! # Analyze specific schema
+//! topcat analyze -i sql/ -e sql --schema my_schema orphans
+//! ```
+
 use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
@@ -13,17 +64,28 @@ use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
 use topcat::sql_config;
 
-/// Abstraction for analysis output that respects quiet mode
+// Default configuration constants
+const DEFAULT_FALLBACK_LAYER: &str = "normal";
+const DEFAULT_LAYER_PREPEND: &str = "prepend";
+const DEFAULT_LAYER_NORMAL: &str = "normal";
+const DEFAULT_LAYER_APPEND: &str = "append";
+const DEFAULT_MERGE_STRATEGY: &str = "discovery-only";
+
+/// Abstraction for analysis output that respects quiet mode.
+///
+/// Centralizes all output logic to avoid scattered `if !self.quiet` checks
+/// throughout the codebase. All output methods are no-ops when quiet mode is enabled.
 struct AnalysisLogger {
     quiet: bool,
 }
 
 impl AnalysisLogger {
+    /// Create a new logger with the specified quiet mode setting.
     fn new(quiet: bool) -> Self {
         Self { quiet }
     }
 
-    /// Print a section header with title and separator line
+    /// Print a section header with title and separator line.
     fn section(&self, title: &str) {
         if !self.quiet {
             println!("\n{title}");
@@ -31,28 +93,28 @@ impl AnalysisLogger {
         }
     }
 
-    /// Print a regular info message
+    /// Print a regular info message.
     fn info(&self, msg: &str) {
         if !self.quiet {
             println!("{msg}");
         }
     }
 
-    /// Print a table
+    /// Print a formatted table.
     fn table(&self, table: &Table) {
         if !self.quiet {
             println!("{table}");
         }
     }
 
-    /// Print a separator line
+    /// Print a separator line for visual organization.
     fn separator(&self) {
         if !self.quiet {
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         }
     }
 
-    /// Print an empty line
+    /// Print a blank line for spacing.
     fn newline(&self) {
         if !self.quiet {
             println!();
@@ -60,7 +122,11 @@ impl AnalysisLogger {
     }
 }
 
-/// Configuration for displaying analysis results in a table format
+/// Configuration for displaying analysis results in a table format.
+///
+/// This struct standardizes the display format across different analysis types,
+/// enabling the generic `analyze_and_display()` function to handle multiple
+/// analysis commands with consistent formatting.
 struct AnalysisDisplayConfig {
     /// Section title (e.g., "🔍 Orphan Files Analysis")
     title: String,
@@ -70,13 +136,16 @@ struct AnalysisDisplayConfig {
     result_summary: String,
     /// Table column headers
     table_headers: Vec<String>,
-    /// Optional footer message
+    /// Optional footer message shown after the table
     footer_message: Option<String>,
-    /// Whether to apply external checker filtering
+    /// Whether to apply external checker filtering to results
     apply_external_filter: bool,
 }
 
-/// Analyze dependency structure and find cleanup candidates
+/// Command-line arguments for the analyze subcommand.
+///
+/// Provides various dependency graph analyses to identify cleanup candidates,
+/// detect issues, and understand graph structure.
 #[derive(Debug, Args)]
 pub struct AnalyzeArgs {
     #[arg(
@@ -179,7 +248,7 @@ pub struct AnalyzeArgs {
         long = "merge-strategy",
         help = "How to merge discovered and manual dependencies",
         value_name = "STRATEGY",
-        default_value = "discovery-only"
+        default_value = DEFAULT_MERGE_STRATEGY
     )]
     merge_strategy: String,
 
@@ -263,14 +332,30 @@ enum AnalyzeCommand {
 }
 
 impl AnalyzeArgs {
-    /// Build a HashMap for O(1) node lookups by name
+    /// Build a HashMap for O(1) node lookups by name.
+    ///
+    /// This helper method improves performance from O(n²) to O(n) for analyses
+    /// that need to look up node details repeatedly. Instead of linear searching
+    /// through all nodes for each result, we build a hash map once and use O(1) lookups.
+    ///
+    /// # Arguments
+    ///
+    /// * `nodes` - Slice of all file nodes in the graph
+    ///
+    /// # Returns
+    ///
+    /// HashMap mapping node names to node references for fast lookup
     fn build_node_map(
         nodes: &[topcat::file_node::FileNode],
     ) -> std::collections::HashMap<&str, &topcat::file_node::FileNode> {
         nodes.iter().map(|n| (n.name.as_str(), n)).collect()
     }
 
-    /// Get the platform-specific null device path
+    /// Get the platform-specific null device path.
+    ///
+    /// Returns `/dev/null` on Unix, `NUL` on Windows, and `/dev/null` as fallback
+    /// for other platforms. Used when building graphs for analysis where no actual
+    /// output file is needed.
     #[cfg(unix)]
     fn null_device() -> &'static str {
         "/dev/null"
@@ -286,7 +371,20 @@ impl AnalyzeArgs {
         "/dev/null" // Fallback for other platforms
     }
 
-    /// Parse layers from CLI args or use defaults, validate fallback layer
+    /// Parse layers from CLI args or use defaults, validate fallback layer.
+    ///
+    /// Layers enforce ordering between groups of files. This method parses the
+    /// comma-separated layer list from CLI args (or uses defaults), validates that
+    /// the fallback layer exists in the layer list, and returns both.
+    ///
+    /// # Returns
+    ///
+    /// `Ok((layers, fallback_layer))` with the validated layer configuration, or
+    /// `Err(TopCatError::ConfigError)` if the fallback layer is not in the layers list.
+    ///
+    /// # Default Layers
+    ///
+    /// If not specified: `["prepend", "normal", "append"]` with fallback `"normal"`
     fn parse_and_validate_layers(&self) -> Result<(Vec<String>, String), TopCatError> {
         let layers = if let Some(ref layers_str) = self.layers {
             layers_str
@@ -295,16 +393,16 @@ impl AnalyzeArgs {
                 .collect()
         } else {
             vec![
-                "prepend".to_string(),
-                "normal".to_string(),
-                "append".to_string(),
+                DEFAULT_LAYER_PREPEND.to_string(),
+                DEFAULT_LAYER_NORMAL.to_string(),
+                DEFAULT_LAYER_APPEND.to_string(),
             ]
         };
 
         let fallback_layer = self
             .fallback_layer
             .clone()
-            .unwrap_or_else(|| "normal".to_string());
+            .unwrap_or_else(|| DEFAULT_FALLBACK_LAYER.to_string());
 
         if !layers.contains(&fallback_layer) {
             return Err(TopCatError::ConfigError(format!(
@@ -315,7 +413,14 @@ impl AnalyzeArgs {
         Ok((layers, fallback_layer))
     }
 
-    /// Convert schema filter CLI args to node prefixes for filtering
+    /// Convert schema filter CLI args to node prefixes for filtering.
+    ///
+    /// When analyzing specific schemas, this method converts schema names (e.g., `my_schema`)
+    /// into node name prefixes for matching (e.g., `my_schema` and `my_schema.`).
+    ///
+    /// # Returns
+    ///
+    /// `Some(Vec<String>)` with prefixes if schemas are specified, `None` otherwise
     fn build_schema_filter_prefixes(&self) -> Option<Vec<String>> {
         if self.schema_filter.is_empty() {
             return None;
@@ -329,10 +434,30 @@ impl AnalyzeArgs {
         Some(prefixes)
     }
 
-    /// Generic analysis function that handles the common pattern of:
-    /// 1. Finding nodes based on criteria
+    /// Generic analysis function that handles the common pattern across multiple analyses.
+    ///
+    /// This function eliminates ~70% code duplication by providing a reusable pattern for:
+    /// 1. Finding nodes based on criteria (via `finder` closure)
     /// 2. Optionally filtering by external usage
-    /// 3. Displaying results in a formatted table
+    /// 3. Building result table rows (via `row_builder` closure)
+    /// 4. Displaying results in a formatted table
+    ///
+    /// # Type Parameters
+    ///
+    /// * `F` - Finder function that locates nodes matching analysis criteria
+    /// * `R` - Row builder function that formats a node into table cells
+    ///
+    /// # Arguments
+    ///
+    /// * `graph` - The dependency graph to analyze
+    /// * `external_checker` - Optional checker to filter out externally-used nodes
+    /// * `config` - Display configuration (titles, headers, messages)
+    /// * `finder` - Closure that finds relevant nodes in the graph
+    /// * `row_builder` - Closure that builds table row cells for a node
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, `Err(TopCatError)` on error
     fn analyze_and_display<F, R>(
         &self,
         graph: &TCGraph,
@@ -401,6 +526,21 @@ impl AnalyzeArgs {
         Ok(())
     }
 
+    /// Execute the analysis command.
+    ///
+    /// Main entry point that:
+    /// 1. Initializes logging based on verbose/quiet flags
+    /// 2. Handles special cases (cycles, missing) that don't need full graph
+    /// 3. Builds the dependency graph for other commands
+    /// 4. Sets up external usage checker if requested
+    /// 5. Dispatches to the appropriate analysis method
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, `Err(TopCatError)` if:
+    /// - Graph building fails (cycles, missing deps, config errors)
+    /// - Analysis execution fails
+    /// - External checker setup fails
     pub fn execute(&self) -> Result<(), TopCatError> {
         // Initialize logging (unless quiet mode)
         if !self.quiet {
@@ -469,6 +609,22 @@ impl AnalyzeArgs {
         }
     }
 
+    /// Build the dependency graph from configuration.
+    ///
+    /// Constructs a `TCGraph` by:
+    /// 1. Loading SQL discovery configuration from file or CLI args
+    /// 2. Parsing and validating layer configuration
+    /// 3. Building schema filter prefixes if specified
+    /// 4. Creating a `Config` object with all settings
+    /// 5. Building the graph by scanning input directories
+    ///
+    /// # Returns
+    ///
+    /// `Ok(TCGraph)` with the built graph, or `Err(TopCatError)` if:
+    /// - Configuration is invalid
+    /// - Files cannot be read
+    /// - Cycles are detected
+    /// - Required dependencies are missing
     fn build_graph(&self) -> Result<TCGraph, TopCatError> {
         let sql_discovery = self.load_sql_discovery_config()?;
         let (layers, fallback_layer) = self.parse_and_validate_layers()?;
@@ -502,6 +658,15 @@ impl AnalyzeArgs {
         Ok(graph)
     }
 
+    /// Load SQL discovery configuration from file and merge with CLI args.
+    ///
+    /// Loads configuration from TOML file if specified, then overlays CLI arguments
+    /// for enabled state, schema pattern, and merge strategy.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(SqlDiscoveryConfig)` with merged configuration, or `Err(TopCatError)` if
+    /// the configuration file cannot be parsed or merge strategy is invalid.
     fn load_sql_discovery_config(&self) -> Result<sql_config::SqlDiscoveryConfig, TopCatError> {
         let mut config = if let Some(ref config_path) = self.sql_config_file {
             match sql_config::TopcatConfig::from_file(config_path) {
@@ -531,6 +696,17 @@ impl AnalyzeArgs {
         Ok(config)
     }
 
+    /// Build a root node matcher from config file and CLI args.
+    ///
+    /// Root matchers identify which nodes should be treated as entry points
+    /// (roots) in the dependency graph. Configuration from files is merged with
+    /// CLI arguments (CLI extends/overrides config).
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(RootNodeMatcher))` if any patterns are specified
+    /// - `Ok(None)` if no root patterns are configured
+    /// - `Err(TopCatError)` if configuration is invalid or patterns cannot be compiled
     fn build_root_matcher(&self) -> Result<Option<RootNodeMatcher>, TopCatError> {
         // Load from config file if specified
         let mut config_roots = if let Some(ref config_path) = self.sql_config_file {
@@ -582,6 +758,21 @@ impl AnalyzeArgs {
         .map_err(TopCatError::ConfigError)
     }
 
+    /// Find and display dead branches (complete subtrees that can be removed together).
+    ///
+    /// Dead branches are unrequired nodes plus all nodes that would become unrequired
+    /// if the initial unrequired nodes were removed. Removing them as a group avoids
+    /// multiple deletion iterations.
+    ///
+    /// # Arguments
+    ///
+    /// * `graph` - The dependency graph to analyze
+    /// * `external_checker` - Optional checker to filter out externally-used nodes
+    /// * `root_matcher` - Optional matcher to identify entry point nodes
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, `Err(TopCatError)` on error
     fn analyze_dead_branches(
         &self,
         graph: &TCGraph,
@@ -671,6 +862,20 @@ impl AnalyzeArgs {
         Ok(())
     }
 
+    /// Find and display orphan files (nodes with no dependencies or dependents).
+    ///
+    /// Orphans are completely isolated nodes that neither depend on other files
+    /// nor are depended upon by other files. They may be safe to delete or could
+    /// be undocumented entry points.
+    ///
+    /// # Arguments
+    ///
+    /// * `graph` - The dependency graph to analyze
+    /// * `external_checker` - Optional checker to filter out externally-used nodes
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, `Err(TopCatError)` on error
     fn analyze_orphans(
         &self,
         graph: &TCGraph,
@@ -696,6 +901,19 @@ impl AnalyzeArgs {
         )
     }
 
+    /// Find and display unrequired files (nodes not needed by any other files).
+    ///
+    /// Unrequired nodes have no dependents, meaning no other files in the graph
+    /// require them. They may still have dependencies themselves (unlike orphans).
+    ///
+    /// # Arguments
+    ///
+    /// * `graph` - The dependency graph to analyze
+    /// * `external_checker` - Optional checker to filter out externally-used nodes
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, `Err(TopCatError)` on error
     fn analyze_unrequired(
         &self,
         graph: &TCGraph,
@@ -730,6 +948,19 @@ impl AnalyzeArgs {
         )
     }
 
+    /// Find and display leaf nodes (nodes with dependencies but no dependents).
+    ///
+    /// Leaf nodes depend on other files but are not depended upon by any files.
+    /// They represent terminal nodes in the dependency graph.
+    ///
+    /// # Arguments
+    ///
+    /// * `graph` - The dependency graph to analyze
+    /// * `external_checker` - Optional checker to filter out externally-used nodes
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, `Err(TopCatError)` on error
     fn analyze_leaf_nodes(
         &self,
         graph: &TCGraph,
@@ -764,6 +995,18 @@ impl AnalyzeArgs {
         )
     }
 
+    /// Find and display root nodes (nodes with dependents but no dependencies).
+    ///
+    /// Root nodes have no dependencies but are depended upon by other files.
+    /// They represent entry points or foundational components in the dependency graph.
+    ///
+    /// # Arguments
+    ///
+    /// * `graph` - The dependency graph to analyze
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, `Err(TopCatError)` on error
     fn analyze_root_nodes(&self, graph: &TCGraph) -> Result<(), TopCatError> {
         let config = AnalysisDisplayConfig {
             title: "🌱 Root Nodes Analysis".to_string(),
@@ -786,6 +1029,17 @@ impl AnalyzeArgs {
         )
     }
 
+    /// Detect and display cycles in the dependency graph.
+    ///
+    /// Attempts to build the graph, which will fail if cycles exist. Displays
+    /// detailed information about each cycle found including participants and
+    /// the circular dependency path.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if no cycles are detected (valid DAG)
+    /// - `Err(TopCatError::CyclicDependency)` if cycles exist
+    /// - `Err(TopCatError)` for other errors during graph building
     fn analyze_cycles(&self) -> Result<(), TopCatError> {
         let logger = AnalysisLogger::new(self.quiet);
         logger.section("🔄 Cycle Detection Analysis");
@@ -854,6 +1108,16 @@ impl AnalyzeArgs {
         }
     }
 
+    /// Find and display missing dependencies (referenced but non-existent files).
+    ///
+    /// Scans all files and collects ALL missing dependencies in a single pass,
+    /// allowing users to fix all issues at once instead of iteratively.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if no missing dependencies are found
+    /// - `Err(TopCatError::MissingDependency)` if any are found (with full list)
+    /// - `Err(TopCatError)` for other errors during scanning
     fn analyze_missing(&self) -> Result<(), TopCatError> {
         let logger = AnalysisLogger::new(self.quiet);
         logger.section("🔍 Missing Dependencies Analysis");
@@ -930,6 +1194,26 @@ impl AnalyzeArgs {
         ))
     }
 
+    /// Perform detailed analysis of a specific file.
+    ///
+    /// Displays comprehensive information about a single file including:
+    /// - Node metadata (name, path, layer)
+    /// - Direct dependencies
+    /// - Direct dependents
+    /// - External usage status (if checker provided)
+    /// - Node classification (orphan, root, leaf, intermediate)
+    /// - Whether the node is required by others
+    ///
+    /// # Arguments
+    ///
+    /// * `graph` - The dependency graph containing the file
+    /// * `path` - Path to the file to analyze
+    /// * `external_checker` - Optional checker for external usage status
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, or `Err(TopCatError::ConfigError)` if the file
+    /// is not found in the graph.
     fn analyze_file(
         &self,
         graph: &TCGraph,
