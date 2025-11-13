@@ -424,6 +424,82 @@ impl TCGraph {
         Ok(())
     }
 
+    /// Validate all dependencies without building the graph.
+    /// Returns a list of (file_name, missing_dependency) tuples for all missing dependencies.
+    /// This allows reporting all missing dependencies at once instead of failing on the first one.
+    pub fn validate_dependencies_only(&mut self) -> Result<Vec<(String, String)>, TopCatError> {
+        let files = collect_files(&self.file_dirs, self.include_hidden)?;
+        let filtered_files = filter_files(
+            &files,
+            &self.include_globs,
+            &self.exclude_globs,
+            &self.include_extensions,
+            &self.exclude_extensions,
+        );
+
+        // Create SQL analyzer if discovery is enabled
+        let sql_analyzer = if self.sql_discovery.enabled {
+            Some(SqlAnalyzer::new(self.sql_discovery.clone()).map_err(|e| {
+                TopCatError::ConfigError(format!("Failed to create SQL analyzer: {e}"))
+            })?)
+        } else {
+            None
+        };
+
+        // Load all files into name_map (same as build_graph)
+        for file in filtered_files {
+            let mut file_node = match FileNode::from_file(
+                &self.comment_str,
+                file,
+                &self.layers,
+                &self.fallback_layer,
+            ) {
+                Ok(f) => f,
+                Err(e) => {
+                    handle_file_node_error(e)?;
+                    continue;
+                }
+            };
+
+            // Perform SQL discovery if enabled
+            if let Some(ref analyzer) = sql_analyzer {
+                match perform_sql_discovery(&mut file_node, analyzer) {
+                    Ok(_) => {
+                        file_node.merge_dependencies(self.sql_discovery.merge_strategy);
+                    }
+                    Err(e) => {
+                        info!("SQL discovery failed for {:?}: {}", file_node.path, e);
+                    }
+                }
+            }
+
+            if let Some(other_path) = self.name_map.get(&file_node.name) {
+                return Err(TopCatError::NameClash(
+                    file_node.name,
+                    file_node.path,
+                    other_path.path.clone(),
+                ));
+            }
+
+            self.name_map
+                .insert(file_node.name.clone(), file_node.clone());
+            self.path_map.insert(file_node.path.clone(), file_node);
+        }
+
+        // Now collect all missing dependencies instead of failing on the first one
+        let mut missing_deps = Vec::new();
+
+        for file_node in self.name_map.values() {
+            for dep in &file_node.deps {
+                if !self.name_map.contains_key(dep) {
+                    missing_deps.push((file_node.name.clone(), dep.clone()));
+                }
+            }
+        }
+
+        Ok(missing_deps)
+    }
+
     fn find_required_nodes(
         &self,
         initial_nodes: &HashSet<String>,
