@@ -42,24 +42,9 @@ pub const DEFAULT_MERGE_STRATEGY: &str = "discovery-only";
 /// This is used when building graphs for analysis or export where no actual
 /// output file is needed, but the Config struct requires an output path.
 ///
-/// # Returns
-///
-/// - `/dev/null` on Unix systems
-/// - `NUL` on Windows
-/// - `/dev/null` as fallback for other platforms
-#[cfg(unix)]
+/// Delegates to the platform module for platform-specific implementation.
 pub fn null_device() -> &'static str {
-    "/dev/null"
-}
-
-#[cfg(windows)]
-pub fn null_device() -> &'static str {
-    "NUL"
-}
-
-#[cfg(not(any(unix, windows)))]
-pub fn null_device() -> &'static str {
-    "/dev/null" // Fallback for other platforms
+    topcat::platform::null_device()
 }
 
 // ============================================================================

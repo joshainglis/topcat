@@ -10,6 +10,7 @@ pub mod fs;
 pub mod graph_utils;
 pub mod header_generator;
 pub mod output;
+pub mod platform;
 pub mod schema_utils;
 pub mod sql_config;
 

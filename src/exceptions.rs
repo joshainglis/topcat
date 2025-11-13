@@ -1,7 +1,7 @@
 use crate::file_node::FileNode;
 use std::collections::HashSet;
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{fmt, io};
 
 #[derive(Debug)]
@@ -17,6 +17,8 @@ pub enum TopCatError {
     ConfigError(String),
     SerializationError(String),
     UnknownError(String),
+    GraphBuildError(String),
+    ValidationError(String),
 }
 
 impl fmt::Display for TopCatError {
@@ -68,6 +70,8 @@ impl fmt::Display for TopCatError {
             Self::ConfigError(s) => write!(f, "Configuration error: {s}"),
             Self::SerializationError(s) => write!(f, "Serialization error: {s}"),
             Self::UnknownError(s) => write!(f, "UnknownError: {s}"),
+            Self::GraphBuildError(s) => write!(f, "Graph build error: {s}"),
+            Self::ValidationError(s) => write!(f, "Validation error: {s}"),
         }
     }
 }
@@ -79,6 +83,65 @@ impl From<io::Error> for TopCatError {
 }
 
 impl Error for TopCatError {}
+
+/// Trait for adding contextual information to errors
+pub trait ErrorContext {
+    /// Add a contextual message to the error
+    fn with_context<C: fmt::Display>(self, context: C) -> Self;
+
+    /// Add a file path to the error context
+    fn with_file_path(self, path: &Path) -> Self;
+
+    /// Add a node name to the error context
+    fn with_node_name(self, name: &str) -> Self;
+}
+
+impl ErrorContext for TopCatError {
+    fn with_context<C: fmt::Display>(self, context: C) -> Self {
+        match self {
+            TopCatError::UnknownError(msg) => {
+                TopCatError::UnknownError(format!("{context}: {msg}"))
+            }
+            TopCatError::ConfigError(msg) => TopCatError::ConfigError(format!("{context}: {msg}")),
+            TopCatError::GraphBuildError(msg) => {
+                TopCatError::GraphBuildError(format!("{context}: {msg}"))
+            }
+            TopCatError::ValidationError(msg) => {
+                TopCatError::ValidationError(format!("{context}: {msg}"))
+            }
+            TopCatError::SerializationError(msg) => {
+                TopCatError::SerializationError(format!("{context}: {msg}"))
+            }
+            // For other error types, wrap in UnknownError with context
+            other => TopCatError::UnknownError(format!("{context}: {other}")),
+        }
+    }
+
+    fn with_file_path(self, path: &Path) -> Self {
+        self.with_context(format!("in file {}", path.display()))
+    }
+
+    fn with_node_name(self, name: &str) -> Self {
+        self.with_context(format!("for node '{name}'"))
+    }
+}
+
+impl TopCatError {
+    /// Create a configuration error
+    pub fn config_error(message: impl Into<String>) -> Self {
+        TopCatError::ConfigError(message.into())
+    }
+
+    /// Create a graph build error
+    pub fn graph_build_error(message: impl Into<String>) -> Self {
+        TopCatError::GraphBuildError(message.into())
+    }
+
+    /// Create a validation error
+    pub fn validation_error(message: impl Into<String>) -> Self {
+        TopCatError::ValidationError(message.into())
+    }
+}
 
 #[derive(Debug)]
 pub enum FileNodeError {
