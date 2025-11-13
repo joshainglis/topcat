@@ -65,17 +65,41 @@ cargo run -- -i tests/input/sql -o /tmp/output.sql
 | `file_node.rs` | File representation with metadata, schema extraction |
 | `file_dag.rs` | DAG management, validation, schema operations |
 | `stable_topo.rs` | Deterministic topological sort |
+| `commands/common.rs` | Shared command utilities, GraphBuilder pattern |
 | `commands/concat.rs` | File concatenation command |
-| `commands/analyze.rs` | Dependency analysis commands |
-| `commands/clean.rs` | Safe file deletion commands |
+| `commands/analyze/` | Modularized dependency analysis (10 modules) |
+| `commands/clean/` | Modularized safe file deletion (6 modules) |
 | `commands/schema.rs` | Schema operations |
-| `commands/export.rs` | Graph export in multiple formats |
+| `commands/export/` | Modularized graph export (multiple formats) |
 | `analysis/mod.rs` | GraphAnalyzer trait, analysis algorithms |
 | `analysis/root_matcher.rs` | Root node protection patterns |
 | `analysis/external_usage.rs` | External usage checking |
 | `config.rs` | Configuration management |
 | `output.rs` | Output generation |
 | `io_utils.rs` | File system operations |
+
+### Utility Modules
+
+| Module | Purpose | Lines |
+|--------|---------|-------|
+| `schema_utils.rs` | SchemaFilter with matching/filtering operations | 338 |
+| `display_utils.rs` | Table creation, formatting, output utilities | 338 |
+| `graph_utils.rs` | Node mapping, graph analysis helpers | 375 |
+| `platform.rs` | Platform-specific utilities (null device, temp files) | 165 |
+| `exceptions.rs` | Enhanced error handling with ErrorContext trait | - |
+
+### Modularized Commands
+
+**Analyze Command** (`commands/analyze/`): Broken down from 1,329 lines into 10 focused modules
+- `mod.rs` - CLI routing and dispatch
+- `common.rs` - AnalysisLogger, generic display utilities
+- `cycles.rs`, `dead_branches.rs`, `file.rs`, `missing.rs` - Analysis implementations
+- `leaf_nodes.rs`, `orphans.rs`, `root_nodes.rs`, `unrequired.rs` - Node categorization
+
+**Clean Command** (`commands/clean/`): Broken down from 772 lines into 6 focused modules
+- `mod.rs` - CLI routing and dispatch
+- `common.rs` - DeletionContext, confirmation logic
+- `dead_branches.rs`, `orphans.rs`, `targets.rs`, `unrequired.rs` - Cleanup implementations
 
 ### Key Concepts
 

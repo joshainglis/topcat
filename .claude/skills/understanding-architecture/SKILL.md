@@ -59,11 +59,21 @@ Export:  Input Files → Build DAG → Generate Export Format → Write Output
 
 | Module           | Purpose               | Details                                            |
 |------------------|-----------------------|----------------------------------------------------|
+| `commands/common.rs` | Shared utilities, GraphBuilder | [reference/modules.md](reference/modules.md) |
 | `commands/concat.rs` | File concatenation | [reference/modules.md](reference/modules.md) |
-| `commands/analyze.rs` | 8 analysis commands | [reference/algorithms.md](reference/algorithms.md) |
-| `commands/clean.rs` | Safe file deletion | [reference/modules.md](reference/modules.md) |
+| `commands/analyze/` | Modularized analysis (10 modules) | [reference/algorithms.md](reference/algorithms.md) |
+| `commands/clean/` | Modularized cleanup (6 modules) | [reference/modules.md](reference/modules.md) |
 | `commands/schema.rs` | Schema operations | [reference/modules.md](reference/modules.md) |
-| `commands/export.rs` | Graph export (4 formats) | [reference/modules.md](reference/modules.md) |
+| `commands/export/` | Modularized export (multiple formats) | [reference/modules.md](reference/modules.md) |
+
+### Utility Modules
+
+| Module           | Purpose               | Details                                            |
+|------------------|-----------------------|----------------------------------------------------|
+| `schema_utils.rs` | SchemaFilter, matching/filtering | [reference/modules.md](reference/modules.md) |
+| `display_utils.rs` | Table formatting, output | [reference/modules.md](reference/modules.md) |
+| `graph_utils.rs` | Node mapping, graph helpers | [reference/modules.md](reference/modules.md) |
+| `platform.rs` | Platform utilities (null device, temp) | [reference/modules.md](reference/modules.md) |
 
 ### Analysis Infrastructure
 
