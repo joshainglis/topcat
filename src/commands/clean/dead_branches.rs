@@ -1,0 +1,69 @@
+//! Clean dead branches.
+//!
+//! Removes complete dead branches (subtrees that can be trimmed together).
+
+use topcat::analysis::GraphAnalyzer;
+use topcat::analysis::external_usage::ExternalUsageChecker;
+use topcat::analysis::root_matcher::RootNodeMatcher;
+use topcat::exceptions::TopCatError;
+use topcat::file_dag::TCGraph;
+
+use super::common;
+
+/// Remove complete dead branches (subtrees that can be trimmed together).
+///
+/// Finds dead branches, filters by external usage and root patterns,
+/// then deletes the files (unless in dry-run mode).
+///
+/// # Arguments
+///
+/// * `graph` - The dependency graph
+/// * `external_checker` - Optional checker to filter out externally-used nodes
+/// * `root_matcher` - Optional matcher to identify protected nodes
+/// * `actually_delete` - Whether to actually delete files (false = dry-run)
+/// * `force` - Skip confirmation prompt if true
+/// * `verbose` - Show each file as it's deleted
+///
+/// # Returns
+///
+/// `Ok(())` on success, `Err(TopCatError)` on error
+pub fn clean(
+    graph: &TCGraph,
+    external_checker: Option<&ExternalUsageChecker>,
+    root_matcher: Option<&RootNodeMatcher>,
+    actually_delete: bool,
+    force: bool,
+    verbose: bool,
+) -> Result<(), TopCatError> {
+    println!("\n🌳 Finding dead branches...\n");
+
+    // Find dead branches
+    let mut dead_branches = graph.find_dead_branches(root_matcher);
+
+    // Filter out externally used files
+    if let Some(checker) = external_checker {
+        let before_count = dead_branches.len();
+        dead_branches = checker.filter_unused(&dead_branches);
+        let filtered_count = before_count - dead_branches.len();
+        if filtered_count > 0 {
+            println!("✅ Filtered out {filtered_count} file(s) with external usage\n");
+        }
+    }
+
+    if dead_branches.is_empty() {
+        println!("✅ No dead branches found! Your codebase is clean.");
+        return Ok(());
+    }
+
+    // Show what will be deleted
+    common::show_deletion_preview(graph, &dead_branches, "Dead Branches")?;
+
+    // Delete files if not dry-run
+    if actually_delete {
+        common::perform_deletion(graph, &dead_branches, force, verbose)?;
+    } else {
+        println!("\n💡 Run with --no-dry-run to actually delete these files");
+    }
+
+    Ok(())
+}
