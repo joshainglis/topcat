@@ -404,7 +404,8 @@ impl AnalyzeArgs {
         )?;
         let (layers, fallback_layer) =
             cmd_common::parse_and_validate_layers(&self.layers, &self.fallback_layer)?;
-        let include_node_prefixes = cmd_common::build_schema_filter_prefixes(&self.schema_filter);
+        let include_node_prefixes =
+            cmd_common::build_schema_filter(&self.schema_filter).to_option();
 
         cmd_common::build_graph(
             self.input_dirs.clone(),

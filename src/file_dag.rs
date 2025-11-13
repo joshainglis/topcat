@@ -12,6 +12,7 @@ use petgraph::{Directed, Graph};
 
 use crate::exceptions::{FileNodeError, TopCatError};
 use crate::file_node::FileNode;
+use crate::schema_utils::SchemaFilter;
 use crate::sql_parser::SqlAnalyzer;
 use crate::stable_topo::StableTopo;
 use crate::{config, io_utils};
@@ -782,15 +783,30 @@ impl TCGraph {
         deps
     }
 
-    /// Apply schema-based node prefix filtering
-    /// This modifies the include_node_prefixes to filter by schema
+    /// Apply schema-based node prefix filtering using SchemaFilter.
+    ///
+    /// This modifies the include_node_prefixes to filter by the specified schemas.
+    /// If schemas is empty, no filtering is applied.
+    ///
+    /// # Arguments
+    ///
+    /// * `schemas` - List of schema names to filter by
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use topcat::file_dag::TCGraph;
+    /// # let mut graph = TCGraph::new(&Default::default());
+    /// graph.apply_schema_filter(&["auth".to_string(), "billing".to_string()]);
+    /// ```
     pub fn apply_schema_filter(&mut self, schemas: &[String]) {
-        if schemas.is_empty() {
+        let filter = SchemaFilter::from(schemas);
+        if filter.is_empty() {
             return;
         }
 
-        // Convert schemas to node prefixes (e.g., "my_schema" -> "my_schema.")
-        let schema_prefixes: HashSet<String> = schemas.iter().map(|s| format!("{s}.")).collect();
+        // Convert schemas to node prefixes using SchemaFilter
+        let schema_prefixes: HashSet<String> = filter.to_node_prefixes().into_iter().collect();
 
         // Add to include_node_prefixes
         match &mut self.include_node_prefixes {

@@ -2,12 +2,15 @@
 
 pub mod analysis;
 pub mod config;
+pub mod display_utils;
 pub mod exceptions;
 pub mod file_dag;
 pub mod file_node;
 pub mod fs;
+pub mod graph_utils;
 pub mod header_generator;
 pub mod output;
+pub mod schema_utils;
 pub mod sql_config;
 
 mod io_utils;

@@ -11,6 +11,7 @@ use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::config;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::schema_utils::SchemaFilter;
 use topcat::sql_config;
 
 // ============================================================================
@@ -241,12 +242,10 @@ pub fn build_root_matcher(
 // Schema Filtering
 // ============================================================================
 
-/// Convert schema filter CLI args to node name prefixes.
+/// Convert schema filter CLI args to a SchemaFilter instance.
 ///
 /// When filtering by specific schemas, this function converts schema names
-/// (e.g., `my_schema`) into node name prefixes for matching. It includes both
-/// exact matches and prefixed matches to catch schema definition nodes and
-/// schema member nodes.
+/// into a SchemaFilter that can be used for node matching and graph filtering.
 ///
 /// # Arguments
 ///
@@ -254,27 +253,18 @@ pub fn build_root_matcher(
 ///
 /// # Returns
 ///
-/// `Some(Vec<String>)` with prefixes if schemas are specified (e.g., for "my_schema":
-/// ["my_schema", "my_schema."]), or `None` if no schema filter is active.
+/// A `SchemaFilter` instance. Use `.to_option()` to get `Option<Vec<String>>`
+/// for backward compatibility with APIs expecting node prefixes.
 ///
 /// # Examples
 ///
 /// ```
-/// let prefixes = build_schema_filter_prefixes(&vec!["auth".to_string()]);
-/// // Returns: Some(vec!["auth", "auth."])
-/// // Matches: "auth", "auth.users", "auth.sessions", etc.
+/// # use topcat::commands::common::build_schema_filter;
+/// let filter = build_schema_filter(&vec!["auth".to_string()]);
+/// let prefixes = filter.to_option(); // Some(vec!["auth", "auth."])
 /// ```
-pub fn build_schema_filter_prefixes(schema_filter: &[String]) -> Option<Vec<String>> {
-    if schema_filter.is_empty() {
-        return None;
-    }
-
-    let mut prefixes = Vec::new();
-    for schema in schema_filter {
-        prefixes.push(schema.clone()); // For exact match (e.g., "my_schema")
-        prefixes.push(format!("{schema}.")); // For prefixed match (e.g., "my_schema.")
-    }
-    Some(prefixes)
+pub fn build_schema_filter(schema_filter: &[String]) -> SchemaFilter {
+    SchemaFilter::from(schema_filter)
 }
 
 // ============================================================================
@@ -355,6 +345,9 @@ pub fn build_graph(
 
 /// Build a HashMap for O(1) node lookups by name.
 ///
+/// This is a re-export of `topcat::graph_utils::build_name_to_node_map` for
+/// backward compatibility. New code should use the graph_utils module directly.
+///
 /// This helper improves performance from O(n²) to O(n) for analyses that need
 /// to look up node details repeatedly. Instead of linear searching through all
 /// nodes for each result, build a hash map once and use O(1) lookups.
@@ -369,7 +362,7 @@ pub fn build_graph(
 pub fn build_node_map(
     nodes: &[topcat::file_node::FileNode],
 ) -> std::collections::HashMap<&str, &topcat::file_node::FileNode> {
-    nodes.iter().map(|n| (n.name.as_str(), n)).collect()
+    topcat::graph_utils::build_name_to_node_map(nodes)
 }
 
 #[cfg(test)]
@@ -405,29 +398,32 @@ mod tests {
     }
 
     #[test]
-    fn test_build_schema_filter_prefixes_empty() {
-        let result = build_schema_filter_prefixes(&[]);
-        assert_eq!(result, None);
+    fn test_build_schema_filter_empty() {
+        let filter = build_schema_filter(&[]);
+        assert!(filter.is_empty());
+        assert_eq!(filter.to_option(), None);
     }
 
     #[test]
-    fn test_build_schema_filter_prefixes_single() {
-        let result = build_schema_filter_prefixes(&["auth".to_string()]);
-        assert_eq!(result, Some(vec!["auth".to_string(), "auth.".to_string()]));
-    }
-
-    #[test]
-    fn test_build_schema_filter_prefixes_multiple() {
-        let result = build_schema_filter_prefixes(&["auth".to_string(), "billing".to_string()]);
+    fn test_build_schema_filter_single() {
+        let filter = build_schema_filter(&["auth".to_string()]);
+        assert!(!filter.is_empty());
         assert_eq!(
-            result,
-            Some(vec![
-                "auth".to_string(),
-                "auth.".to_string(),
-                "billing".to_string(),
-                "billing.".to_string()
-            ])
+            filter.to_option(),
+            Some(vec!["auth".to_string(), "auth.".to_string()])
         );
+    }
+
+    #[test]
+    fn test_build_schema_filter_multiple() {
+        let filter = build_schema_filter(&["auth".to_string(), "billing".to_string()]);
+        assert!(!filter.is_empty());
+        let prefixes = filter.to_option().unwrap();
+        assert_eq!(prefixes.len(), 4);
+        assert!(prefixes.contains(&"auth".to_string()));
+        assert!(prefixes.contains(&"auth.".to_string()));
+        assert!(prefixes.contains(&"billing".to_string()));
+        assert!(prefixes.contains(&"billing.".to_string()));
     }
 
     #[test]
