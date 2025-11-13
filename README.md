@@ -1,336 +1,642 @@
-# topcat
+# Topcat
 
-**top**ological con**cat**enation of files
+**Top**ological con**cat**enation of files with comprehensive dependency analysis.
 
-## Description
+## Overview
 
-`topcat` is a simple tool to concatenate files in a topological order. It is useful when you have a set of files that
-depend on each other and you want to concatenate them in the right order.
+Topcat is a Rust CLI tool that reads files with dependency metadata, builds a directed acyclic graph (DAG), performs topological sorting with layer constraints, and provides powerful analysis, cleanup, and export capabilities.
 
-For my use case this is SQL files.
+**Primary use case:** Managing SQL migration files where execution order matters based on dependencies. Also analyzes dependency health, detects dead code, and safely cleans up unused files.
 
-I like to treat my SQL files as a set of functions and views that depend on each other. I like to keep them in separate
-files and concatenate them in the right order to create a single file that I can run in my database.
+## Features
+
+- 🔗 **Topological Concatenation** - Order files correctly based on dependencies
+- 🔍 **Dependency Analysis** - Find dead code, cycles, orphans, and missing dependencies
+- 🧹 **Safe Cleanup** - Remove unused files with multi-stage verification
+- 📊 **Schema Management** - Analyze and filter by schema boundaries
+- 📤 **Graph Export** - Export to JSON, GraphViz, GraphML, and Mermaid
+- 🤖 **SQL Auto-Discovery** - Automatically extract dependencies from SQL code
+- 🛡️ **Protection Patterns** - Safeguard entry points from accidental deletion
+- 📐 **Layer System** - Enforce high-level ordering constraints
+- ⚙️ **Configuration** - Project-specific settings via `topcat.toml`
 
 ## Installation
 
-pip:
+### From Crates.io
 
-```sh
-pip install topcat
+```bash
+cargo install topcat
 ```
 
-poetry:
+### From Source
 
-```sh
-poetry add topcat
+```bash
+git clone https://github.com/joshainglis/topcat.git
+cd topcat
+cargo build --release
+./target/release/topcat --help
 ```
 
-## Usage
+### Via Nix
 
-### The quick version
-
-```sh
-topcat -i /path/to/input -o /path/to/output.sql
+```bash
+nix develop  # Enter development environment with all dependencies
 ```
 
-Where `/path/to/input` is the directory containing the files to concatenate and `/path/to/output.sql` will be where the
-concatenated file will be written.
+## Quick Start
 
-### The long version
+```bash
+# Concatenate SQL files in dependency order
+topcat concat -i sql/ -o migrations.sql
 
-```sh
-USAGE:
-    topcat [FLAGS] [OPTIONS] --output <FILE>
+# Find dead code that can be safely removed
+topcat analyze -i sql/ -e sql dead-branches
 
-FLAGS:
-        --dry        Only print the output, do not write to file.
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-    -v, --verbose    Print debug information
+# Preview deletion of orphaned files
+topcat clean -i sql/ -e sql orphans
 
-OPTIONS:
-        --comment-str <comment-str>
-            The string used to denote a comment. eg '--' [default: --]
+# List all schemas with statistics
+topcat schema -i sql/ -e sql list
 
-        --ensure-each-file-ends-with <ensure-each-file-ends-with-str>
-            Add this string to the end of files if it does not exist. eg ';' [default: ;]
-
-    -x, --exclude <PATTERN>...                                           Exclude files matching given glob pattern
-        --file-separator-str <file-separator-str>
-            Add this between each concatenated file in the output. eg '---' [default:
-            ------------------------------------------------------------------------------------------------------------------------]
-    -n, --include <PATTERN>...                                           Only include files matching glob pattern
-    -i, --input_dir <DIR>...
-            Path to directory containing files to be concatenated
-
-    -o, --output <FILE>                                                  Path to generate combined output file
+# Export dependency graph for visualization
+topcat export -i sql/ -e sql -o graph.json json
 ```
 
-Some quirks here:
+## Commands
 
-- `-i` is the input directory. You can have multiple input directories. This is useful if you have a set of files in
-  different directories that depend on each other.
-- `-o` is the output file. This is where the concatenated file will be written.
-- `-x` and `-n` are used to exclude and include files respectively. These are glob patterns. For example `-x
-  **/tests/*` will exclude all files in any `tests` directory. `-n **/functions/*` will **only** include files in the
-  `functions` directory. You can use these together to include and exclude files as you need. You can use these multiple
-  times.
-- `--comment-str` is the string used to denote a comment. This is used to find the `name`, `requires`, `dropped_by` and
-  `exists` comments in the files. The default is `--`. In SQL this is `--` but in other languages it might be `//`
-  or `#`.
-- `--ensure-each-file-ends-with` is the string to add to the end of each file if it doesn't exist. This is useful for
-  SQL
-  files where you might want to ensure each file ends with a `;`. The default is `;`.
-- `--file-separator-str` is the string to add between each concatenated file in the output. The default is a long line
-  of
-  dashes. This is just visually useful to see where one file ends and the next begins.
-- `--dry` will only print the output, it will not write to the output file.
-- `-v` will print debug information and a `.dot` format of the dependency graph.
+### `concat` - Concatenate Files
 
-## What a file needs to include to be concatenated
+Concatenate files in topological order respecting dependencies and layer constraints.
 
-### `name`
-
-The only requirement for a file to be included in the concatenation is that it needs to have a `name` comment at the top
-of the file.
-
-This can be anything you want, but it needs to be unique. This is used to define a node in the dependency graph.
-
-For example:
-
-```postgresql
--- name: my_schema
+```bash
+topcat concat -i sql/ -o output.sql
+topcat concat -i sql/ -o output.sql --enable-sql-discovery
+topcat concat -i dir1/ -i dir2/ -o output.sql --layers prepend,normal,append
 ```
 
-### `requires`
+**Basic Options:**
+- `-i, --input-dirs <DIR>...` - Input directories (multiple allowed)
+- `-o, --output-file <FILE>` - Output file path
+- `-e, --include-exts <EXT>...` - File extensions to include (e.g., `sql`)
+- `-E, --exclude-exts <EXT>...` - File extensions to exclude
+- `-g, --include-glob <PATTERN>...` - Include files matching glob
+- `-G, --exclude-glob <PATTERN>...` - Exclude files matching glob
+- `-d, --dry-run` - Preview output without writing
+- `-v, --verbose` - Show debug information
 
-If a file requires another file to be concatenated before it, you can add a `requires` comment to the file.
-An alias for `requires` is `dropped_by`. I use `dropped_by` in SQL files for clarity to show that the DDL in the file
-gets dropped so I don't need to use `CREATE OR REPLACE FUNCTION` or the like.
+**Layer Options:**
+- `--layers <LAYERS>` - Custom layer ordering (comma-separated, default: `prepend,normal,append`)
+- `--fallback-layer <LAYER>` - Default layer for files without declaration (default: `normal`)
 
-For example:
+**Filtering Options:**
+- `--include-prefix <PREFIX>...` - Only include nodes with these name prefixes
+- `--exclude-prefix <PREFIX>...` - Exclude nodes with these name prefixes
+- `--subdir-filter <PATH>` - Include only files from subdirectory and their dependencies
 
-```postgresql
--- name: my_schema.b
--- dropped_by: my_schema
--- requires: my_schema.a
+**SQL Discovery Options:**
+- `--enable-sql-discovery` - Extract dependencies from SQL code
+- `--schema-pattern <REGEX>` - Pattern for schema names (e.g., `"myapp_\\w+"`)
+- `--merge-strategy <STRATEGY>` - How to merge manual vs discovered deps:
+  - `header-only` - Use only manual headers
+  - `discovery-only` - Use only discovered (default)
+  - `union` - Combine both
+  - `header-with-fallback` - Manual if present, else discovered
+  - `validate` - Check for discrepancies (fails on mismatch)
+
+**Header Management:**
+- `--update-headers` - Update source files with discovered dependencies
+- `--generate-headers <DIR>` - Write files with updated headers to directory
+
+**Formatting Options:**
+- `-c, --comment-prefix <STR>` - Comment string (default: `--`)
+- `-s, --file-separator <STR>` - Separator between concatenated files
+- `-a, --file-suffix <STR>` - Ensure files end with this (default: `;`)
+
+### `analyze` - Dependency Analysis
+
+Analyze dependency structure and health with multiple analysis types.
+
+```bash
+topcat analyze -i sql/ -e sql dead-branches
+topcat analyze -i sql/ -e sql --schema auth orphans
+topcat analyze -i sql/ -e sql --quiet cycles  # CI/CD mode
 ```
 
-### `exists`
+**Analysis Types:**
 
-`exists` is for soft dependencies. For example in plpgsql functions, the body isn't parsed until the function is called.
-So any dependent objects you can't use `requires` for, you can use `exists` to ensure the file is included in the
-concatenated file but order of creation doesn't matter.
+| Type | Description | Exit Code on Issue |
+|------|-------------|-------------------|
+| `dead-branches` | Complete dead subtrees (transitive) | 0 (informational) |
+| `orphans` | Files with no dependencies AND no dependents | 0 (informational) |
+| `unrequired` | Files not required by any other files | 0 (informational) |
+| `leaf-nodes` | Files with dependencies but no dependents | 0 (informational) |
+| `root-nodes` | Files with dependents but no dependencies | 0 (informational) |
+| `cycles` | Circular dependency detection | **1 (error)** |
+| `missing` | Referenced but non-existent dependencies | **1 (error)** |
+| `file <path>` | Detailed analysis of specific file | 0 |
 
-For example:
+**Protection Options:**
+- `--root-nodes <NODE>...` - Specific nodes to protect (e.g., `api_main`)
+- `--root-pattern <GLOB>...` - Glob patterns for files (e.g., `**/api/*.sql`)
+- `--root-regex <REGEX>...` - Regex for node names (e.g., `^api_.*`)
+- `--root-dir <DIR>...` - Directories to protect (e.g., `api/`)
 
-```postgresql
--- name: my_schema.b
--- dropped_by: my_schema
--- requires: my_schema.a
--- exists: my_schema.c
+**External Usage Checking:**
+- `--external-check-dir <DIR>...` - Check these directories for usage
+- `--external-check-pattern <PATTERN>...` - File patterns to check (e.g., `*.py`, `*.rs`)
+
+**Filtering:**
+- `--schema <SCHEMA>...` - Filter to specific schemas
+
+**Output:**
+- `-v, --verbose` - Show debug information
+- `-q, --quiet` - Suppress output (CI/CD mode, only exit codes)
+
+### `clean` - Safe File Deletion
+
+Remove files based on analysis with safety checks and dry-run default.
+
+```bash
+topcat clean -i sql/ -e sql dead-branches              # Preview (dry-run)
+topcat clean -i sql/ -e sql orphans --no-dry-run       # Execute with confirmation
+topcat clean -i sql/ -e sql orphans --no-dry-run -f    # Force (no confirmation)
 ```
 
-### `layer`
+**Clean Types:**
+- `dead-branches` - Remove complete dead subtrees
+- `orphans` - Remove isolated files
+- `unrequired` - Remove unrequired files
+- `targets <files>...` - Remove specific targets (with dependency check)
 
-You can organize files into layers that enforce ordering constraints. Files in lower-index layers cannot depend on files in higher-index layers.
+**Safety Features:**
+- `--dry-run` - Preview deletion (**DEFAULT** - always safe by default)
+- `--no-dry-run` - Actually perform deletion
+- `-f, --force` - Skip interactive confirmation (for automation)
+- Protection checks prevent deleting files with dependents
+- All protection and filtering options from `analyze` available
 
-For example:
+### `schema` - Schema Management
 
-```postgresql
--- name: my_schema.setup
--- layer: first
+Analyze and manage schema boundaries in multi-schema projects.
 
--- name: my_schema.functions  
--- layer: second
--- requires: my_schema.setup
-
--- name: my_schema.views
--- layer: third
--- requires: my_schema.functions
+```bash
+topcat schema -i sql/ -e sql list                    # All schemas with stats
+topcat schema -i sql/ -e sql analyze my_schema       # Detailed schema view
+topcat schema -i sql/ -e sql dependencies            # Cross-schema deps
 ```
 
-#### Layer Configuration
+**Schema Operations:**
+- `list` - List all schemas with file counts and distribution
+- `analyze <schema>` - Detailed analysis showing:
+  - Files in schema
+  - Internal dependencies
+  - External dependencies (grouped by target schema)
+  - Schemas that depend on this schema
+- `dependencies` - Cross-schema dependency table
 
-- Use `--layers first,second,third` to define custom layers in order
-- Use `--fallback-layer second` to specify the default layer for files without explicit layer declarations
-- Default layers are `prepend,normal,append` with `normal` as the fallback
+### `export` - Graph Export
 
-#### Backward Compatibility
+Export dependency graphs in multiple formats for visualization and integration.
 
-The legacy `-- is_initial` and `-- is_final` headers are still supported:
-- `-- is_initial` maps to the "prepend" layer  
-- `-- is_final` maps to the "append" layer
-- Files without layer declarations use the fallback layer
-
-## Example
-
-Lets say you have a directory with the following files:
-
+```bash
+topcat export -i sql/ -e sql -o graph.json json                    # Full graph
+topcat export -i sql/ -e sql -o graph.dot dot                      # GraphViz
+topcat export -i sql/ -e sql --mode deps --node my_node -o deps.json json
 ```
 
-sql
-├── my_other_schema
-│ ├── functions
-│ │ ├── a.sql
-│ │ ├── b.sql
-│ │ └── c.sql
-│ └── schema.sql
-└── my_schema
-├── functions
-│ └── a.sql
-└── schema.sql
+**Export Formats:**
+- `json` - JSON with full metadata
+- `dot` - GraphViz DOT format
+- `graphml` - GraphML for Gephi/yEd
+- `mermaid` - Mermaid diagram syntax
 
+**Export Modes:**
+- `--mode full` - Entire dependency graph (default)
+- `--mode deps` - Node and all transitive dependencies
+- `--mode dependents` - Node and all transitive dependents
+- `--mode direct` - Node and immediate neighbors only
+
+**Options:**
+- `-o, --output <FILE>` - Output file path (required)
+- `--node <NAME>` - Target node (required for deps/dependents/direct modes)
+- `--schema <SCHEMA>...` - Filter by schemas
+
+## File Metadata
+
+Files specify dependencies and properties via header comments:
+
+```sql
+-- name: create_users_table
+-- requires: create_schema, create_extensions
+-- dropped_by: drop_schema
+-- exists: audit_trigger
+-- layer: normal
+
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL
+);
 ```
 
-And the content of the files is:
+### Metadata Headers
 
-`sql/my_schema/schema.sql`:
+**Required:**
+- `-- name: <unique_name>` - Unique node identifier (REQUIRED)
 
-```postgresql
--- name: my_schema
+**Dependencies:**
+- `-- requires: dep1, dep2` - Hard dependencies (enforces ordering)
+- `-- dropped_by: dep` - Alias for `requires` (semantic clarity for DDL drops)
+- `-- exists: dep` - Soft dependencies (ensures inclusion, no ordering)
+- `-- !override_dep` - Prefix with `!` to force dependency retention
 
-DROP SCHEMA IF EXISTS my_schema CASCADE;
-CREATE SCHEMA IF NOT EXISTS my_schema;
+**Layer Declaration:**
+- `-- layer: <layer_name>` - Explicit layer assignment
+- `-- is_initial` - Legacy: maps to "prepend" layer
+- `-- is_final` - Legacy: maps to "append" layer
+
+**Schema Extraction:**
+- Automatic from node names: `schema.table` → schema is "schema"
+- Also supports: `schema::table` (PostgreSQL namespace style)
+
+### Dependency Types
+
+| Type | Syntax | Behavior |
+|------|--------|----------|
+| **Hard** | `requires:`, `dropped_by:` | Enforces execution order |
+| **Soft** | `exists:` | Ensures file inclusion without ordering |
+| **Override** | `!prefix` | Forces dependency retention despite patterns |
+
+### Layer System
+
+Layers enforce high-level ordering between groups of files. Files in earlier layers always execute before later layers.
+
+**Default Layers:** `prepend` → `normal` → `append`
+
+**Custom Layers:**
+```bash
+topcat concat -i sql/ -o output.sql --layers setup,functions,views,cleanup
 ```
 
-`sql/my_schema/functions/a.sql`:
+**Use Cases:**
+- `prepend`: Schema creation, extensions, types
+- `normal`: Tables, functions, main logic
+- `append`: Grants, post-deployment scripts
 
-```postgresql
--- name: my_schema.a
--- dropped_by: my_schema
+**Rules:**
+- Files in earlier layers cannot depend on later layers
+- Files in the same layer are ordered by dependencies
+- Files without layer declaration use `--fallback-layer` (default: `normal`)
 
-CREATE FUNCTION my_schema.a() RETURNS INT AS
-$$
-SELECT 1;
-$$ LANGUAGE SQL IMMUTABLE
-                PARALLEL SAFE;
+## Configuration
+
+Use `topcat.toml` in your project root for persistent configuration:
+
+```toml
+[sql_discovery]
+enabled = true
+schema_pattern = "(?:app|test)_\\w+"
+object_pattern = "\\w+"
+merge_strategy = "discovery-only"
+
+# Map SQL types to their defining objects
+[sql_discovery.type_mappings]
+TSTZRANGE = "c_tmf.t_time_period"
+my_enum = "schema.enum_definition"
+
+# Map extensions to their providers
+[sql_discovery.extension_mappings]
+digest = "pgcrypto"
+uuid_generate_v4 = "uuid-ossp"
+
+# Patterns to ignore during discovery
+strip_suffixes = ["_or_ref", "_view"]
+model_gen_patterns = ["codegen_tmf\\.proc_(?:make_model|combine_enums)"]
+
+[analysis]
+# Protect these nodes from dead branch detection
+root_nodes = ["api_main", "public_entry"]
+root_patterns = ["**/api/*.sql", "**/public/*.sql"]
+root_regex = ["^api_.*", "^public_.*"]
+root_dirs = ["api/", "migrations/"]
+
+# Check for external usage
+external_check_dirs = ["src/", "app/"]
+external_check_patterns = ["*.py", "*.rs", "*.ts"]
 ```
 
-`sql/my_schema/functions/b.sql`:
+### SQL Discovery
 
-```postgresql
--- name: my_schema.b
--- dropped_by: my_schema
--- requires: my_schema.a
+Automatically extract dependencies from SQL code, eliminating manual header maintenance:
 
-CREATE FUNCTION my_schema.b() RETURNS INT AS
-$$
-SELECT my_schema.a() + 1
+```bash
+topcat concat -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "myapp_\\w+"
+```
+
+**Discovery Features:**
+- Extracts table, view, function, type, and extension dependencies
+- Configurable schema and object patterns
+- Type and extension mappings for system objects
+- Multiple merge strategies for combining with manual headers
+
+See configuration section for detailed `sql_discovery` options.
+
+## Examples
+
+### Basic SQL Project
+
+**Directory Structure:**
+```
+sql/
+├── schema.sql
+├── functions/
+│   ├── user_auth.sql
+│   └── user_profile.sql
+└── views/
+    └── active_users.sql
+```
+
+**File: sql/schema.sql**
+```sql
+-- name: myapp_schema
+-- layer: prepend
+
+DROP SCHEMA IF EXISTS myapp CASCADE;
+CREATE SCHEMA myapp;
+```
+
+**File: sql/functions/user_auth.sql**
+```sql
+-- name: myapp.user_auth
+-- dropped_by: myapp_schema
+-- requires: myapp_schema
+
+CREATE FUNCTION myapp.user_auth(email TEXT) RETURNS BOOLEAN AS $$
+    SELECT EXISTS(SELECT 1 FROM myapp.users WHERE email = $1);
 $$ LANGUAGE SQL;
 ```
 
-`sql/my_schema/functions/c.sql`:
+**File: sql/views/active_users.sql**
+```sql
+-- name: myapp.active_users
+-- dropped_by: myapp_schema
+-- exists: myapp.user_auth
 
-```postgresql
--- name: my_schema.c
--- dropped_by: my_schema
--- requires: my_schema.b
-
-CREATE FUNCTION my_schema.c() RETURNS INT AS
-$$
-SELECT my_schema.b() + 1
-$$ LANGUAGE SQL IMMUTABLE
-                PARALLEL SAFE;
+CREATE VIEW myapp.active_users AS
+    SELECT * FROM myapp.users WHERE last_login > NOW() - INTERVAL '30 days';
 ```
 
-`sql/my_other_schema/schema.sql`:
-
-```postgresql
--- name: my_other_schema
-
-DROP SCHEMA IF EXISTS my_schema CASCADE;
-CREATE SCHEMA IF NOT EXISTS my_schema;
+**Concatenate:**
+```bash
+topcat concat -i sql/ -o migrations/deploy.sql -e sql
 ```
 
-`sql/my_other_schema/functions/a.sql`:
+**Result:** Files ordered as `schema.sql` → `user_auth.sql` → `user_profile.sql` → `active_users.sql`
 
-```postgresql
--- name: my_other_schema.a
--- dropped_by: my_other_schema
--- requires: my_schema.b
+### Dead Code Cleanup Workflow
 
-CREATE FUNCTION my_other_schema.a() RETURNS INT AS
-$$
-SELECT my_schema.b() + 1
-$$ LANGUAGE SQL IMMUTABLE
-                PARALLEL SAFE;
+```bash
+# Step 1: Analyze and find dead branches
+topcat analyze -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches
+
+# Step 2: Preview deletion (dry-run is default)
+topcat clean -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches
+
+# Step 3: Execute deletion with confirmation
+topcat clean -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches --no-dry-run
+
+# Step 4: Verify no cycles or missing deps remain
+topcat analyze -i sql/ -e sql cycles
+topcat analyze -i sql/ -e sql missing
 ```
 
-So the dependency graph looks like:
-![](https://github.com/joshainglis/topcat/raw/main/docs/assets/graph.png)
+### Multi-Schema Project
 
-Now you can run `topcat` to concatenate the files in the right order:
+```bash
+# List all schemas
+topcat schema -i sql/ -e sql list
 
-```sh
-topcat -i tests/input/sql -o tests/output/sql/output.sql
+# Analyze specific schema
+topcat schema -i sql/ -e sql analyze auth
+
+# Show cross-schema dependencies
+topcat schema -i sql/ -e sql dependencies
+
+# Concatenate only one schema
+topcat concat -i sql/ -e sql -o auth.sql --include-prefix auth.
 ```
 
-The content of `output.sql` will be:
+### CI/CD Integration
 
-```postgresql
--- This file was generated by topcat. To regenerate run:
---
--- topcat -i tests/input/sql -o tests/output/sql/output.sql -v
+**GitHub Actions Example:**
+```yaml
+name: Check SQL Dependencies
 
-------------------------------------------------------------------------------------------------------------------------
--- tests/input/sql/my_other_schema/schema.sql
--- name: my_schema
+on: [push, pull_request]
 
-DROP SCHEMA IF EXISTS my_schema CASCADE;
-CREATE SCHEMA IF NOT EXISTS my_schema;
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo install topcat
 
-------------------------------------------------------------------------------------------------------------------------
--- tests/input/sql/my_other_schema/functions/a.sql
--- name: my_schema.a
--- dropped_by: my_schema
+      # Fail on cycles
+      - run: topcat analyze -i sql/ -e sql --quiet cycles
 
-CREATE FUNCTION my_schema.a() RETURNS INT AS
-$$
-SELECT 1;
-$$ LANGUAGE SQL;
+      # Fail on missing dependencies
+      - run: topcat analyze -i sql/ -e sql --quiet missing
 
-------------------------------------------------------------------------------------------------------------------------
--- tests/input/sql/my_other_schema/functions/b.sql
--- name: my_schema.b
--- dropped_by: my_schema
--- requires: my_schema.a
-
-CREATE FUNCTION my_schema.b() RETURNS INT AS
-$$
-SELECT my_schema.a() + 1
-$$ LANGUAGE SQL;
-
-------------------------------------------------------------------------------------------------------------------------
--- tests/input/sql/my_schema/schema.sql
--- name: my_other_schema
-
-DROP SCHEMA IF EXISTS my_other_schema CASCADE;
-CREATE SCHEMA IF NOT EXISTS my_other_schema;
-
-------------------------------------------------------------------------------------------------------------------------
--- tests/input/sql/my_schema/functions/a.sql
--- name: my_other_schema.a
--- dropped_by: my_other_schema
--- requires: my_schema.b
-
-CREATE FUNCTION my_other_schema.a() RETURNS INT AS
-$$
-SELECT my_schema.b() + 1
-$$ LANGUAGE SQL IMMUTABLE
-                PARALLEL SAFE;
-
-------------------------------------------------------------------------------------------------------------------------
--- tests/input/sql/my_other_schema/functions/c.sql
--- name: my_schema.c
--- dropped_by: my_schema
--- requires: my_schema.b
--- requires: my_other_schema.a
-
-CREATE FUNCTION my_schema.c() RETURNS INT AS
-$$
-SELECT my_schema.b() + my_other_schema.a() + 1
-$$ LANGUAGE SQL;
+      # Report dead branches (informational)
+      - run: topcat analyze -i sql/ -e sql dead-branches
 ```
 
+**Pre-commit Hook:**
+```bash
+#!/bin/bash
+# .git/hooks/pre-commit
+
+# Check for cycles
+if ! topcat analyze -i sql/ -e sql --quiet cycles; then
+    echo "Error: Circular dependencies detected!"
+    exit 1
+fi
+
+# Check for missing dependencies
+if ! topcat analyze -i sql/ -e sql --quiet missing; then
+    echo "Error: Missing dependencies detected!"
+    exit 1
+fi
+```
+
+### Graph Visualization
+
+```bash
+# Export to GraphViz and render
+topcat export -i sql/ -e sql -o graph.dot dot
+dot -Tpng graph.dot -o graph.png
+
+# Export to Mermaid for documentation
+topcat export -i sql/ -e sql -o graph.md mermaid
+
+# Export dependencies of specific node
+topcat export -i sql/ -e sql --mode deps --node api_main -o api_deps.json json
+```
+
+## Best Practices
+
+### 1. Use Meaningful Names
+```sql
+-- Good
+-- name: auth.create_user_function
+-- name: billing.monthly_invoice_view
+
+-- Avoid
+-- name: function1
+-- name: temp
+```
+
+### 2. Leverage Layers for High-Level Organization
+```sql
+-- Schema setup (prepend layer)
+-- name: schema_init
+-- layer: prepend
+
+-- Core logic (normal layer - default)
+-- name: user_functions
+-- layer: normal
+
+-- Post-deployment (append layer)
+-- name: grant_permissions
+-- layer: append
+```
+
+### 3. Use Discovery for SQL Projects
+```bash
+# Enable discovery to avoid manual maintenance
+topcat concat -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "myapp_\\w+"
+
+# Validate your manual headers match reality
+topcat concat -i sql/ -o output.sql --enable-sql-discovery --merge-strategy validate
+```
+
+### 4. Protect Entry Points
+```bash
+# Prevent accidental deletion of API endpoints
+topcat analyze -i sql/ -e sql \
+    --root-pattern "**/api/*.sql" \
+    --root-pattern "**/public/*.sql" \
+    dead-branches
+```
+
+### 5. Check External Usage
+```bash
+# Verify SQL objects aren't used in application code
+topcat analyze -i sql/ -e sql \
+    --external-check-dir src/ \
+    --external-check-pattern "*.py" \
+    --external-check-pattern "*.ts" \
+    dead-branches
+```
+
+### 6. Always Dry-Run First
+```bash
+# Default is safe (dry-run)
+topcat clean -i sql/ -e sql dead-branches
+
+# Only execute after reviewing
+topcat clean -i sql/ -e sql dead-branches --no-dry-run
+```
+
+### 7. Use Configuration Files
+```toml
+# topcat.toml - commit to version control
+[analysis]
+root_patterns = ["**/api/*.sql"]
+external_check_dirs = ["src/", "app/"]
+external_check_patterns = ["*.py"]
+
+[sql_discovery]
+enabled = true
+schema_pattern = "myapp_\\w+"
+```
+
+### 8. Integrate with CI/CD
+```bash
+# Fail builds on dependency issues
+topcat analyze -i sql/ -e sql --quiet cycles || exit 1
+topcat analyze -i sql/ -e sql --quiet missing || exit 1
+```
+
+## Troubleshooting
+
+### Circular Dependencies
+```bash
+# Detect cycles
+topcat analyze -i sql/ -e sql cycles
+
+# Solutions:
+# 1. Use soft dependencies (exists:) instead of hard (requires:)
+# 2. Split files into different layers
+# 3. Reorganize to break the cycle
+```
+
+### Missing Dependencies
+```bash
+# Find missing deps
+topcat analyze -i sql/ -e sql missing
+
+# Solutions:
+# 1. Add the missing file
+# 2. Fix the typo in the dependency name
+# 3. Remove the dependency if no longer needed
+```
+
+### Cross-Layer Violations
+```
+Error: Node 'views.user_summary' in layer 'functions' depends on 'schema.init' in layer 'setup'
+```
+
+**Solution:** Assign correct layer to file or restructure layers:
+```sql
+-- Change layer assignment
+-- layer: setup
+```
+
+### False Positives in Dead Branch Detection
+```bash
+# Protect known entry points
+topcat analyze -i sql/ -e sql \
+    --root-pattern "**/api/*.sql" \
+    --external-check-dir app/ \
+    dead-branches
+```
+
+### Duplicate Names
+```
+Error: Duplicate node name 'schema.users' found in:
+  - sql/v1/users.sql
+  - sql/v2/users.sql
+```
+
+**Solution:** Ensure each file has a unique name:
+```sql
+-- name: schema.users_v1
+-- name: schema.users_v2
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+See [LICENSE](LICENSE) for details.
+
+## Links
+
+- **Repository:** https://github.com/joshainglis/topcat
+- **Issues:** https://github.com/joshainglis/topcat/issues
+- **Documentation:** See [CLAUDE.md](CLAUDE.md) for detailed project documentation
