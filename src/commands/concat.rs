@@ -9,6 +9,8 @@ use topcat::{
     config, exceptions::TopCatError, file_dag::TCGraph, fs, header_generator, output, sql_config,
 };
 
+use super::common;
+
 /// Concatenate files in topological order based on dependencies
 #[derive(Debug, Args)]
 pub struct ConcatArgs {
@@ -191,35 +193,16 @@ impl ConcatArgs {
         }
 
         // Load SQL discovery configuration early
-        let sql_discovery = self.load_sql_discovery_config()?;
+        let sql_discovery = common::load_sql_discovery_config(
+            &self.sql_config_file,
+            self.enable_sql_discovery,
+            &self.schema_pattern,
+            &self.merge_strategy,
+        )?;
 
-        // Parse layers from CLI or use defaults
-        let layers = if let Some(ref layers_str) = self.layers {
-            layers_str
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect()
-        } else {
-            vec![
-                "prepend".to_string(),
-                "normal".to_string(),
-                "append".to_string(),
-            ]
-        };
-
-        // Set fallback layer
-        let fallback_layer = self
-            .fallback_layer
-            .clone()
-            .unwrap_or_else(|| "normal".to_string());
-
-        // Validate that fallback layer exists in layers
-        if !layers.contains(&fallback_layer) {
-            eprintln!(
-                "Error: Fallback layer '{fallback_layer}' is not in the layers list: {layers:?}"
-            );
-            std::process::exit(1);
-        }
+        // Parse and validate layers
+        let (layers, fallback_layer) =
+            common::parse_and_validate_layers(&self.layers, &self.fallback_layer)?;
 
         // Determine header update mode
         let header_update_mode = if self.update_headers {
@@ -298,38 +281,5 @@ impl ConcatArgs {
         }
 
         Ok(())
-    }
-
-    /// Load SQL discovery configuration from file and CLI overrides
-    fn load_sql_discovery_config(&self) -> Result<sql_config::SqlDiscoveryConfig, TopCatError> {
-        // Start with file config if provided
-        let mut config = if let Some(ref config_path) = self.sql_config_file {
-            match sql_config::TopcatConfig::from_file(config_path) {
-                Ok(cfg) => cfg.sql_discovery,
-                Err(e) => {
-                    eprintln!("Warning: Failed to load SQL config file: {e}");
-                    sql_config::SqlDiscoveryConfig::default()
-                }
-            }
-        } else {
-            sql_config::SqlDiscoveryConfig::default()
-        };
-
-        // Apply CLI overrides
-        if self.enable_sql_discovery {
-            config.enabled = true;
-        }
-
-        if let Some(ref pattern) = self.schema_pattern {
-            config.schema_pattern = Some(pattern.clone());
-        }
-
-        // Parse merge strategy
-        config.merge_strategy = self
-            .merge_strategy
-            .parse()
-            .map_err(|e: String| TopCatError::ConfigError(e))?;
-
-        Ok(config)
     }
 }

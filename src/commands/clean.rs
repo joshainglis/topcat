@@ -9,10 +9,10 @@ use log::LevelFilter;
 use topcat::analysis::GraphAnalyzer;
 use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::analysis::root_matcher::RootNodeMatcher;
-use topcat::config;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
-use topcat::sql_config;
+
+use super::common;
 
 /// Remove unused files based on dependency analysis
 #[derive(Debug, Args)]
@@ -284,133 +284,40 @@ impl CleanArgs {
     }
 
     fn build_graph(&self) -> Result<TCGraph, TopCatError> {
-        let sql_discovery = self.load_sql_discovery_config()?;
+        let sql_discovery = common::load_sql_discovery_config(
+            &self.sql_config_file,
+            self.enable_sql_discovery,
+            &self.schema_pattern,
+            &self.merge_strategy,
+        )?;
+        let (layers, fallback_layer) =
+            common::parse_and_validate_layers(&self.layers, &self.fallback_layer)?;
+        let include_node_prefixes = common::build_schema_filter_prefixes(&self.schema_filter);
 
-        let layers = if let Some(ref layers_str) = self.layers {
-            layers_str
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect()
-        } else {
-            vec![
-                "prepend".to_string(),
-                "normal".to_string(),
-                "append".to_string(),
-            ]
-        };
-
-        let fallback_layer = self
-            .fallback_layer
-            .clone()
-            .unwrap_or_else(|| "normal".to_string());
-
-        if !layers.contains(&fallback_layer) {
-            return Err(TopCatError::ConfigError(format!(
-                "Fallback layer '{fallback_layer}' is not in the layers list: {layers:?}"
-            )));
-        }
-
-        // Convert schema filter to node prefixes if specified
-        // Include both "schema" and "schema." to catch schema definition nodes
-        let include_node_prefixes = if !self.schema_filter.is_empty() {
-            let mut prefixes = Vec::new();
-            for schema in &self.schema_filter {
-                prefixes.push(schema.clone()); // For exact match (e.g., "my_schema")
-                prefixes.push(format!("{schema}.")); // For prefixed match (e.g., "my_schema.")
-            }
-            Some(prefixes)
-        } else {
-            None
-        };
-
-        let config = config::Config {
-            input_dirs: self.input_dirs.clone(),
-            include_extensions: self.include_file_extensions.as_deref(),
-            exclude_extensions: self.exclude_file_extensions.as_deref(),
-            include_globs: self.include_globs.as_deref(),
-            exclude_globs: self.exclude_globs.as_deref(),
-            output: PathBuf::from("/dev/null"), // Not used for cleanup
-            comment_str: self.comment_str.clone(),
-            file_separator_str: String::new(),
-            file_end_str: String::new(),
-            include_hidden: self.include_hidden_files_and_directories,
-            verbose: self.verbose,
-            include_node_prefixes: include_node_prefixes.as_deref(),
-            exclude_node_prefixes: None,
-            dry_run: false,
-            subdir_filter: None,
+        common::build_graph(
+            self.input_dirs.clone(),
+            self.include_file_extensions.as_deref(),
+            self.exclude_file_extensions.as_deref(),
+            self.include_globs.as_deref(),
+            self.exclude_globs.as_deref(),
+            self.include_hidden_files_and_directories,
+            self.verbose,
+            self.comment_str.clone(),
             layers,
             fallback_layer,
             sql_discovery,
-            header_update_mode: sql_config::HeaderUpdateMode::Never,
-            header_output_dir: None,
-        };
-
-        let mut graph = TCGraph::new(&config);
-        graph.build_graph()?;
-        Ok(graph)
-    }
-
-    fn load_sql_discovery_config(&self) -> Result<sql_config::SqlDiscoveryConfig, TopCatError> {
-        let mut config = if let Some(ref config_path) = self.sql_config_file {
-            match sql_config::TopcatConfig::from_file(config_path) {
-                Ok(cfg) => cfg.sql_discovery,
-                Err(e) => {
-                    eprintln!("Warning: Failed to load SQL config file: {e}");
-                    sql_config::SqlDiscoveryConfig::default()
-                }
-            }
-        } else {
-            sql_config::SqlDiscoveryConfig::default()
-        };
-
-        // Override with CLI args if provided
-        if self.enable_sql_discovery {
-            config.enabled = true;
-        }
-
-        if let Some(ref pattern) = self.schema_pattern {
-            config.schema_pattern = Some(pattern.clone());
-        }
-
-        config.merge_strategy = self
-            .merge_strategy
-            .parse()
-            .map_err(|e: String| TopCatError::ConfigError(e))?;
-
-        Ok(config)
+            include_node_prefixes,
+        )
     }
 
     fn build_root_matcher(&self) -> Result<Option<RootNodeMatcher>, TopCatError> {
-        // Start with empty matcher
-        let mut root_nodes = self.root_nodes.clone();
-        let mut root_patterns = self.root_patterns.clone();
-        let mut root_regex = self.root_regex.clone();
-        let mut root_dirs = self.root_dirs.clone();
-
-        // Try to load from config file
-        if let Some(ref config_path) = self.sql_config_file {
-            if let Ok(cfg) = sql_config::TopcatConfig::from_file(config_path) {
-                let analysis_cfg = cfg.analysis;
-                root_nodes.extend(analysis_cfg.root_nodes);
-                root_patterns.extend(analysis_cfg.root_patterns);
-                root_regex.extend(analysis_cfg.root_regex);
-                root_dirs.extend(analysis_cfg.root_dirs.into_iter().map(PathBuf::from));
-            }
-        }
-
-        // If we have any root configuration, create the matcher
-        if !root_nodes.is_empty()
-            || !root_patterns.is_empty()
-            || !root_regex.is_empty()
-            || !root_dirs.is_empty()
-        {
-            RootNodeMatcher::new(root_nodes, root_patterns, root_regex, root_dirs)
-                .map(Some)
-                .map_err(TopCatError::ConfigError)
-        } else {
-            Ok(None)
-        }
+        common::build_root_matcher(
+            &self.sql_config_file,
+            self.root_nodes.clone(),
+            self.root_patterns.clone(),
+            self.root_regex.clone(),
+            self.root_dirs.clone(),
+        )
     }
 
     fn clean_dead_branches(

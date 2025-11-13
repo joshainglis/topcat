@@ -64,12 +64,7 @@ use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
 use topcat::sql_config;
 
-// Default configuration constants
-const DEFAULT_FALLBACK_LAYER: &str = "normal";
-const DEFAULT_LAYER_PREPEND: &str = "prepend";
-const DEFAULT_LAYER_NORMAL: &str = "normal";
-const DEFAULT_LAYER_APPEND: &str = "append";
-const DEFAULT_MERGE_STRATEGY: &str = "discovery-only";
+use super::common;
 
 /// Abstraction for analysis output that respects quiet mode.
 ///
@@ -248,7 +243,7 @@ pub struct AnalyzeArgs {
         long = "merge-strategy",
         help = "How to merge discovered and manual dependencies",
         value_name = "STRATEGY",
-        default_value = DEFAULT_MERGE_STRATEGY
+        default_value = common::DEFAULT_MERGE_STRATEGY
     )]
     merge_strategy: String,
 
@@ -332,108 +327,6 @@ enum AnalyzeCommand {
 }
 
 impl AnalyzeArgs {
-    /// Build a HashMap for O(1) node lookups by name.
-    ///
-    /// This helper method improves performance from O(n²) to O(n) for analyses
-    /// that need to look up node details repeatedly. Instead of linear searching
-    /// through all nodes for each result, we build a hash map once and use O(1) lookups.
-    ///
-    /// # Arguments
-    ///
-    /// * `nodes` - Slice of all file nodes in the graph
-    ///
-    /// # Returns
-    ///
-    /// HashMap mapping node names to node references for fast lookup
-    fn build_node_map(
-        nodes: &[topcat::file_node::FileNode],
-    ) -> std::collections::HashMap<&str, &topcat::file_node::FileNode> {
-        nodes.iter().map(|n| (n.name.as_str(), n)).collect()
-    }
-
-    /// Get the platform-specific null device path.
-    ///
-    /// Returns `/dev/null` on Unix, `NUL` on Windows, and `/dev/null` as fallback
-    /// for other platforms. Used when building graphs for analysis where no actual
-    /// output file is needed.
-    #[cfg(unix)]
-    fn null_device() -> &'static str {
-        "/dev/null"
-    }
-
-    #[cfg(windows)]
-    fn null_device() -> &'static str {
-        "NUL"
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    fn null_device() -> &'static str {
-        "/dev/null" // Fallback for other platforms
-    }
-
-    /// Parse layers from CLI args or use defaults, validate fallback layer.
-    ///
-    /// Layers enforce ordering between groups of files. This method parses the
-    /// comma-separated layer list from CLI args (or uses defaults), validates that
-    /// the fallback layer exists in the layer list, and returns both.
-    ///
-    /// # Returns
-    ///
-    /// `Ok((layers, fallback_layer))` with the validated layer configuration, or
-    /// `Err(TopCatError::ConfigError)` if the fallback layer is not in the layers list.
-    ///
-    /// # Default Layers
-    ///
-    /// If not specified: `["prepend", "normal", "append"]` with fallback `"normal"`
-    fn parse_and_validate_layers(&self) -> Result<(Vec<String>, String), TopCatError> {
-        let layers = if let Some(ref layers_str) = self.layers {
-            layers_str
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect()
-        } else {
-            vec![
-                DEFAULT_LAYER_PREPEND.to_string(),
-                DEFAULT_LAYER_NORMAL.to_string(),
-                DEFAULT_LAYER_APPEND.to_string(),
-            ]
-        };
-
-        let fallback_layer = self
-            .fallback_layer
-            .clone()
-            .unwrap_or_else(|| DEFAULT_FALLBACK_LAYER.to_string());
-
-        if !layers.contains(&fallback_layer) {
-            return Err(TopCatError::ConfigError(format!(
-                "Fallback layer '{fallback_layer}' is not in the layers list: {layers:?}"
-            )));
-        }
-
-        Ok((layers, fallback_layer))
-    }
-
-    /// Convert schema filter CLI args to node prefixes for filtering.
-    ///
-    /// When analyzing specific schemas, this method converts schema names (e.g., `my_schema`)
-    /// into node name prefixes for matching (e.g., `my_schema` and `my_schema.`).
-    ///
-    /// # Returns
-    ///
-    /// `Some(Vec<String>)` with prefixes if schemas are specified, `None` otherwise
-    fn build_schema_filter_prefixes(&self) -> Option<Vec<String>> {
-        if self.schema_filter.is_empty() {
-            return None;
-        }
-
-        let mut prefixes = Vec::new();
-        for schema in &self.schema_filter {
-            prefixes.push(schema.clone()); // For exact match (e.g., "my_schema")
-            prefixes.push(format!("{schema}.")); // For prefixed match (e.g., "my_schema.")
-        }
-        Some(prefixes)
-    }
-
     /// Generic analysis function that handles the common pattern across multiple analyses.
     ///
     /// This function eliminates ~70% code duplication by providing a reusable pattern for:
@@ -509,7 +402,7 @@ impl AnalyzeArgs {
 
         // Build node map once for O(1) lookups
         let all_nodes = graph.get_all_nodes();
-        let node_map = Self::build_node_map(&all_nodes);
+        let node_map = common::build_node_map(&all_nodes);
 
         for name in sorted_results {
             if let Some(&node) = node_map.get(name.as_str()) {
@@ -626,74 +519,30 @@ impl AnalyzeArgs {
     /// - Cycles are detected
     /// - Required dependencies are missing
     fn build_graph(&self) -> Result<TCGraph, TopCatError> {
-        let sql_discovery = self.load_sql_discovery_config()?;
-        let (layers, fallback_layer) = self.parse_and_validate_layers()?;
-        let include_node_prefixes = self.build_schema_filter_prefixes();
+        let sql_discovery = common::load_sql_discovery_config(
+            &self.sql_config_file,
+            self.enable_sql_discovery,
+            &self.schema_pattern,
+            &self.merge_strategy,
+        )?;
+        let (layers, fallback_layer) =
+            common::parse_and_validate_layers(&self.layers, &self.fallback_layer)?;
+        let include_node_prefixes = common::build_schema_filter_prefixes(&self.schema_filter);
 
-        let config = config::Config {
-            input_dirs: self.input_dirs.clone(),
-            include_extensions: self.include_file_extensions.as_deref(),
-            exclude_extensions: self.exclude_file_extensions.as_deref(),
-            include_globs: self.include_globs.as_deref(),
-            exclude_globs: self.exclude_globs.as_deref(),
-            output: PathBuf::from(Self::null_device()), // Platform-specific null device
-            comment_str: self.comment_str.clone(),
-            file_separator_str: String::new(),
-            file_end_str: String::new(),
-            include_hidden: self.include_hidden_files_and_directories,
-            verbose: self.verbose,
-            include_node_prefixes: include_node_prefixes.as_deref(),
-            exclude_node_prefixes: None,
-            dry_run: false,
-            subdir_filter: None,
+        common::build_graph(
+            self.input_dirs.clone(),
+            self.include_file_extensions.as_deref(),
+            self.exclude_file_extensions.as_deref(),
+            self.include_globs.as_deref(),
+            self.exclude_globs.as_deref(),
+            self.include_hidden_files_and_directories,
+            self.verbose,
+            self.comment_str.clone(),
             layers,
             fallback_layer,
             sql_discovery,
-            header_update_mode: sql_config::HeaderUpdateMode::Never,
-            header_output_dir: None,
-        };
-
-        let mut graph = TCGraph::new(&config);
-        graph.build_graph()?;
-        Ok(graph)
-    }
-
-    /// Load SQL discovery configuration from file and merge with CLI args.
-    ///
-    /// Loads configuration from TOML file if specified, then overlays CLI arguments
-    /// for enabled state, schema pattern, and merge strategy.
-    ///
-    /// # Returns
-    ///
-    /// `Ok(SqlDiscoveryConfig)` with merged configuration, or `Err(TopCatError)` if
-    /// the configuration file cannot be parsed or merge strategy is invalid.
-    fn load_sql_discovery_config(&self) -> Result<sql_config::SqlDiscoveryConfig, TopCatError> {
-        let mut config = if let Some(ref config_path) = self.sql_config_file {
-            match sql_config::TopcatConfig::from_file(config_path) {
-                Ok(cfg) => cfg.sql_discovery,
-                Err(e) => {
-                    eprintln!("Warning: Failed to load SQL config file: {e}");
-                    sql_config::SqlDiscoveryConfig::default()
-                }
-            }
-        } else {
-            sql_config::SqlDiscoveryConfig::default()
-        };
-
-        if self.enable_sql_discovery {
-            config.enabled = true;
-        }
-
-        if let Some(ref pattern) = self.schema_pattern {
-            config.schema_pattern = Some(pattern.clone());
-        }
-
-        config.merge_strategy = self
-            .merge_strategy
-            .parse()
-            .map_err(|e: String| TopCatError::ConfigError(e))?;
-
-        Ok(config)
+            include_node_prefixes,
+        )
     }
 
     /// Build a root node matcher from config file and CLI args.
@@ -708,54 +557,13 @@ impl AnalyzeArgs {
     /// - `Ok(None)` if no root patterns are configured
     /// - `Err(TopCatError)` if configuration is invalid or patterns cannot be compiled
     fn build_root_matcher(&self) -> Result<Option<RootNodeMatcher>, TopCatError> {
-        // Load from config file if specified
-        let mut config_roots = if let Some(ref config_path) = self.sql_config_file {
-            let config = sql_config::TopcatConfig::from_file(config_path)
-                .map_err(|e| TopCatError::ConfigError(format!("Failed to load config: {e}")))?;
-            config.analysis
-        } else {
-            sql_config::AnalysisConfig::default()
-        };
-
-        // Merge CLI args (CLI extends config)
-        if !self.root_nodes.is_empty() {
-            config_roots.root_nodes.extend(self.root_nodes.clone());
-        }
-        if !self.root_patterns.is_empty() {
-            config_roots
-                .root_patterns
-                .extend(self.root_patterns.clone());
-        }
-        if !self.root_regex.is_empty() {
-            config_roots.root_regex.extend(self.root_regex.clone());
-        }
-        if !self.root_dirs.is_empty() {
-            config_roots.root_dirs.extend(
-                self.root_dirs
-                    .iter()
-                    .map(|p| p.to_string_lossy().to_string()),
-            );
-        }
-
-        // Only create matcher if any patterns were specified
-        if config_roots.root_nodes.is_empty()
-            && config_roots.root_patterns.is_empty()
-            && config_roots.root_regex.is_empty()
-            && config_roots.root_dirs.is_empty()
-        {
-            return Ok(None);
-        }
-
-        let dirs: Vec<PathBuf> = config_roots.root_dirs.iter().map(PathBuf::from).collect();
-
-        RootNodeMatcher::new(
-            config_roots.root_nodes,
-            config_roots.root_patterns,
-            config_roots.root_regex,
-            dirs,
+        common::build_root_matcher(
+            &self.sql_config_file,
+            self.root_nodes.clone(),
+            self.root_patterns.clone(),
+            self.root_regex.clone(),
+            self.root_dirs.clone(),
         )
-        .map(Some)
-        .map_err(TopCatError::ConfigError)
     }
 
     /// Find and display dead branches (complete subtrees that can be removed together).
@@ -828,7 +636,7 @@ impl AnalyzeArgs {
 
         // Build node map once for O(1) lookups
         let all_nodes = graph.get_all_nodes();
-        let node_map = Self::build_node_map(&all_nodes);
+        let node_map = common::build_node_map(&all_nodes);
 
         for node_name in sorted_branches {
             if let Some(&node) = node_map.get(node_name.as_str()) {
@@ -1123,9 +931,15 @@ impl AnalyzeArgs {
         logger.section("🔍 Missing Dependencies Analysis");
 
         // Build a minimal config for validation (same as build_graph but for validation only)
-        let sql_discovery = self.load_sql_discovery_config()?;
-        let (layers, fallback_layer) = self.parse_and_validate_layers()?;
-        let include_node_prefixes = self.build_schema_filter_prefixes();
+        let sql_discovery = common::load_sql_discovery_config(
+            &self.sql_config_file,
+            self.enable_sql_discovery,
+            &self.schema_pattern,
+            &self.merge_strategy,
+        )?;
+        let (layers, fallback_layer) =
+            common::parse_and_validate_layers(&self.layers, &self.fallback_layer)?;
+        let include_node_prefixes = common::build_schema_filter_prefixes(&self.schema_filter);
 
         let config = config::Config {
             input_dirs: self.input_dirs.clone(),
@@ -1133,7 +947,7 @@ impl AnalyzeArgs {
             exclude_extensions: self.exclude_file_extensions.as_deref(),
             include_globs: self.include_globs.as_deref(),
             exclude_globs: self.exclude_globs.as_deref(),
-            output: PathBuf::from(Self::null_device()),
+            output: PathBuf::from(common::null_device()),
             comment_str: self.comment_str.clone(),
             file_separator_str: String::new(),
             file_end_str: String::new(),

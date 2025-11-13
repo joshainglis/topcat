@@ -3,9 +3,10 @@ use comfy_table::{Cell, Color, Table, modifiers::UTF8_ROUND_CORNERS, presets::UT
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use topcat::config::Config;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+
+use super::common;
 
 #[derive(Debug, Subcommand)]
 pub enum SchemaCommand {
@@ -59,57 +60,27 @@ impl SchemaArgs {
     }
 
     fn build_graph(&self) -> Result<TCGraph, TopCatError> {
-        let layers = if let Some(ref layers_str) = self.layers {
-            layers_str
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect()
-        } else {
-            vec![
-                "prepend".to_string(),
-                "normal".to_string(),
-                "append".to_string(),
-            ]
-        };
+        let (layers, fallback_layer) =
+            common::parse_and_validate_layers(&self.layers, &Some(self.fallback_layer.clone()))?;
 
-        let fallback_layer = self.fallback_layer.clone();
-
-        if !layers.contains(&fallback_layer) {
-            return Err(TopCatError::ConfigError(format!(
-                "Fallback layer '{fallback_layer}' is not in the layers list: {layers:?}"
-            )));
-        }
-
-        let config = Config {
-            input_dirs: self.input_dirs.clone(),
-            include_extensions: if self.include_extensions.is_empty() {
+        common::build_graph(
+            self.input_dirs.clone(),
+            if self.include_extensions.is_empty() {
                 None
             } else {
                 Some(&self.include_extensions)
             },
-            exclude_extensions: None,
-            include_globs: None,
-            exclude_globs: None,
-            output: PathBuf::from("/dev/null"), // Not used for schema analysis
-            comment_str: self.comment_str.clone(),
-            file_separator_str: String::new(),
-            file_end_str: String::new(),
-            include_hidden: false,
-            verbose: false,
-            include_node_prefixes: None,
-            exclude_node_prefixes: None,
-            dry_run: false,
-            subdir_filter: None,
+            None,  // exclude_extensions
+            None,  // include_globs
+            None,  // exclude_globs
+            false, // include_hidden
+            false, // verbose
+            self.comment_str.clone(),
             layers,
             fallback_layer,
-            sql_discovery: Default::default(),
-            header_update_mode: topcat::sql_config::HeaderUpdateMode::Never,
-            header_output_dir: None,
-        };
-
-        let mut graph = TCGraph::new(&config);
-        graph.build_graph()?;
-        Ok(graph)
+            Default::default(), // sql_discovery
+            None,               // schema_filter_prefixes
+        )
     }
 
     fn list_schemas(&self, graph: &TCGraph) -> Result<(), TopCatError> {

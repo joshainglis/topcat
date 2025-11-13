@@ -2,9 +2,10 @@ use clap::{Args, Subcommand, ValueEnum};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use topcat::config::Config;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+
+use super::common as cmd_common;
 
 mod common;
 mod dot;
@@ -128,57 +129,29 @@ impl ExportArgs {
     /// - The fallback layer is not in the layers list
     /// - Graph construction fails (file reading, parsing, cycle detection)
     fn build_graph(&self) -> Result<TCGraph, TopCatError> {
-        let layers = if let Some(ref layers_str) = self.layers {
-            layers_str
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect()
-        } else {
-            vec![
-                "prepend".to_string(),
-                "normal".to_string(),
-                "append".to_string(),
-            ]
-        };
+        let (layers, fallback_layer) = cmd_common::parse_and_validate_layers(
+            &self.layers,
+            &Some(self.fallback_layer.clone()),
+        )?;
 
-        let fallback_layer = self.fallback_layer.clone();
-
-        if !layers.contains(&fallback_layer) {
-            return Err(TopCatError::ConfigError(format!(
-                "Fallback layer '{fallback_layer}' is not in the layers list: {layers:?}"
-            )));
-        }
-
-        let config = Config {
-            input_dirs: self.input_dirs.clone(),
-            include_extensions: if self.include_extensions.is_empty() {
+        cmd_common::build_graph(
+            self.input_dirs.clone(),
+            if self.include_extensions.is_empty() {
                 None
             } else {
                 Some(&self.include_extensions)
             },
-            include_globs: None,
-            exclude_globs: None,
-            exclude_extensions: None,
-            output: PathBuf::new(), // Not used for export - dummy value
-            comment_str: self.comment_str.clone(),
-            file_separator_str: String::new(),
-            file_end_str: String::new(),
-            verbose: false,
-            dry_run: false,
-            include_node_prefixes: None,
-            exclude_node_prefixes: None,
-            include_hidden: false,
-            subdir_filter: None,
+            None,  // exclude_extensions
+            None,  // include_globs
+            None,  // exclude_globs
+            false, // include_hidden
+            false, // verbose
+            self.comment_str.clone(),
             layers,
             fallback_layer,
-            sql_discovery: Default::default(),
-            header_update_mode: Default::default(),
-            header_output_dir: None,
-        };
-
-        let mut graph = TCGraph::new(&config);
-        graph.build_graph()?;
-        Ok(graph)
+            Default::default(), // sql_discovery
+            None,               // schema_filter_prefixes
+        )
     }
 
     /// Filters the graph to include only nodes from the specified schemas.
