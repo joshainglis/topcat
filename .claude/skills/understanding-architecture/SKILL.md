@@ -1,46 +1,77 @@
 ---
 name: understanding-architecture
-description: Provides deep architectural insights into Topcat's implementation including module structure, DAG algorithms, and layer system. Use when exploring Topcat internals, understanding the topological sort implementation, extending functionality, or debugging complex dependency issues.
+description: Provides deep architectural insights into Topcat's implementation including module structure, DAG algorithms, layer system, analysis capabilities, and schema operations. Use when exploring Topcat internals, understanding algorithms, extending functionality, or debugging complex issues.
 ---
 
 # Understanding Topcat Architecture
 
 ## System Overview
 
-Topcat uses a directed acyclic graph (DAG) with layer-based constraints to order files based on dependencies.
+Topcat uses a directed acyclic graph (DAG) with layer-based constraints to order files based on dependencies, analyze graph structure, detect dead code, and manage multi-schema projects.
 
+**Core Workflows**:
 ```
-Input Files → Parse Metadata → Build DAG → Validate → Topological Sort → Output
+Concat:  Input Files → Parse Metadata → Build DAG → Validate → Topological Sort → Output
+Analyze: Input Files → Build DAG → Run Analysis Algorithms → Report Results
+Clean:   Input Files → Build DAG → Find Dead Nodes → Validate Safety → Delete Files
+Schema:  Input Files → Build DAG → Extract Schemas → Analyze Cross-Schema Deps
+Export:  Input Files → Build DAG → Generate Export Format → Write Output
 ```
 
 ## Core Components
 
 ### File Representation
 
-- **FileNode**: Represents files with metadata (name, dependencies, layer)
+- **FileNode**: Represents files with metadata (name, dependencies, layer, schema)
 - **Metadata Parser**: Extracts headers from comment lines
+- **Schema Extraction**: Automatic from node names (`schema.table` or `schema::table`)
 - **Dependency Types**: `requires` (hard), `exists` (soft), `dropped_by` (reverse)
 
 ### Graph Management
 
-- **TCGraph**: Multi-layer DAG structure
+- **TCGraph**: Multi-layer DAG structure with schema-aware operations
 - **Layer System**: Enforces ordering between file groups
 - **Validation**: Cycle detection and cross-layer dependency checks
+- **Analysis Algorithms**: Dead branches, orphans, leaf/root nodes via GraphAnalyzer trait
+- **Schema Operations**: Grouping, filtering, cross-schema dependency tracking
 
-### Ordering Algorithm
+### Command Structure
 
-- **Stable Topological Sort**: Deterministic DFS-based sorting
-- **Node Weighting**: Ensures consistent output across runs
-- **Layer Constraints**: Maintains strict inter-layer ordering
+- **Subcommand Architecture**: `concat`, `analyze`, `clean`, `schema`, `export`
+- **Shared Graph Building**: All commands use TCGraph as foundation
+- **Analysis Trait**: Common interface via `GraphAnalyzer` trait
+- **Safety Mechanisms**: Root node protection, external usage checking, dry-run mode
 
 ## Module Map
 
+### Core Infrastructure
+
 | Module           | Purpose               | Details                                            |
 |------------------|-----------------------|----------------------------------------------------|
-| `main.rs`        | CLI and orchestration | [reference/modules.md](reference/modules.md)       |
-| `file_node.rs`   | File representation   | [reference/modules.md](reference/modules.md)       |
-| `file_dag.rs`    | DAG management        | [reference/algorithms.md](reference/algorithms.md) |
+| `main.rs`        | CLI routing to subcommands | [reference/modules.md](reference/modules.md)  |
+| `file_node.rs`   | File representation, schema extraction | [reference/modules.md](reference/modules.md) |
+| `file_dag.rs`    | DAG management, schema ops, analysis | [reference/algorithms.md](reference/algorithms.md) |
 | `stable_topo.rs` | Topological sorting   | [reference/algorithms.md](reference/algorithms.md) |
+| `config.rs`      | Configuration, TOML parsing | [reference/modules.md](reference/modules.md) |
+| `output.rs`      | File output generation | [reference/modules.md](reference/modules.md) |
+
+### Commands (Subcommands)
+
+| Module           | Purpose               | Details                                            |
+|------------------|-----------------------|----------------------------------------------------|
+| `commands/concat.rs` | File concatenation | [reference/modules.md](reference/modules.md) |
+| `commands/analyze.rs` | 8 analysis commands | [reference/algorithms.md](reference/algorithms.md) |
+| `commands/clean.rs` | Safe file deletion | [reference/modules.md](reference/modules.md) |
+| `commands/schema.rs` | Schema operations | [reference/modules.md](reference/modules.md) |
+| `commands/export.rs` | Graph export (4 formats) | [reference/modules.md](reference/modules.md) |
+
+### Analysis Infrastructure
+
+| Module           | Purpose               | Details                                            |
+|------------------|-----------------------|----------------------------------------------------|
+| `analysis/mod.rs` | GraphAnalyzer trait, algorithms | [reference/algorithms.md](reference/algorithms.md) |
+| `analysis/root_matcher.rs` | Root node protection patterns | [reference/modules.md](reference/modules.md) |
+| `analysis/external_usage.rs` | External usage checking | [reference/modules.md](reference/modules.md) |
 
 ## Layer System
 
@@ -58,17 +89,31 @@ For implementation details, see [reference/layers.md](reference/layers.md).
 
 ## Key Algorithms
 
-### Topological Sort
+### Ordering Algorithms
 
-Custom DFS implementation with deterministic ordering through node weights.
+- **Topological Sort**: Custom DFS implementation with deterministic ordering through node weights
+- **Cycle Detection**: Uses `graph-cycles` crate to identify circular dependencies
+- **Dependency Resolution**: Breadth-first traversal to pull in transitive dependencies
 
-### Cycle Detection
+### Analysis Algorithms (GraphAnalyzer Trait)
 
-Uses `graph-cycles` crate to identify circular dependencies.
+- **Dead Branches**: Iterative transitive closure to find complete dead subtrees (not just leaf nodes)
+- **Orphan Detection**: Finds nodes with no dependencies AND no dependents
+- **Leaf/Root Nodes**: Identifies graph endpoints and entry points
+- **Unrequired Nodes**: Finds nodes not required by any other nodes
+- **Missing Dependencies**: Validates all dependency references exist
 
-### Dependency Resolution
+### Schema Operations
 
-Breadth-first traversal to pull in transitive dependencies.
+- **Schema Extraction**: Parses node names for schema prefixes (`schema.table` or `schema::table`)
+- **Cross-Schema Dependencies**: Builds map of dependencies between schemas
+- **Schema Grouping**: Groups nodes by schema for filtered operations
+
+### Graph Traversal
+
+- **Transitive Dependencies**: BFS to find all dependencies of a node (for export modes)
+- **Transitive Dependents**: Reverse BFS to find all dependents of a node
+- **Direct Neighbors**: Returns immediate dependencies and dependents
 
 For algorithm details, see [reference/algorithms.md](reference/algorithms.md).
 
@@ -80,12 +125,32 @@ Common customization scenarios:
 - **Custom sort order**: Update Ord implementation
 - **New filter types**: Extend io_utils patterns
 - **Additional validations**: Add to graph validation
+- **New analysis algorithms**: Implement GraphAnalyzer trait methods
+- **New export formats**: Add to export command with format-specific serialization
+- **Custom protection patterns**: Extend RootNodeMatcher with new pattern types
+- **New commands**: Add subcommand to Commands enum and implement handler
 
 For extension guide, see [reference/extensions.md](reference/extensions.md).
 
 ## Performance Notes
 
+**Graph Operations**:
 - Graph construction: O(V + E)
 - Topological sort: O(V + E)
-- Memory usage: O(V) for visited sets
-- File I/O: Lazy content reading
+- Dead branches analysis: O(V + E) with iterative refinement
+- Schema extraction: O(V) during node creation
+
+**External Checking**:
+- Parallel file scanning using rayon
+- File content caching for fast lookups
+- Progress bars for operations >100 items
+
+**Memory Usage**:
+- O(V) for visited sets during traversal
+- O(E) for dependency maps
+- File content caching bounded by external file count
+
+**I/O**:
+- Lazy content reading for concat
+- Parallel scanning for external usage checking
+- Efficient file deletion with error recovery
