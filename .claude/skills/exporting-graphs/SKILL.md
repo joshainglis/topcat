@@ -47,13 +47,8 @@ topcat export -i sql/ -e sql -o graph.json json
 - Edge information (source, target, type)
 - Schema groupings with statistics
 - Graph metadata (version, timestamp, counts)
-- Node classification (root, intermediate, leaf)
 
-**Use cases**:
-- API consumption
-- Custom analysis tools
-- Data processing pipelines
-- Integration with other systems
+**Use cases**: API consumption, custom analysis tools, data processing pipelines
 
 ### DOT - GraphViz Visualization
 
@@ -65,20 +60,14 @@ topcat export -i sql/ -e sql -o graph.dot dot
 # Generate image
 dot -Tpng graph.dot -o graph.png
 dot -Tsvg graph.dot -o graph.svg
-dot -Tpdf graph.dot -o graph.pdf
 ```
 
 **Features**:
-- Schema-based node coloring (6 distinct colors)
-- Schema subgraphs for visual grouping
-- Cross-schema edges highlighted (red dashed lines)
-- Supports all GraphViz layout engines (dot, neato, fdp, circo)
+- Schema-based node coloring
+- Cross-schema edges highlighted (red dashed)
+- Supports all GraphViz layouts (dot, neato, fdp, circo)
 
-**Use cases**:
-- Visual dependency exploration
-- Architecture documentation
-- Identifying bottlenecks
-- Understanding flow
+**Use cases**: Visual exploration, architecture documentation, identifying bottlenecks
 
 ### GraphML - Standard Format
 
@@ -88,22 +77,9 @@ XML format compatible with graph analysis tools:
 topcat export -i sql/ -e sql -o graph.graphml graphml
 ```
 
-**Compatible with**:
-- Gephi (network analysis)
-- yEd (diagram editor)
-- Cytoscape (biological networks)
-- NetworkX (Python)
+**Compatible with**: Gephi, yEd, Cytoscape, NetworkX
 
-**Preserves**:
-- Node attributes (schema, layer, path)
-- Edge attributes (type)
-- Full metadata
-
-**Use cases**:
-- Advanced graph analysis
-- Interactive exploration
-- Community detection
-- Centrality analysis
+**Use cases**: Advanced graph analysis, interactive exploration, community detection
 
 ### Mermaid - Markdown Diagrams
 
@@ -114,16 +90,11 @@ topcat export -i sql/ -e sql -o graph.md mermaid
 ```
 
 **Features**:
-- Flowchart format for dependency graphs
+- Renders in GitHub, GitLab, VS Code
 - Schema-based subgraphs
 - Cross-schema deps as dotted lines
-- Renders in GitHub, GitLab, VS Code
 
-**Use cases**:
-- Documentation in README.md
-- Pull request descriptions
-- Wiki pages
-- Inline documentation
+**Use cases**: README documentation, PR descriptions, wiki pages
 
 ## Export Modes
 
@@ -134,8 +105,6 @@ Export entire dependency graph:
 ```bash
 topcat export -i sql/ -e sql -o full.json json
 ```
-
-Includes all nodes and edges.
 
 ### Dependencies Mode
 
@@ -148,10 +117,7 @@ topcat export -i sql/ -e sql \
   -o deps.json json
 ```
 
-**Useful for**:
-- Understanding what a node needs
-- Minimal subgraph for node execution
-- Dependency analysis
+**Useful for**: Understanding what a node needs, minimal subgraph for execution
 
 ### Dependents Mode
 
@@ -164,10 +130,7 @@ topcat export -i sql/ -e sql \
   -o dependents.json json
 ```
 
-**Useful for**:
-- Impact analysis (what depends on this?)
-- Understanding downstream effects
-- Change risk assessment
+**Useful for**: Impact analysis, understanding downstream effects
 
 ### Direct Neighbors Mode
 
@@ -180,10 +143,7 @@ topcat export -i sql/ -e sql \
   -o direct.json json
 ```
 
-**Useful for**:
-- Quick node relationship view
-- Local dependency check
-- Simplified visualization
+**Useful for**: Quick relationship view, simplified visualization
 
 ## Common Workflows
 
@@ -224,20 +184,6 @@ Documentation Checklist:
 
 - [ ] Step 4: Verify rendering on GitHub
       git push && open https://github.com/user/repo/blob/main/DEPENDENCIES.md
-```
-
-### Analysis Tool Integration
-
-```bash
-# Export to JSON
-topcat export -i sql/ -e sql -o graph.json json
-
-# Process with custom tool
-python analyze_graph.py graph.json
-
-# Or use jq for quick queries
-cat graph.json | jq '.nodes[] | select(.schema=="auth")'
-cat graph.json | jq '.nodes[] | select(.classification=="leaf")'
 ```
 
 ### Per-Schema Visualization
@@ -283,38 +229,6 @@ fdp -Tpng graph.dot -o graph.png
 
 # Circular - good for showing cycles
 circo -Tpng graph.dot -o graph.png
-
-# Radial - good for star-like graphs
-twopi -Tpng graph.dot -o graph.png
-```
-
-## Mermaid Rendering
-
-### GitHub/GitLab
-
-Automatically renders in:
-- README.md
-- Wiki pages
-- Issue/PR descriptions
-- `.md` files in repo
-
-### VS Code
-
-Install "Markdown Preview Mermaid Support" extension.
-
-### Online
-
-- [Mermaid Live Editor](https://mermaid.live/)
-- Copy/paste diagram code
-
-### Local
-
-```bash
-# Install mermaid-cli
-npm install -g @mermaid-js/mermaid-cli
-
-# Generate image
-mmdc -i graph.md -o graph.png
 ```
 
 ## Advanced Examples
@@ -343,17 +257,7 @@ topcat export -i sql/ -e sql \
 dot -Tpng api_deps.dot -o api_deps.png
 ```
 
-### Cross-Schema Architecture
-
-```bash
-# Full graph showing schema boundaries
-topcat export -i sql/ -e sql -o architecture.dot dot
-
-# Use fdp layout for better schema clustering
-fdp -Tpng architecture.dot -o architecture.png
-```
-
-### JSON Querying
+### JSON Querying with jq
 
 ```bash
 # Export JSON
@@ -382,13 +286,18 @@ jq '.edges[] | select(.source | startswith("auth")) | select(.target | startswit
 | JSON file too large | Use mode filtering or export subgraphs |
 | Schema colors not distinct | Only 6 colors available, use schema filtering |
 
-## Integration Examples
+## Tool Integration
 
-See [reference/integrations.md](reference/integrations.md) for:
-- Python NetworkX integration
-- Gephi import and analysis
-- Custom visualization scripts
-- CI/CD report generation
+See [reference/integrations.md](reference/integrations.md) for detailed examples:
+
+- **Python/NetworkX** - Programmatic graph analysis, centrality metrics, community detection
+- **Gephi** - Interactive visualization, modularity analysis, statistical reports
+- **yEd** - Diagram editing, automatic layouts, property mapping
+- **GraphViz Advanced** - Custom styling, subgraph layouts, enhanced visualization
+- **Mermaid Dynamic** - Python generation scripts, custom formatting
+- **CI/CD Integration** - GitHub Actions, GitLab CI, automated reports
+- **Custom D3.js** - Web-based interactive visualization
+- **Database Storage** - PostgreSQL integration for graph data
 
 ## Format Comparison
 

@@ -54,27 +54,13 @@ No configuration needed - extraction is automatic!
 
 ### List Schemas
 
-View all schemas with statistics and distribution:
+View all schemas with statistics:
 
 ```bash
 topcat schema -i sql/ -e sql list
 ```
 
-**Output**:
-```
-╭─────────────┬───────┬──────────────┬─────────────────────────────────╮
-│ Schema      ┆ Files ┆ Dependencies ┆ Distribution                    │
-╞═════════════╪═══════╪══════════════╪═════════════════════════════════╡
-│ auth        ┆ 5     ┆ 12           ┆ ████████████████████░░░░░░░░░░░ │
-│ billing     ┆ 3     ┆ 8            ┆ ████████████░░░░░░░░░░░░░░░░░░░ │
-│ public      ┆ 2     ┆ 4            ┆ ████████░░░░░░░░░░░░░░░░░░░░░░░ │
-╰─────────────┴───────┴──────────────┴─────────────────────────────────╯
-```
-
-Shows:
-- File count per schema
-- Dependency count
-- Visual bar chart
+Shows file count, dependency count, and distribution bar chart for each schema.
 
 ### Analyze Schema
 
@@ -82,32 +68,6 @@ Detailed view of a specific schema:
 
 ```bash
 topcat schema -i sql/ -e sql analyze auth
-```
-
-**Output**:
-```
-Schema: auth
-
-Files (5):
-  - auth.users_table
-  - auth.sessions
-  - auth.permissions
-
-Internal Dependencies (3):
-  auth.sessions → auth.users_table
-  auth.permissions → auth.users_table
-  auth.audit_log → auth.sessions
-
-External Dependencies (2):
-
-  To schema 'public':
-    auth.users_table → public.extensions
-
-  To schema 'billing':
-    auth.users_table → billing.customers
-
-Dependent Schemas (1):
-  billing
 ```
 
 Shows:
@@ -124,20 +84,6 @@ View all cross-schema relationships:
 topcat schema -i sql/ -e sql dependencies
 ```
 
-**Output**:
-```
-Cross-Schema Dependencies:
-
-╭───────────────┬───┬─────────────╮
-│ Source Schema ┆ → ┆ Target Schema │
-╞═══════════════╪═══╪═════════════╡
-│ auth          ┆ → ┆ public      │
-│ auth          ┆ → ┆ billing     │
-│ billing       ┆ → ┆ auth        │
-│ billing       ┆ → ┆ public      │
-╰───────────────┴───┴─────────────╯
-```
-
 Helps identify:
 - Schema coupling
 - Circular dependencies between schemas
@@ -152,7 +98,6 @@ Filter analyze, clean, and export operations to specific schemas:
 ```bash
 # Analyze only one schema
 topcat analyze -i sql/ -e sql --schema auth dead-branches
-topcat analyze -i sql/ -e sql --schema billing orphans
 
 # Multiple schemas
 topcat analyze -i sql/ -e sql \
@@ -218,15 +163,6 @@ for schema in auth billing public; do
 done
 ```
 
-### Schema-Specific Cleanup
-
-```bash
-# Clean up one schema without affecting others
-topcat clean -i sql/ -e sql \
-  --schema deprecated_schema \
-  unrequired --no-dry-run --force
-```
-
 ### Visualize Schema Architecture
 
 ```bash
@@ -237,9 +173,6 @@ topcat export -i sql/ -e sql --schema billing -o billing.dot dot
 # Generate images
 dot -Tpng auth.dot -o auth.png
 dot -Tpng billing.dot -o billing.png
-
-# Or export cross-schema view
-topcat export -i sql/ -e sql -o full.dot dot
 ```
 
 ## Schema-Aware Protection
@@ -260,45 +193,32 @@ topcat clean -i sql/ -e sql \
   orphans --no-dry-run
 ```
 
-## Understanding Schema Extraction
+## Common Patterns
 
-### File Node Schema Field
+### Layered Architecture
 
-Every `FileNode` has:
-```rust
-pub schema: Option<String>
+Good separation of concerns:
+
+```
+┌─────────────┐
+│   public    │  (Shared utilities, extensions)
+└─────────────┘
+       ↑
+       │
+┌──────┴──────┬──────────────┬──────────────┐
+│    auth     │   billing    │  reporting   │
+└─────────────┴──────────────┴──────────────┘
 ```
 
-Extracted automatically from node name during graph building.
+Only allow dependencies flowing up (to `public`), no horizontal dependencies.
 
-### Extraction Rules
+### Microservice Pattern
 
-1. **Dot separator** (`.`):
-   - `auth.users` → schema: "auth", name: "auth.users"
-   - `a.b.c` → schema: "a", name: "a.b.c" (first segment)
+Each service has isolated schema with minimal cross-schema dependencies.
 
-2. **Double colon** (`::`):
-   - `auth::users` → schema: "auth", name: "auth::users"
-   - `a::b::c` → schema: "a", name: "a::b::c" (first segment)
+### Core-Periphery Pattern
 
-3. **No separator**:
-   - `users` → schema: None, name: "users"
-
-4. **Mixed** (handled consistently):
-   - `my_schema.table_name` → schema: "my_schema"
-   - Uses first separator found
-
-### Schema Definitions
-
-Files can also DEFINE a schema (via SQL discovery):
-
-```sql
--- Schema definition file
-CREATE SCHEMA IF NOT EXISTS auth;
-```
-
-Node name: `auth` (the schema itself)
-Schema field: `None` or special handling
+Core schema is widely depended upon, peripheral schemas depend on core but not each other.
 
 ## Use Cases
 
@@ -309,7 +229,6 @@ Each service has its own schema:
 ```bash
 # Check coupling between services
 topcat schema -i sql/ -e sql dependencies
-
 # Should show minimal cross-schema deps
 ```
 
@@ -348,9 +267,9 @@ topcat export -i sql/ -e sql --schema feature_x -o feature_x.md mermaid
 
 ## Detailed References
 
-- **Schema patterns**: See [reference/patterns.md](reference/patterns.md)
-- **Cross-schema analysis**: See [reference/dependencies.md](reference/dependencies.md)
-- **Advanced filtering**: See [reference/filtering.md](reference/filtering.md)
+- **Schema patterns**: See [reference/patterns.md](reference/patterns.md) - Naming conventions, best practices, and migration patterns
+- **Cross-schema analysis**: See [reference/dependencies.md](reference/dependencies.md) - Analyzing coupling, circular dependencies, and architectural patterns
+- **Advanced filtering**: See [reference/filtering.md](reference/filtering.md) - Complex filter combinations, performance optimization, and practical examples
 
 ## Related Skills
 
