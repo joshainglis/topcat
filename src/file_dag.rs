@@ -2,6 +2,7 @@ use graph_cycles::Cycles;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use log::{debug, info, trace};
 use petgraph::algo::is_cyclic_directed;
@@ -162,9 +163,9 @@ fn perform_sql_discovery(
 }
 
 fn add_nodes_to_graphs(
-    layer_graphs: &mut HashMap<String, DiGraph<FileNode, ()>>,
+    layer_graphs: &mut HashMap<String, DiGraph<Rc<FileNode>, ()>>,
     layer_index_maps: &mut HashMap<String, HashMap<String, NodeIndex>>,
-    name_map: &HashMap<String, FileNode>,
+    name_map: &HashMap<String, Rc<FileNode>>,
 ) {
     for file_node in name_map.values() {
         let layer = &file_node.layer;
@@ -175,14 +176,14 @@ fn add_nodes_to_graphs(
             .get_mut(layer)
             .expect("Layer index map should exist");
 
-        let idx = graph.add_node(file_node.clone());
+        let idx = graph.add_node(Rc::clone(file_node));
         index_map.insert(file_node.name.clone(), idx);
     }
 }
 
 fn validate_dependencies(
-    name_map: &HashMap<String, FileNode>,
-    layer_graphs: &mut HashMap<String, DiGraph<FileNode, ()>>,
+    name_map: &HashMap<String, Rc<FileNode>>,
+    layer_graphs: &mut HashMap<String, DiGraph<Rc<FileNode>, ()>>,
     layer_index_maps: &HashMap<String, HashMap<String, NodeIndex>>,
     layers: &[String],
 ) -> Result<(), TopCatError> {
@@ -255,22 +256,22 @@ fn validate_dependencies(
 
 fn extract_cycle_nodes(
     cycle: Vec<NodeIndex>,
-    graph: &Graph<FileNode, (), Directed>,
+    graph: &Graph<Rc<FileNode>, (), Directed>,
 ) -> Vec<FileNode> {
     cycle
         .iter()
         .map(|n| {
-            graph
+            let rc_node = graph
                 .node_weight(*n)
-                .expect("Cycle node should exist in graph")
-                .clone()
+                .expect("Cycle node should exist in graph");
+            (**rc_node).clone()
         })
         .collect()
 }
 
 fn convert_cycle_indexes_to_cycle_nodes(
     cycles: Vec<Vec<NodeIndex>>,
-    graph: &Graph<FileNode, (), Directed>,
+    graph: &Graph<Rc<FileNode>, (), Directed>,
 ) -> Vec<Vec<FileNode>> {
     cycles
         .iter()
@@ -278,7 +279,7 @@ fn convert_cycle_indexes_to_cycle_nodes(
         .collect()
 }
 fn check_cyclic_dependencies(
-    layer_graphs: &HashMap<String, DiGraph<FileNode, ()>>,
+    layer_graphs: &HashMap<String, DiGraph<Rc<FileNode>, ()>>,
 ) -> Result<(), TopCatError> {
     let mut cycles: Vec<Vec<FileNode>> = Vec::new();
 
@@ -304,12 +305,12 @@ pub struct TCGraph {
     pub exclude_extensions: Option<HashSet<String>>,
     pub include_node_prefixes: Option<HashSet<String>>,
     pub exclude_node_prefixes: Option<HashSet<String>>,
-    layer_graphs: HashMap<String, DiGraph<FileNode, ()>>,
+    layer_graphs: HashMap<String, DiGraph<Rc<FileNode>, ()>>,
     layer_index_maps: HashMap<String, HashMap<String, NodeIndex>>,
     layers: Vec<String>,
     fallback_layer: String,
-    path_map: HashMap<PathBuf, FileNode>,
-    name_map: HashMap<String, FileNode>,
+    path_map: HashMap<PathBuf, Rc<FileNode>>,
+    name_map: HashMap<String, Rc<FileNode>>,
     include_hidden: bool,
     graph_is_built: bool,
     subdir_filter: Option<PathBuf>,
@@ -422,9 +423,11 @@ impl TCGraph {
                 ));
             }
 
+            let file_node_rc = Rc::new(file_node);
             self.name_map
-                .insert(file_node.name.clone(), file_node.clone());
-            self.path_map.insert(file_node.path.clone(), file_node);
+                .insert(file_node_rc.name.clone(), Rc::clone(&file_node_rc));
+            self.path_map
+                .insert(file_node_rc.path.clone(), file_node_rc);
         }
 
         add_nodes_to_graphs(
@@ -503,9 +506,11 @@ impl TCGraph {
                 ));
             }
 
+            let file_node_rc = Rc::new(file_node);
             self.name_map
-                .insert(file_node.name.clone(), file_node.clone());
-            self.path_map.insert(file_node.path.clone(), file_node);
+                .insert(file_node_rc.name.clone(), Rc::clone(&file_node_rc));
+            self.path_map
+                .insert(file_node_rc.path.clone(), file_node_rc);
         }
 
         // Now collect all missing dependencies instead of failing on the first one
@@ -555,7 +560,7 @@ impl TCGraph {
     pub fn graph_as_dot(
         &self,
         layer_name: &str,
-    ) -> Result<Dot<&DiGraph<FileNode, ()>>, TopCatError> {
+    ) -> Result<Dot<&DiGraph<Rc<FileNode>, ()>>, TopCatError> {
         if !self.graph_is_built {
             return Err(TopCatError::GraphMissing);
         }
@@ -574,7 +579,13 @@ impl TCGraph {
 
     /// Get all file nodes from the graph
     pub fn get_all_nodes(&self) -> Vec<FileNode> {
-        self.name_map.values().cloned().collect()
+        self.name_map.values().map(|arc| (**arc).clone()).collect()
+    }
+
+    /// Get an iterator over all file nodes (Rc references)
+    /// This is more efficient than get_all_nodes() as it avoids cloning
+    pub fn nodes(&self) -> impl Iterator<Item = &Rc<FileNode>> {
+        self.name_map.values()
     }
 
     pub fn get_sorted_files(&self) -> Result<Vec<PathBuf>, TopCatError> {
