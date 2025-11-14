@@ -9,17 +9,17 @@ use topcat::sql_config::SqlDiscoveryConfig;
 
 // Helper to create a test file with metadata
 fn create_test_file(dir: &TempDir, name: &str, requires: &[&str], layer: &str) {
-    let filename = format!("{}.sql", name);
+    let filename = format!("{name}.sql");
     let file_path = dir.path().join(&filename);
 
-    let mut content = format!("-- name: {}\n", name);
+    let mut content = format!("-- name: {name}\n");
     if !requires.is_empty() {
         content.push_str(&format!("-- requires: {}\n", requires.join(", ")));
     }
     if !layer.is_empty() && layer != "normal" {
-        content.push_str(&format!("-- layer: {}\n", layer));
+        content.push_str(&format!("-- layer: {layer}\n"));
     }
-    content.push_str(&format!("CREATE TABLE {} ();\n", name));
+    content.push_str(&format!("CREATE TABLE {name} ();\n"));
 
     fs::write(&file_path, content).unwrap();
 }
@@ -72,7 +72,7 @@ proptest! {
         // Create nodes with random but acyclic dependencies
         let mut nodes = Vec::new();
         for i in 0..node_count {
-            let name = format!("node_{}", i);
+            let name = format!("node_{i}");
 
             // Only depend on nodes created before this one (ensures no cycles)
             let max_deps = i.min(3);
@@ -81,7 +81,7 @@ proptest! {
             let mut requires = Vec::new();
             for _ in 0..num_deps {
                 let dep_idx = rng.random_range(0..i);
-                requires.push(format!("node_{}", dep_idx));
+                requires.push(format!("node_{dep_idx}"));
             }
             requires.dedup();
 
@@ -137,13 +137,13 @@ proptest! {
 
         // Create nodes in different layers
         for i in 0..prepend_count {
-            create_test_file(&dir, &format!("prep_{}", i), &[], "prepend");
+            create_test_file(&dir, &format!("prep_{i}"), &[], "prepend");
         }
         for i in 0..normal_count {
-            create_test_file(&dir, &format!("norm_{}", i), &[], "normal");
+            create_test_file(&dir, &format!("norm_{i}"), &[], "normal");
         }
         for i in 0..append_count {
-            create_test_file(&dir, &format!("app_{}", i), &[], "append");
+            create_test_file(&dir, &format!("app_{i}"), &[], "append");
         }
 
         let graph = build_graph_from_dir(&dir, &["prepend", "normal", "append"]);
@@ -192,7 +192,7 @@ proptest! {
         create_test_file(&dir, "node_0", &[], "normal");
         for i in 1..chain_length {
             let dep = format!("node_{}", i - 1);
-            create_test_file(&dir, &format!("node_{}", i), &[&dep], "normal");
+            create_test_file(&dir, &format!("node_{i}"), &[&dep], "normal");
         }
 
         let graph = build_graph_from_dir(&dir, &["normal"]);
@@ -212,7 +212,7 @@ proptest! {
 
         // Verify all expected nodes are present
         for i in 0..chain_length - 1 {
-            let expected = format!("node_{}", i);
+            let expected = format!("node_{i}");
             prop_assert!(
                 transitive_deps.contains(&expected),
                 "Transitive dependencies should include {}",
@@ -233,12 +233,12 @@ proptest! {
         // Create main nodes that depend on each other
         create_test_file(&dir, "main_0", &[], "normal");
         for i in 1..main_count {
-            create_test_file(&dir, &format!("main_{}", i), &["main_0"], "normal");
+            create_test_file(&dir, &format!("main_{i}"), &["main_0"], "normal");
         }
 
         // Create isolated orphan nodes
         for i in 0..orphan_count {
-            create_test_file(&dir, &format!("orphan_{}", i), &[], "normal");
+            create_test_file(&dir, &format!("orphan_{i}"), &[], "normal");
         }
 
         let graph = build_graph_from_dir(&dir, &["normal"]);
@@ -274,10 +274,10 @@ proptest! {
 
         // Create nodes in two schemas
         for i in 0..schema_a_count {
-            create_test_file(&dir, &format!("schema_a.table_{}", i), &[], "normal");
+            create_test_file(&dir, &format!("schema_a.table_{i}"), &[], "normal");
         }
         for i in 0..schema_b_count {
-            create_test_file(&dir, &format!("schema_b.table_{}", i), &[], "normal");
+            create_test_file(&dir, &format!("schema_b.table_{i}"), &[], "normal");
         }
 
         let graph = build_graph_from_dir(&dir, &["normal"]);
@@ -307,26 +307,24 @@ fn test_deterministic_sort() {
 
     // Create nodes with no dependencies (order is ambiguous without determinism)
     for i in 0..5 {
-        create_test_file(&dir, &format!("node_{}", i), &[], "normal");
+        create_test_file(&dir, &format!("node_{i}"), &[], "normal");
     }
 
     let graph1 = build_graph_from_dir(&dir, &["normal"]);
     let sorted_paths1 = graph1.get_sorted_files().unwrap();
     let all_nodes1 = graph1.get_all_nodes();
-    let path_to_node1: HashMap<_, _> = all_nodes1.iter()
-        .map(|n| (n.path.clone(), n))
-        .collect();
-    let sorted1: Vec<_> = sorted_paths1.iter()
+    let path_to_node1: HashMap<_, _> = all_nodes1.iter().map(|n| (n.path.clone(), n)).collect();
+    let sorted1: Vec<_> = sorted_paths1
+        .iter()
         .filter_map(|p| path_to_node1.get(p).map(|n| &n.name))
         .collect();
 
     let graph2 = build_graph_from_dir(&dir, &["normal"]);
     let sorted_paths2 = graph2.get_sorted_files().unwrap();
     let all_nodes2 = graph2.get_all_nodes();
-    let path_to_node2: HashMap<_, _> = all_nodes2.iter()
-        .map(|n| (n.path.clone(), n))
-        .collect();
-    let sorted2: Vec<_> = sorted_paths2.iter()
+    let path_to_node2: HashMap<_, _> = all_nodes2.iter().map(|n| (n.path.clone(), n)).collect();
+    let sorted2: Vec<_> = sorted_paths2
+        .iter()
         .filter_map(|p| path_to_node2.get(p).map(|n| &n.name))
         .collect();
 

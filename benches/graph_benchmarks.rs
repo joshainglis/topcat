@@ -1,25 +1,25 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use std::fs;
 use tempfile::TempDir;
-use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::analysis::GraphAnalyzer;
+use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::config::Config;
 use topcat::file_dag::TCGraph;
 use topcat::sql_config::SqlDiscoveryConfig;
 
 // Helper to create a test file with metadata
 fn create_test_file(dir: &TempDir, name: &str, requires: &[&str], layer: &str) {
-    let filename = format!("{}.sql", name);
+    let filename = format!("{name}.sql");
     let file_path = dir.path().join(&filename);
 
-    let mut content = format!("-- name: {}\n", name);
+    let mut content = format!("-- name: {name}\n");
     if !requires.is_empty() {
         content.push_str(&format!("-- requires: {}\n", requires.join(", ")));
     }
     if !layer.is_empty() && layer != "normal" {
-        content.push_str(&format!("-- layer: {}\n", layer));
+        content.push_str(&format!("-- layer: {layer}\n"));
     }
-    content.push_str(&format!("CREATE TABLE {} ();\n", name));
+    content.push_str(&format!("CREATE TABLE {name} ();\n"));
 
     fs::write(&file_path, content).unwrap();
 }
@@ -30,14 +30,10 @@ fn setup_test_graph(node_count: usize, avg_deps_per_node: usize) -> (TempDir, TC
 
     // Create nodes with dependencies on earlier nodes
     for i in 0..node_count {
-        let name = format!("node_{}", i);
+        let name = format!("node_{i}");
 
         // Create dependencies to earlier nodes
-        let num_deps = if i == 0 {
-            0
-        } else {
-            avg_deps_per_node.min(i)
-        };
+        let num_deps = if i == 0 { 0 } else { avg_deps_per_node.min(i) };
 
         let requires: Vec<String> = (0..num_deps)
             .map(|j| format!("node_{}", i.saturating_sub(j + 1)))
@@ -85,7 +81,7 @@ fn bench_graph_building(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let dir = TempDir::new().unwrap();
             for i in 0..size {
-                let name = format!("node_{}", i);
+                let name = format!("node_{i}");
                 let deps = if i > 0 {
                     vec![format!("node_{}", i - 1)]
                 } else {
@@ -121,7 +117,8 @@ fn bench_graph_building(c: &mut Criterion) {
                     header_output_dir: None,
                 };
                 let mut graph = TCGraph::new(&config);
-                black_box(graph.build_graph().unwrap());
+                graph.build_graph().unwrap();
+                black_box(());
             });
         });
     }
@@ -173,16 +170,16 @@ fn bench_orphan_detection(c: &mut Criterion) {
 
             // Create a graph with half connected nodes and half orphans
             for i in 0..size / 2 {
-                let name = format!("connected_{}", i);
+                let name = format!("connected_{i}");
                 if i > 0 {
-                    create_test_file(&dir, &name, &[&format!("connected_0")], "normal");
+                    create_test_file(&dir, &name, &["connected_0"], "normal");
                 } else {
                     create_test_file(&dir, &name, &[], "normal");
                 }
             }
 
             for i in 0..size / 2 {
-                let name = format!("orphan_{}", i);
+                let name = format!("orphan_{i}");
                 create_test_file(&dir, &name, &[], "normal");
             }
 
@@ -233,13 +230,13 @@ fn bench_dead_branches(c: &mut Criterion) {
             // Create a main tree and a dead branch
             create_test_file(&dir, "main_root", &[], "normal");
             for i in 1..size / 2 {
-                create_test_file(&dir, &format!("main_{}", i), &["main_root"], "normal");
+                create_test_file(&dir, &format!("main_{i}"), &["main_root"], "normal");
             }
 
             // Create dead branch
             create_test_file(&dir, "dead_root", &[], "normal");
             for i in 1..size / 2 {
-                create_test_file(&dir, &format!("dead_{}", i), &["dead_root"], "normal");
+                create_test_file(&dir, &format!("dead_{i}"), &["dead_root"], "normal");
             }
 
             let extensions: Option<Vec<String>> = Some(vec!["sql".to_string()]);
@@ -271,12 +268,9 @@ fn bench_dead_branches(c: &mut Criterion) {
 
             b.iter(|| {
                 // Protect main_root as root node
-                let matcher = RootNodeMatcher::new(
-                    vec!["main_root".to_string()],
-                    vec![],
-                    vec![],
-                    vec![],
-                ).unwrap();
+                let matcher =
+                    RootNodeMatcher::new(vec!["main_root".to_string()], vec![], vec![], vec![])
+                        .unwrap();
                 let dead_branches = graph.find_dead_branches(Some(&matcher));
                 black_box(dead_branches);
             });
