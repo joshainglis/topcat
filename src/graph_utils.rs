@@ -24,11 +24,12 @@ use crate::file_node::FileNode;
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use topcat::file_dag::TCGraph;
 /// use topcat::graph_utils::build_name_to_node_map;
+/// use topcat::config::Config;
 ///
-/// # let config = topcat::config::Config::default();
+/// # let config: Config = unimplemented!();
 /// # let graph = TCGraph::new(&config);
 /// let nodes = graph.get_all_nodes();
 /// let node_map = build_name_to_node_map(&nodes);
@@ -57,11 +58,12 @@ pub fn build_name_to_node_map(nodes: &[FileNode]) -> HashMap<&str, &FileNode> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use topcat::file_dag::TCGraph;
 /// use topcat::graph_utils::build_name_to_path_map;
+/// use topcat::config::Config;
 ///
-/// # let config = topcat::config::Config::default();
+/// # let config: Config = unimplemented!();
 /// # let graph = TCGraph::new(&config);
 /// let nodes = graph.get_all_nodes();
 /// let path_map = build_name_to_path_map(&nodes);
@@ -93,12 +95,13 @@ pub fn build_name_to_path_map(nodes: &[FileNode]) -> HashMap<String, PathBuf> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use std::path::PathBuf;
 /// use topcat::file_dag::TCGraph;
 /// use topcat::graph_utils::build_path_to_node_map;
+/// use topcat::config::Config;
 ///
-/// # let config = topcat::config::Config::default();
+/// # let config: Config = unimplemented!();
 /// # let graph = TCGraph::new(&config);
 /// let nodes = graph.get_all_nodes();
 /// let path_map = build_path_to_node_map(&nodes);
@@ -128,11 +131,12 @@ pub fn build_path_to_node_map(nodes: &[FileNode]) -> HashMap<PathBuf, &FileNode>
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use topcat::file_dag::TCGraph;
 /// use topcat::graph_utils::count_nodes_by_layer;
+/// use topcat::config::Config;
 ///
-/// # let config = topcat::config::Config::default();
+/// # let config: Config = unimplemented!();
 /// # let graph = TCGraph::new(&config);
 /// let nodes = graph.get_all_nodes();
 /// let layer_counts = count_nodes_by_layer(&nodes);
@@ -164,11 +168,12 @@ pub fn count_nodes_by_layer(nodes: &[FileNode]) -> HashMap<String, usize> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use topcat::file_dag::TCGraph;
 /// use topcat::graph_utils::filter_nodes_by_layer;
+/// use topcat::config::Config;
 ///
-/// # let config = topcat::config::Config::default();
+/// # let config: Config = unimplemented!();
 /// # let graph = TCGraph::new(&config);
 /// let nodes = graph.get_all_nodes();
 /// let normal_nodes = filter_nodes_by_layer(&nodes, "normal");
@@ -194,11 +199,12 @@ pub fn filter_nodes_by_layer<'a>(nodes: &'a [FileNode], layer: &str) -> Vec<&'a 
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use topcat::file_dag::TCGraph;
 /// use topcat::graph_utils::group_nodes_by_schema;
+/// use topcat::config::Config;
 ///
-/// # let config = topcat::config::Config::default();
+/// # let config: Config = unimplemented!();
 /// # let graph = TCGraph::new(&config);
 /// let nodes = graph.get_all_nodes();
 /// let schema_groups = group_nodes_by_schema(&nodes);

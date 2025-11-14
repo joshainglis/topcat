@@ -164,14 +164,12 @@
 //!
 //! ```no_run
 //! # use topcat::file_dag::TCGraph;
-//! # use topcat::schema_utils::SchemaFilter;
 //! # use topcat::config::Config;
 //! # let config: Config = unimplemented!();
 //! # let mut graph = TCGraph::new(&config);
 //! # graph.build_graph().unwrap();
-//! let schema_filter = SchemaFilter::new(vec!["public".to_string()]);
-//! graph.apply_schema_filter(&schema_filter)?;
-//! # Ok::<(), topcat::exceptions::TopCatError>(())
+//! let schemas = vec!["public".to_string()];
+//! graph.apply_schema_filter(&schemas);
 //! ```
 //!
 //! # Error Handling

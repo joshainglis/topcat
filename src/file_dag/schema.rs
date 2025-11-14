@@ -144,8 +144,11 @@ impl TCGraph {
     ///
     /// ```no_run
     /// # use topcat::file_dag::TCGraph;
-    /// # let mut graph = TCGraph::new(&Default::default());
-    /// graph.apply_schema_filter(&["auth".to_string(), "billing".to_string()]);
+    /// # use topcat::config::Config;
+    /// # let config: Config = unimplemented!();
+    /// # let mut graph = TCGraph::new(&config);
+    /// let schemas = vec!["auth".to_string(), "billing".to_string()];
+    /// graph.apply_schema_filter(&schemas);
     /// ```
     pub fn apply_schema_filter(&mut self, schemas: &[String]) {
         let filter = SchemaFilter::from(schemas);
