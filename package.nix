@@ -7,7 +7,7 @@
 
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "topcat";
-  version = "0.2.4";
+  version = "0.3.0";
 
   src = ./.;
   cargoHash = "sha256-YPgxoTm2earVQSz7QzBpAHMqiMHZndZkWPO8uHBZYxw=";
