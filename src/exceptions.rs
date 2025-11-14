@@ -148,6 +148,7 @@ pub enum FileNodeError {
     TooManyNames(PathBuf, Vec<String>),
     NoNameDefined(PathBuf),
     InvalidLayer(PathBuf, String),
+    FileOpen(PathBuf, io::Error),
 }
 
 impl fmt::Display for FileNodeError {
@@ -162,6 +163,9 @@ impl fmt::Display for FileNodeError {
             Self::NoNameDefined(x) => write!(f, "No name defined in {}", x.display()),
             Self::InvalidLayer(x, layer) => {
                 write!(f, "Invalid layer '{}' declared in {}", layer, x.display())
+            }
+            Self::FileOpen(path, err) => {
+                write!(f, "Failed to open file {}: {err}", path.display())
             }
         }
     }

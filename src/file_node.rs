@@ -9,11 +9,8 @@ use std::path::PathBuf;
 
 use crate::exceptions::FileNodeError;
 
-fn get_file_headers(path: &PathBuf, comment_str: &str) -> Vec<String> {
-    let file = match File::open(path) {
-        Err(why) => panic!("couldn't open {}: {why}", path.display()),
-        Ok(file) => file,
-    };
+fn get_file_headers(path: &PathBuf, comment_str: &str) -> io::Result<Vec<String>> {
+    let file = File::open(path)?;
 
     // fill a vector with the first lines of the file starting with the comment string ignoring empty lines. Stop on the first line without the comment string.
     let reader = io::BufReader::new(file);
@@ -26,15 +23,14 @@ fn get_file_headers(path: &PathBuf, comment_str: &str) -> Vec<String> {
             };
             x.starts_with(comment_str) || x.is_empty()
         })
-        .collect::<io::Result<_>>()
-        .unwrap_or_else(|_| vec![]);
+        .collect::<io::Result<_>>()?;
 
     // remove any empty lines from the vector and return
-    file_data
+    Ok(file_data
         .iter()
         .filter(|x| !x.is_empty())
         .map(|x| x.to_string())
-        .collect()
+        .collect())
 }
 
 #[derive(Debug, Clone)]
@@ -173,7 +169,8 @@ impl FileNode {
         layers: &[String],
         fallback_layer: &str,
     ) -> Result<FileNode, FileNodeError> {
-        let file_data = get_file_headers(path, comment_str);
+        let file_data = get_file_headers(path, comment_str)
+            .map_err(|err| FileNodeError::FileOpen(path.clone(), err))?;
         let name_str = format!("{comment_str} name:");
         let dep_str = format!("{comment_str} requires:");
         let drop_str = format!("{comment_str} dropped_by:");

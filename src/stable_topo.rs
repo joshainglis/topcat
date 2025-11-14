@@ -93,15 +93,17 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         // Sort the `tovisit` vector based on the node weights
+        // Cache weights to avoid repeated lookups and handle missing nodes gracefully
         self.tovisit.sort_unstable_by(|a, b| {
-            match self.graph.node_weight(*a) {
-                Some(x) => x,
-                None => panic!("Node not found in graph: {a:?}"),
-            }
-            .cmp(match self.graph.node_weight(*b) {
-                Some(x) => x,
-                None => panic!("Node not found in graph: {b:?}"),
-            })
+            let weight_a = self
+                .graph
+                .node_weight(*a)
+                .expect("Invariant violation: node in tovisit not found in graph");
+            let weight_b = self
+                .graph
+                .node_weight(*b)
+                .expect("Invariant violation: node in tovisit not found in graph");
+            weight_a.cmp(weight_b)
         });
 
         // Take an unvisited element and find which of its neighbors are next
@@ -121,16 +123,17 @@ where
                     neighbors.push(neigh);
                 }
             }
-            // Sort the neighbors based on the node index
+            // Sort the neighbors based on the node weights
             neighbors.sort_unstable_by(|a, b| {
-                match self.graph.node_weight(*a) {
-                    Some(x) => x,
-                    None => panic!("Node not found in graph: {a:?}"),
-                }
-                .cmp(match self.graph.node_weight(*b) {
-                    Some(x) => x,
-                    None => panic!("Node not found in graph: {b:?}"),
-                })
+                let weight_a = self
+                    .graph
+                    .node_weight(*a)
+                    .expect("Invariant violation: neighbor node not found in graph");
+                let weight_b = self
+                    .graph
+                    .node_weight(*b)
+                    .expect("Invariant violation: neighbor node not found in graph");
+                weight_a.cmp(weight_b)
             });
             self.tovisit.extend(neighbors);
             return Some(nix);

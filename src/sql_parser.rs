@@ -4,6 +4,32 @@ use std::collections::HashSet;
 
 use crate::sql_config::SqlDiscoveryConfig;
 
+/// Maximum allowed length for user-supplied regex patterns to prevent complexity issues
+const MAX_PATTERN_LENGTH: usize = 500;
+
+/// Validate a user-supplied regex pattern for basic safety checks
+fn validate_regex_pattern(pattern: &str) -> Result<(), String> {
+    // Check pattern length to prevent excessive complexity
+    if pattern.len() > MAX_PATTERN_LENGTH {
+        return Err(format!(
+            "Regex pattern too long ({} chars). Maximum allowed is {} characters.",
+            pattern.len(),
+            MAX_PATTERN_LENGTH
+        ));
+    }
+
+    // Check for empty pattern
+    if pattern.trim().is_empty() {
+        return Err("Regex pattern cannot be empty".to_string());
+    }
+
+    // Try to compile the pattern to ensure it's valid
+    // Rust's regex crate is resistant to ReDoS, but we still validate for correctness
+    Regex::new(pattern).map_err(|e| format!("Invalid regex pattern: {e}"))?;
+
+    Ok(())
+}
+
 /// Result of analyzing SQL content
 #[derive(Debug, Clone)]
 pub struct SqlAnalysisResult {
@@ -46,6 +72,11 @@ pub struct SqlAnalyzer {
 impl SqlAnalyzer {
     /// Create a new SQL analyzer with the given configuration
     pub fn new(config: SqlDiscoveryConfig) -> Result<Self, Box<dyn std::error::Error>> {
+        // Validate schema pattern if provided
+        if let Some(ref schema_pat) = config.schema_pattern {
+            validate_regex_pattern(schema_pat)?;
+        }
+
         // Build dependency pattern if schema pattern is provided
         let dependency_pattern = if let Some(ref schema_pat) = config.schema_pattern {
             // Pattern to match schema.object or "schema"."object" or just schema
@@ -73,16 +104,22 @@ impl SqlAnalyzer {
             .build()?
         };
 
-        // Build model generation patterns
+        // Build model generation patterns with validation
         let model_gen_patterns = config
             .model_gen_patterns
             .iter()
             .filter_map(|pat| {
+                // Validate pattern first
+                if let Err(e) = validate_regex_pattern(pat) {
+                    warn!("Skipping invalid model generation pattern '{pat}': {e}");
+                    return None;
+                }
+
                 RegexBuilder::new(pat)
                     .case_insensitive(true)
                     .build()
                     .map_err(|e| {
-                        warn!("Invalid model generation pattern '{pat}': {e}");
+                        warn!("Failed to compile model generation pattern '{pat}': {e}");
                         e
                     })
                     .ok()

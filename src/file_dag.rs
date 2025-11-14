@@ -106,6 +106,10 @@ fn handle_file_node_error(e: FileNodeError) -> Result<(), TopCatError> {
             p,
             format!("Invalid layer '{layer}' declared"),
         )),
+        FileNodeError::FileOpen(p, err) => Err(TopCatError::InvalidFileHeader(
+            p,
+            format!("Failed to open file: {err}"),
+        )),
     }
 }
 
@@ -204,8 +208,12 @@ fn validate_dependencies(
                 TopCatError::MissingDependency(file_node.name.clone(), dep.clone())
             })?;
 
-            let file_layer_idx = layer_indices.get(&file_node.layer).unwrap();
-            let dep_layer_idx = layer_indices.get(&dep_node.layer).unwrap();
+            let file_layer_idx = layer_indices
+                .get(&file_node.layer)
+                .expect("Layer index should exist for node layer");
+            let dep_layer_idx = layer_indices
+                .get(&dep_node.layer)
+                .expect("Layer index should exist for dependency layer");
 
             // Enforce layer ordering: lower index layers cannot depend on higher index layers
             if file_layer_idx < dep_layer_idx {
@@ -224,11 +232,19 @@ fn validate_dependencies(
 
             // Only add edges within the same layer
             if file_node.layer == dep_node.layer {
-                let graph = layer_graphs.get_mut(&file_node.layer).unwrap();
-                let index_map = layer_index_maps.get(&file_node.layer).unwrap();
+                let graph = layer_graphs
+                    .get_mut(&file_node.layer)
+                    .expect("Layer graph should exist for node layer");
+                let index_map = layer_index_maps
+                    .get(&file_node.layer)
+                    .expect("Layer index map should exist for node layer");
                 graph.add_edge(
-                    *index_map.get(dep).unwrap(),
-                    *index_map.get(&file_node.name).unwrap(),
+                    *index_map
+                        .get(dep)
+                        .expect("Dependency node index should exist in map"),
+                    *index_map
+                        .get(&file_node.name)
+                        .expect("Node index should exist in map"),
                     (),
                 );
             }
@@ -243,7 +259,12 @@ fn extract_cycle_nodes(
 ) -> Vec<FileNode> {
     cycle
         .iter()
-        .map(|n| graph.node_weight(*n).unwrap().clone())
+        .map(|n| {
+            graph
+                .node_weight(*n)
+                .expect("Cycle node should exist in graph")
+                .clone()
+        })
         .collect()
 }
 
@@ -605,7 +626,10 @@ impl TCGraph {
         let mut sorted_files = Vec::new();
 
         for layer_name in &self.layers {
-            let graph = self.layer_graphs.get(layer_name).unwrap();
+            let graph = self
+                .layer_graphs
+                .get(layer_name)
+                .expect("Layer graph should exist for configured layer");
 
             debug!(
                 "{} graph: {:?} nodes and {:?} edges",
@@ -936,8 +960,14 @@ impl TCGraph {
 
         // Add nodes to appropriate layer graphs
         for (node_name, node) in &new_graph.name_map {
-            let layer_graph = new_graph.layer_graphs.get_mut(&node.layer).unwrap();
-            let layer_map = new_graph.layer_index_maps.get_mut(&node.layer).unwrap();
+            let layer_graph = new_graph
+                .layer_graphs
+                .get_mut(&node.layer)
+                .expect("Layer graph should exist for node layer");
+            let layer_map = new_graph
+                .layer_index_maps
+                .get_mut(&node.layer)
+                .expect("Layer index map should exist for node layer");
             let idx = layer_graph.add_node(node.clone());
             layer_map.insert(node_name.clone(), idx);
         }
@@ -951,7 +981,10 @@ impl TCGraph {
                 .copied();
 
             if let Some(source_idx) = source_idx {
-                let layer_graph = new_graph.layer_graphs.get_mut(&node.layer).unwrap();
+                let layer_graph = new_graph
+                    .layer_graphs
+                    .get_mut(&node.layer)
+                    .expect("Layer graph should exist for node layer");
                 for dep in &node.deps {
                     // Only add edge if dependency is in the same layer and in the filtered set
                     if nodes_to_keep.contains(dep) {

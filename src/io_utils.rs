@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use glob::glob;
-use log::error;
+use log::{debug, error};
 
 fn is_hidden_dir_or_file(path: &Path) -> Result<bool, io::Error> {
     let file_or_dir_name = match path.file_name() {
@@ -18,7 +18,18 @@ fn is_hidden_dir_or_file(path: &Path) -> Result<bool, io::Error> {
     Ok(file_or_dir_name.to_string_lossy().starts_with('.'))
 }
 
+/// Walk directory recursively with symlink cycle detection
 pub fn walk_dir(dir: &Path, include_hidden: bool) -> io::Result<HashSet<PathBuf>> {
+    let mut visited = HashSet::new();
+    walk_dir_impl(dir, include_hidden, &mut visited)
+}
+
+/// Internal implementation of walk_dir that tracks visited directories
+fn walk_dir_impl(
+    dir: &Path,
+    include_hidden: bool,
+    visited: &mut HashSet<PathBuf>,
+) -> io::Result<HashSet<PathBuf>> {
     let mut files = HashSet::new();
 
     if !dir.is_dir() {
@@ -28,6 +39,28 @@ pub fn walk_dir(dir: &Path, include_hidden: bool) -> io::Result<HashSet<PathBuf>
     if !include_hidden && is_hidden_dir_or_file(dir).unwrap_or(false) {
         return Ok(files);
     }
+
+    // Get canonical path to detect symlink cycles
+    let canonical_dir = match dir.canonicalize() {
+        Ok(path) => path,
+        Err(e) => {
+            debug!("Failed to canonicalize path {}: {}", dir.display(), e);
+            // If we can't canonicalize, skip this directory to be safe
+            return Ok(files);
+        }
+    };
+
+    // Check for symlink cycles
+    if visited.contains(&canonical_dir) {
+        debug!(
+            "Skipping directory {} (already visited, potential symlink cycle)",
+            dir.display()
+        );
+        return Ok(files);
+    }
+
+    // Mark this directory as visited
+    visited.insert(canonical_dir.clone());
 
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -47,7 +80,8 @@ pub fn walk_dir(dir: &Path, include_hidden: bool) -> io::Result<HashSet<PathBuf>
                     }
                     files.insert(path);
                 } else if path.is_dir() {
-                    let subdir_files = walk_dir(&path, include_hidden)?;
+                    // Recursively walk subdirectory with cycle detection
+                    let subdir_files = walk_dir_impl(&path, include_hidden, visited)?;
                     files.extend(subdir_files);
                 }
             }
