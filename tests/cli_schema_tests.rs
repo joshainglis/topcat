@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 /// Get a Command instance for the topcat binary
 fn topcat_cmd() -> Command {
-    Command::cargo_bin("topcat").unwrap()
+    Command::new(assert_cmd::cargo::cargo_bin!("topcat"))
 }
 
 /// Get the path to the test input directory
@@ -17,7 +17,7 @@ fn test_input_dir() -> PathBuf {
 #[test]
 fn test_schema_list() {
     topcat_cmd()
-        .args(&[
+        .args([
             "schema",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -33,7 +33,7 @@ fn test_schema_list() {
 #[test]
 fn test_schema_analyze() {
     topcat_cmd()
-        .args(&[
+        .args([
             "schema",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -50,7 +50,7 @@ fn test_schema_analyze() {
 #[test]
 fn test_schema_dependencies() {
     topcat_cmd()
-        .args(&[
+        .args([
             "schema",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -71,7 +71,7 @@ fn test_schema_dependencies() {
 fn test_schema_missing_input() {
     // Topcat may handle missing directories gracefully or error
     let _ = topcat_cmd()
-        .args(&[
+        .args([
             "schema",
             "-i",
             "/tmp/topcat_nonexistent_test_12345",
@@ -86,7 +86,7 @@ fn test_schema_missing_input() {
 #[test]
 fn test_schema_help() {
     topcat_cmd()
-        .args(&["schema", "--help"])
+        .args(["schema", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("schema").or(predicate::str::contains("Schema")))
@@ -96,7 +96,7 @@ fn test_schema_help() {
 #[test]
 fn test_schema_list_help() {
     topcat_cmd()
-        .args(&["schema", "list", "--help"])
+        .args(["schema", "list", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("list"));
@@ -105,7 +105,7 @@ fn test_schema_list_help() {
 #[test]
 fn test_schema_analyze_help() {
     topcat_cmd()
-        .args(&["schema", "analyze", "--help"])
+        .args(["schema", "analyze", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("analyze"));
@@ -114,7 +114,7 @@ fn test_schema_analyze_help() {
 #[test]
 fn test_schema_missing_subcommand() {
     topcat_cmd()
-        .args(&["schema", "-i", test_input_dir().to_str().unwrap()])
+        .args(["schema", "-i", test_input_dir().to_str().unwrap()])
         .assert()
         .failure()
         .stderr(predicate::str::contains("required").or(predicate::str::contains("subcommand")));
@@ -123,7 +123,7 @@ fn test_schema_missing_subcommand() {
 #[test]
 fn test_schema_analyze_nonexistent() {
     topcat_cmd()
-        .args(&[
+        .args([
             "schema",
             "-i",
             test_input_dir().to_str().unwrap(),

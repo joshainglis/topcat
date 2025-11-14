@@ -8,7 +8,7 @@ use tempfile::TempDir;
 
 /// Get a Command instance for the topcat binary
 fn topcat_cmd() -> Command {
-    Command::cargo_bin("topcat").unwrap()
+    Command::new(assert_cmd::cargo::cargo_bin!("topcat"))
 }
 
 /// Get the path to the test input directory
@@ -22,7 +22,7 @@ fn test_concat_basic_success() {
     let output_file = temp_dir.path().join("output.sql");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "concat",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -46,7 +46,7 @@ fn test_concat_with_extension_filter() {
     let output_file = temp_dir.path().join("output.sql");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "concat",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -69,7 +69,7 @@ fn test_concat_missing_input_directory() {
     // Topcat may handle missing directories gracefully or error
     // Just verify the command runs
     let _ = topcat_cmd()
-        .args(&[
+        .args([
             "concat",
             "-i",
             "/tmp/topcat_nonexistent_test_12345",
@@ -97,7 +97,7 @@ fn test_concat_missing_input_arg() {
 
     // Missing -i uses default (current directory), so may succeed
     let _ = topcat_cmd()
-        .args(&["concat", "-o", output_file.to_str().unwrap()])
+        .args(["concat", "-o", output_file.to_str().unwrap()])
         .assert()
         .get_output();
 }
@@ -106,7 +106,7 @@ fn test_concat_missing_input_arg() {
 fn test_concat_missing_output_arg() {
     // Missing -o
     topcat_cmd()
-        .args(&["concat", "-i", test_input_dir().to_str().unwrap()])
+        .args(["concat", "-i", test_input_dir().to_str().unwrap()])
         .assert()
         .failure()
         .stderr(predicate::str::contains("required"));
@@ -118,7 +118,7 @@ fn test_concat_with_layers() {
     let output_file = temp_dir.path().join("output.sql");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "concat",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -139,7 +139,7 @@ fn test_concat_verbose_output() {
     let output_file = temp_dir.path().join("output.sql");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "concat",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -154,7 +154,7 @@ fn test_concat_verbose_output() {
 #[test]
 fn test_concat_help() {
     topcat_cmd()
-        .args(&["concat", "--help"])
+        .args(["concat", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Concatenate"))
@@ -167,7 +167,7 @@ fn test_concat_output_contains_all_files() {
     let output_file = temp_dir.path().join("output.sql");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "concat",
             "-i",
             test_input_dir().to_str().unwrap(),

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 /// Get a Command instance for the topcat binary
 fn topcat_cmd() -> Command {
-    Command::cargo_bin("topcat").unwrap()
+    Command::new(assert_cmd::cargo::cargo_bin!("topcat"))
 }
 
 /// Get the path to the test input directory
@@ -18,7 +18,7 @@ fn test_input_dir() -> PathBuf {
 fn test_clean_dead_branches_dry_run() {
     // Dry-run is the default - should not actually delete files
     topcat_cmd()
-        .args(&[
+        .args([
             "clean",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -34,7 +34,7 @@ fn test_clean_dead_branches_dry_run() {
 #[test]
 fn test_clean_orphans_dry_run() {
     topcat_cmd()
-        .args(&[
+        .args([
             "clean",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -49,7 +49,7 @@ fn test_clean_orphans_dry_run() {
 #[test]
 fn test_clean_unrequired_dry_run() {
     topcat_cmd()
-        .args(&[
+        .args([
             "clean",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -64,7 +64,7 @@ fn test_clean_unrequired_dry_run() {
 #[test]
 fn test_clean_with_root_pattern() {
     topcat_cmd()
-        .args(&[
+        .args([
             "clean",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -81,7 +81,7 @@ fn test_clean_with_root_pattern() {
 #[test]
 fn test_clean_with_schema_filter() {
     topcat_cmd()
-        .args(&[
+        .args([
             "clean",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -99,7 +99,7 @@ fn test_clean_with_schema_filter() {
 fn test_clean_missing_input() {
     // Topcat may handle missing directories gracefully or error
     let _ = topcat_cmd()
-        .args(&[
+        .args([
             "clean",
             "-i",
             "/tmp/topcat_nonexistent_test_12345",
@@ -114,7 +114,7 @@ fn test_clean_missing_input() {
 #[test]
 fn test_clean_help() {
     topcat_cmd()
-        .args(&["clean", "--help"])
+        .args(["clean", "--help"])
         .assert()
         .success()
         .stdout(
@@ -127,7 +127,7 @@ fn test_clean_help() {
 #[test]
 fn test_clean_dead_branches_help() {
     topcat_cmd()
-        .args(&["clean", "dead-branches", "--help"])
+        .args(["clean", "dead-branches", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("dead"));
@@ -136,7 +136,7 @@ fn test_clean_dead_branches_help() {
 #[test]
 fn test_clean_missing_subcommand() {
     topcat_cmd()
-        .args(&["clean", "-i", test_input_dir().to_str().unwrap()])
+        .args(["clean", "-i", test_input_dir().to_str().unwrap()])
         .assert()
         .failure()
         .stderr(predicate::str::contains("required").or(predicate::str::contains("subcommand")));
@@ -146,7 +146,7 @@ fn test_clean_missing_subcommand() {
 fn test_clean_targets_dry_run() {
     // Test cleaning specific target files (takes file paths, not node names)
     topcat_cmd()
-        .args(&[
+        .args([
             "clean",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -165,7 +165,7 @@ fn test_clean_no_dry_run_requires_confirmation() {
     // Since we're in a non-interactive test, this will likely fail without --force
     // We test that the command recognizes the flag
     topcat_cmd()
-        .args(&[
+        .args([
             "clean",
             "-i",
             test_input_dir().to_str().unwrap(),

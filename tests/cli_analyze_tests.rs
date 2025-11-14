@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 /// Get a Command instance for the topcat binary
 fn topcat_cmd() -> Command {
-    Command::cargo_bin("topcat").unwrap()
+    Command::new(assert_cmd::cargo::cargo_bin!("topcat"))
 }
 
 /// Get a nonexistent directory path
@@ -22,7 +22,7 @@ fn test_input_dir() -> PathBuf {
 #[test]
 fn test_analyze_cycles_success() {
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -38,7 +38,7 @@ fn test_analyze_cycles_success() {
 fn test_analyze_cycles_quiet_mode() {
     // Quiet mode should exit with code 0 if no cycles found
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -54,7 +54,7 @@ fn test_analyze_cycles_quiet_mode() {
 #[test]
 fn test_analyze_dead_branches() {
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -70,7 +70,7 @@ fn test_analyze_dead_branches() {
 #[test]
 fn test_analyze_orphans() {
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -86,7 +86,7 @@ fn test_analyze_orphans() {
 #[test]
 fn test_analyze_missing() {
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -102,7 +102,7 @@ fn test_analyze_missing() {
 #[test]
 fn test_analyze_leaf_nodes() {
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -118,7 +118,7 @@ fn test_analyze_leaf_nodes() {
 #[test]
 fn test_analyze_root_nodes() {
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -134,7 +134,7 @@ fn test_analyze_root_nodes() {
 #[test]
 fn test_analyze_unrequired() {
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -150,7 +150,7 @@ fn test_analyze_unrequired() {
 #[test]
 fn test_analyze_file_specific() {
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -170,7 +170,7 @@ fn test_analyze_missing_input() {
     // or fail depending on the error handling. Let's just verify it runs.
     // For a true error, we'd need to provide an invalid path that causes an IO error.
     let result = topcat_cmd()
-        .args(&["analyze", "-i", nonexistent_dir(), "-e", "sql", "cycles"])
+        .args(["analyze", "-i", nonexistent_dir(), "-e", "sql", "cycles"])
         .assert();
 
     // Either succeeds with no cycles found, or fails with an error
@@ -181,7 +181,7 @@ fn test_analyze_missing_input() {
 #[test]
 fn test_analyze_with_schema_filter() {
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -198,7 +198,7 @@ fn test_analyze_with_schema_filter() {
 #[test]
 fn test_analyze_with_root_pattern() {
     topcat_cmd()
-        .args(&[
+        .args([
             "analyze",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -215,7 +215,7 @@ fn test_analyze_with_root_pattern() {
 #[test]
 fn test_analyze_help() {
     topcat_cmd()
-        .args(&["analyze", "--help"])
+        .args(["analyze", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Analyze"))
@@ -225,7 +225,7 @@ fn test_analyze_help() {
 #[test]
 fn test_analyze_cycles_help() {
     topcat_cmd()
-        .args(&["analyze", "cycles", "--help"])
+        .args(["analyze", "cycles", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("cycles"));
@@ -234,7 +234,7 @@ fn test_analyze_cycles_help() {
 #[test]
 fn test_analyze_missing_subcommand() {
     topcat_cmd()
-        .args(&["analyze", "-i", test_input_dir().to_str().unwrap()])
+        .args(["analyze", "-i", test_input_dir().to_str().unwrap()])
         .assert()
         .failure()
         .stderr(predicate::str::contains("required").or(predicate::str::contains("subcommand")));

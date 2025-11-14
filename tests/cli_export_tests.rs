@@ -8,7 +8,7 @@ use tempfile::TempDir;
 
 /// Get a Command instance for the topcat binary
 fn topcat_cmd() -> Command {
-    Command::cargo_bin("topcat").unwrap()
+    Command::new(assert_cmd::cargo::cargo_bin!("topcat"))
 }
 
 /// Get the path to the test input directory
@@ -22,7 +22,7 @@ fn test_export_json() {
     let output_file = temp_dir.path().join("graph.json");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "export",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -49,7 +49,7 @@ fn test_export_dot() {
     let output_file = temp_dir.path().join("graph.dot");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "export",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -75,7 +75,7 @@ fn test_export_graphml() {
     let output_file = temp_dir.path().join("graph.graphml");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "export",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -101,7 +101,7 @@ fn test_export_mermaid() {
     let output_file = temp_dir.path().join("graph.md");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "export",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -127,7 +127,7 @@ fn test_export_with_mode_deps() {
     let output_file = temp_dir.path().join("deps.json");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "export",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -153,7 +153,7 @@ fn test_export_with_mode_dependents() {
     let output_file = temp_dir.path().join("dependents.json");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "export",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -179,7 +179,7 @@ fn test_export_with_schema_filter() {
     let output_file = temp_dir.path().join("schema-filtered.json");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "export",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -204,7 +204,7 @@ fn test_export_missing_input() {
 
     // Topcat may handle missing directories gracefully or error
     let _ = topcat_cmd()
-        .args(&[
+        .args([
             "export",
             "-i",
             "/tmp/topcat_nonexistent_test_12345",
@@ -221,7 +221,7 @@ fn test_export_missing_input() {
 #[test]
 fn test_export_help() {
     topcat_cmd()
-        .args(&["export", "--help"])
+        .args(["export", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Export"))
@@ -231,7 +231,7 @@ fn test_export_help() {
 #[test]
 fn test_export_json_help() {
     topcat_cmd()
-        .args(&["export", "json", "--help"])
+        .args(["export", "json", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("JSON"));
@@ -243,7 +243,7 @@ fn test_export_missing_format() {
     let output_file = temp_dir.path().join("graph.out");
 
     topcat_cmd()
-        .args(&[
+        .args([
             "export",
             "-i",
             test_input_dir().to_str().unwrap(),
@@ -264,7 +264,7 @@ fn test_export_mode_requires_node() {
 
     // --mode deps requires --node to be specified
     topcat_cmd()
-        .args(&[
+        .args([
             "export",
             "-i",
             test_input_dir().to_str().unwrap(),
