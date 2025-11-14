@@ -7,6 +7,7 @@
 
 use std::path::PathBuf;
 
+use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::config;
 use topcat::exceptions::TopCatError;
@@ -250,6 +251,45 @@ pub fn build_root_matcher(
 /// ```
 pub fn build_schema_filter(schema_filter: &[String]) -> SchemaFilter {
     SchemaFilter::from(schema_filter)
+}
+
+// ============================================================================
+// External Usage Checking
+// ============================================================================
+
+/// Build an external usage checker from CLI arguments.
+///
+/// Sets up an `ExternalUsageChecker` if both directories and patterns are provided.
+/// Returns `None` if external checking is not configured.
+///
+/// # Arguments
+///
+/// * `external_check_dirs` - Directories to scan for external usage
+/// * `external_check_patterns` - File patterns to check (e.g., "*.py")
+/// * `verbose` - Whether to show verbose output during scanning
+///
+/// # Returns
+///
+/// `Ok(Some(ExternalUsageChecker))` if configured,
+/// `Ok(None)` if not configured,
+/// `Err(TopCatError)` if checker initialization fails
+pub fn build_external_checker(
+    external_check_dirs: &[PathBuf],
+    external_check_patterns: &[String],
+    verbose: bool,
+) -> Result<Option<ExternalUsageChecker>, TopCatError> {
+    if external_check_dirs.is_empty() || external_check_patterns.is_empty() {
+        return Ok(None);
+    }
+
+    println!(
+        "🔍 Setting up external usage checker for {} directories...",
+        external_check_dirs.len()
+    );
+
+    ExternalUsageChecker::new(external_check_dirs, external_check_patterns, !verbose)
+        .map(Some)
+        .map_err(|e| TopCatError::ConfigError(format!("External checker error: {e}")))
 }
 
 // ============================================================================

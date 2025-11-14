@@ -38,17 +38,10 @@ pub fn clean(
     println!("\n🌳 Finding dead branches...\n");
 
     // Find dead branches
-    let mut dead_branches = graph.find_dead_branches(root_matcher);
+    let dead_branches = graph.find_dead_branches(root_matcher);
 
     // Filter out externally used files
-    if let Some(checker) = external_checker {
-        let before_count = dead_branches.len();
-        dead_branches = checker.filter_unused(&dead_branches);
-        let filtered_count = before_count - dead_branches.len();
-        if filtered_count > 0 {
-            println!("✅ Filtered out {filtered_count} file(s) with external usage\n");
-        }
-    }
+    let dead_branches = common::apply_external_filter(dead_branches, external_checker);
 
     if dead_branches.is_empty() {
         println!("✅ No dead branches found! Your codebase is clean.");

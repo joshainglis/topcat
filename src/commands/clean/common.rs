@@ -4,12 +4,14 @@
 //! - `show_deletion_preview`: Display files that will be deleted
 //! - `perform_deletion`: Actually delete files with confirmation
 //! - `filter_by_root_matcher`: Filter out protected root nodes
+//! - `apply_external_filter`: Filter out externally-used nodes
 
 use std::collections::HashSet;
 use std::io::{self, Write};
 
 use comfy_table::{Cell, Color, Table};
 
+use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
@@ -143,7 +145,7 @@ pub fn perform_deletion(
     }
 
     if failure_count > 0 {
-        Err(TopCatError::Io(std::io::Error::other(format!(
+        Err(TopCatError::Io(io::Error::other(format!(
             "Failed to delete {failure_count} file(s)"
         ))))
     } else {
@@ -184,6 +186,34 @@ pub fn filter_by_root_matcher(
         let filtered_count = before_count - nodes.len();
         if filtered_count > 0 {
             println!("🔒 Protected {filtered_count} root node(s) from deletion");
+        }
+    }
+    nodes
+}
+
+/// Apply external usage filtering to a set of nodes.
+///
+/// Filters out nodes that are externally used, printing a message
+/// if any nodes were filtered.
+///
+/// # Arguments
+///
+/// * `nodes` - Set of node names to filter
+/// * `checker` - Optional external usage checker
+///
+/// # Returns
+///
+/// The filtered set with externally-used nodes removed
+pub fn apply_external_filter(
+    mut nodes: HashSet<String>,
+    checker: Option<&ExternalUsageChecker>,
+) -> HashSet<String> {
+    if let Some(checker) = checker {
+        let before_count = nodes.len();
+        nodes = checker.filter_unused(&nodes);
+        let filtered_count = before_count - nodes.len();
+        if filtered_count > 0 {
+            println!("✅ Filtered out {filtered_count} file(s) with external usage\n");
         }
     }
     nodes

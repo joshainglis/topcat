@@ -44,14 +44,7 @@ pub fn clean(
     unrequired = common::filter_by_root_matcher(unrequired, graph, root_matcher);
 
     // Filter out externally used files
-    if let Some(checker) = external_checker {
-        let before_count = unrequired.len();
-        unrequired = checker.filter_unused(&unrequired);
-        let filtered_count = before_count - unrequired.len();
-        if filtered_count > 0 {
-            println!("✅ Filtered out {filtered_count} file(s) with external usage\n");
-        }
-    }
+    unrequired = common::apply_external_filter(unrequired, external_checker);
 
     if unrequired.is_empty() {
         println!("✅ No unrequired files found!");

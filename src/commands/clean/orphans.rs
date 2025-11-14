@@ -44,14 +44,7 @@ pub fn clean(
     orphans = common::filter_by_root_matcher(orphans, graph, root_matcher);
 
     // Filter out externally used files
-    if let Some(checker) = external_checker {
-        let before_count = orphans.len();
-        orphans = checker.filter_unused(&orphans);
-        let filtered_count = before_count - orphans.len();
-        if filtered_count > 0 {
-            println!("✅ Filtered out {filtered_count} file(s) with external usage\n");
-        }
-    }
+    orphans = common::apply_external_filter(orphans, external_checker);
 
     if orphans.is_empty() {
         println!("✅ No orphan files found!");

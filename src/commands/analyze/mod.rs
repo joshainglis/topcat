@@ -60,7 +60,6 @@ use clap::{Args, Subcommand};
 use env_logger::Builder;
 use log::LevelFilter;
 
-use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::exceptions::TopCatError;
 
@@ -336,24 +335,11 @@ impl AnalyzeArgs {
         let graph = self.build_graph()?;
 
         // Check for external usage if requested
-        let external_checker = if !self.external_check_dirs.is_empty()
-            && !self.external_check_patterns.is_empty()
-        {
-            println!(
-                "🔍 Setting up external usage checker for {} directories...",
-                self.external_check_dirs.len()
-            );
-            Some(
-                ExternalUsageChecker::new(
-                    &self.external_check_dirs,
-                    &self.external_check_patterns,
-                    !self.verbose,
-                )
-                .map_err(|e| TopCatError::ConfigError(format!("External checker error: {e}")))?,
-            )
-        } else {
-            None
-        };
+        let external_checker = cmd_common::build_external_checker(
+            &self.external_check_dirs,
+            &self.external_check_patterns,
+            self.verbose,
+        )?;
 
         // Build root matcher from CLI args and config
         let root_matcher = self.build_root_matcher()?;
