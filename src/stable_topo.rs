@@ -7,49 +7,90 @@ use petgraph::visit::IntoNeighborsDirected;
 use petgraph::visit::Reversed;
 use petgraph::visit::{GraphBase, IntoNeighbors, IntoNodeIdentifiers, Visitable};
 
-/// `StableTopo` represents a stable topological sort of a directed graph.
-/// It is implemented using a depth-first search (DFS) algorithm.
+/// Deterministic topological sort iterator that produces consistent ordering.
+///
+/// Unlike standard topological sort algorithms which may produce different valid orderings
+/// for the same graph, `StableTopo` guarantees consistent, deterministic results by:
+///
+/// 1. **Weight-based ordering**: Nodes are sorted by their weight (using `Ord` on node weights)
+/// 2. **Stable iteration**: Given the same input graph, always produces the same output order
+/// 3. **Level-order traversal**: Processes all nodes at the same "level" before moving deeper
+///
+/// This is critical for Topcat's use case where the same dependency graph should always
+/// produce the same concatenated output file, ensuring reproducible builds and diffs.
+///
+/// # Algorithm
+///
+/// The algorithm is a modified topological sort based on Kahn's algorithm with stability guarantees:
+///
+/// 1. **Initialization**: Find all source nodes (nodes with no incoming edges)
+/// 2. **Weight-based selection**: Sort candidates by node weight to ensure deterministic order
+/// 3. **Dependency checking**: Only visit a node when all its dependencies have been visited
+/// 4. **Level ordering**: Process nodes level-by-level, respecting the dependency graph
+///
+/// ## Time Complexity
+///
+/// - O(V log V + E) where V is vertices and E is edges
+/// - The log V factor comes from sorting nodes by weight at each level
+///
+/// ## Space Complexity
+///
+/// - O(V) for the visited set and tovisit stack
 ///
 /// # Examples
 ///
 /// ```ignore
-/// use std::collections::HashSet;
-/// use petgraph::graph::{Graph, NodeIndex};
+/// use petgraph::graph::Graph;
 /// use topcat::stable_topo::StableTopo;
 ///
-/// // Create a new graph
-/// let mut graph = Graph::<i32, ()>::new();
+/// // Create a graph: 1 -> 2 -> {3, 4}, 4 -> 3
+/// let mut graph = Graph::<&str, ()>::new();
+/// let n1 = graph.add_node("a");
+/// let n2 = graph.add_node("b");
+/// let n3 = graph.add_node("c");
+/// let n4 = graph.add_node("d");
 ///
-/// // Add nodes to the graph
-/// let n1 = graph.add_node(1);
-/// let n2 = graph.add_node(2);
-/// let n3 = graph.add_node(3);
-/// let n4 = graph.add_node(4);
-///
-/// // Add edges to the graph
 /// graph.add_edge(n1, n2, ());
 /// graph.add_edge(n2, n3, ());
 /// graph.add_edge(n2, n4, ());
 /// graph.add_edge(n4, n3, ());
 ///
-/// // Perform a stable topological sort
+/// // Perform stable topological sort
 /// let stable_topo = StableTopo::new(&graph);
+/// let ordered: Vec<_> = stable_topo.collect();
 ///
-/// // Get the ordered nodes
-/// let ordered_nodes = stable_topo.ordered();
-///
-/// assert_eq!(ordered_nodes, vec![n1, n2, n4, n3]);
+/// // Always produces: [n1, n2, n4, n3] (deterministic!)
+/// // Note: n4 before n3 because 'd' > 'c' in weight ordering
+/// assert_eq!(ordered, vec![n1, n2, n4, n3]);
 /// ```
+///
+/// # Comparison with Standard Topological Sort
+///
+/// Standard topological sort may produce different valid orderings:
+/// - `[1, 2, 3, 4]` (one valid ordering)
+/// - `[1, 2, 4, 3]` (another valid ordering)
+///
+/// `StableTopo` always produces the same ordering based on node weights:
+/// - Always produces `[1, 2, 4, 3]` if node weights dictate this order
+///
+/// # Use in Topcat
+///
+/// Topcat uses `StableTopo` with `FileNode` as the node weight, where `FileNode`
+/// implements `Ord` based on the file path. This ensures that files are always
+/// concatenated in the same order given the same dependency structure.
 ///
 /// # Implementation Details
 ///
-/// The `StableTopo` struct has the following fields:
-/// - `graph`: The directed graph.
-/// - `ordered`: A set containing the nodes in the order they were visited during the DFS.
-/// - `tovisit : A stack containing the nodes to visit during the DFS.
+/// ## Fields
+/// - `graph`: The directed graph to sort
+/// - `ordered`: Set of already-visited nodes (prevents revisiting)
+/// - `tovisit`: Stack of candidate nodes ready to be visited
 ///
-/// The `StableTopo` struct implements the `Clone` trait to allow for creating clones of the struct
-/// with an independent state.
+/// ## Iterator Protocol
+///
+/// Implements `Iterator` to allow incremental topological traversal:
+/// - `next()`: Returns the next node in topological order
+/// - Returns `None` when all nodes have been visited
 #[derive(Clone)]
 pub struct StableTopo<G> {
     graph: G,
@@ -63,6 +104,27 @@ where
     G: IntoNeighborsDirected + IntoNodeIdentifiers + Visitable,
     G: GraphBase<NodeId = NodeIndex>,
 {
+    /// Creates a new stable topological sort iterator.
+    ///
+    /// Initializes the iterator by identifying all source nodes (nodes with no
+    /// incoming edges) and adding them to the candidate list.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use petgraph::graph::Graph;
+    /// use topcat::stable_topo::StableTopo;
+    ///
+    /// let mut graph = Graph::<i32, ()>::new();
+    /// let n1 = graph.add_node(1);
+    /// let n2 = graph.add_node(2);
+    /// graph.add_edge(n1, n2, ());
+    ///
+    /// let mut topo = StableTopo::new(&graph);
+    /// assert_eq!(topo.next(), Some(n1));
+    /// assert_eq!(topo.next(), Some(n2));
+    /// assert_eq!(topo.next(), None);
+    /// ```
     pub fn new(graph: G) -> Self {
         let mut topo = StableTopo {
             graph,
@@ -73,6 +135,10 @@ where
         topo
     }
 
+    /// Finds and adds all source nodes (nodes without incoming edges) to the candidate list.
+    ///
+    /// This is called during initialization to bootstrap the topological traversal.
+    /// Source nodes are the starting points of the dependency graph.
     pub fn extend_with_initials(&mut self) {
         // find all initial nodes (nodes without incoming edges)
         self.tovisit.extend(

@@ -9,7 +9,7 @@ pub struct SqlDiscoveryConfig {
     pub enabled: bool,
 
     /// Regex pattern for matching schema.object references
-    /// Example: "(?:test|e|c|d[pio]|codegen|md)_\\w+"
+    /// Example: `"(?:test|e|c|d\[pio\]|codegen|md)_\\w+"`
     #[serde(default)]
     pub schema_pattern: Option<String>,
 
