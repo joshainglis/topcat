@@ -1,5 +1,5 @@
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use std::fs;
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::{fs, hint::black_box};
 use tempfile::TempDir;
 use topcat::analysis::GraphAnalyzer;
 use topcat::analysis::root_matcher::RootNodeMatcher;
