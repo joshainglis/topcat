@@ -731,3 +731,4 @@ result
 # direnv
 .direnv
 /.claude/settings.local.json
+/.scratchfiles/
