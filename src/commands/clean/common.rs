@@ -95,10 +95,12 @@ pub fn perform_deletion(
             "\n⚠️  Are you sure you want to delete {} files? [y/N]: ",
             nodes_to_delete.len()
         );
-        io::stdout().flush().unwrap();
+        io::stdout().flush().map_err(TopCatError::Io)?;
 
         let mut response = String::new();
-        io::stdin().read_line(&mut response).unwrap();
+        io::stdin()
+            .read_line(&mut response)
+            .map_err(TopCatError::Io)?;
         let response = response.trim().to_lowercase();
 
         if response != "y" && response != "yes" {

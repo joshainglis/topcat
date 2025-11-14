@@ -115,14 +115,10 @@ impl GraphAnalyzer for TCGraph {
                 }
 
                 // Get dependents of this node
-                let dependents = dependents_map.get(&node.name);
-
                 // If this node has no dependents, skip (it's handled by other methods)
-                if dependents.is_none() {
+                let Some(dependents) = dependents_map.get(&node.name) else {
                     continue;
-                }
-
-                let dependents = dependents.unwrap();
+                };
 
                 // Check if ALL dependents are in dead_nodes
                 // If yes, this node will also become a leaf node once dead_nodes are deleted

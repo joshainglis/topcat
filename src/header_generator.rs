@@ -15,7 +15,11 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
 
     // Add schema requirement for object nodes (not schema nodes)
     if file_node.name.contains('.') {
-        let schema_name = file_node.name.split('.').next().unwrap();
+        let schema_name = file_node
+            .name
+            .split('.')
+            .next()
+            .expect("split() always returns at least one element");
         header.push_str(&format!("{comment_str} requires: {schema_name}\n"));
     }
 

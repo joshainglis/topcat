@@ -184,7 +184,9 @@ impl SchemaArgs {
             schemas.sort();
 
             for target_schema in schemas {
-                let deps = by_schema.get(target_schema).unwrap();
+                let deps = by_schema
+                    .get(target_schema)
+                    .expect("schema key must exist in map we just collected from");
                 println!("\n  To schema '{target_schema}':");
                 for (source, target) in deps {
                     println!("    {source} → {target}");

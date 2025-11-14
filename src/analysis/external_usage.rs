@@ -80,7 +80,7 @@ impl ExternalUsageChecker {
                     .template(
                         "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
                     )
-                    .unwrap()
+                    .expect("Invalid progress bar template")
                     .progress_chars("#>-"),
             );
 
@@ -145,7 +145,7 @@ impl ExternalUsageChecker {
             pb.set_style(
                 ProgressStyle::default_bar()
                     .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({eta})")
-                    .unwrap()
+                    .expect("Invalid progress bar template")
                     .progress_chars("#>-"),
             );
             Some(pb)
