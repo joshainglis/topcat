@@ -90,15 +90,11 @@ impl TCGraph {
         }
     }
 
-    /// Build the dependency graph from the configured files.
+    /// Load FileNodes from configured files into name_map and path_map.
     ///
-    /// This will:
-    /// 1. Collect and filter files from the input directories
-    /// 2. Parse file headers to extract dependency metadata
-    /// 3. Optionally perform SQL discovery to extract additional dependencies
-    /// 4. Build layer graphs with nodes and edges
-    /// 5. Validate dependencies and check for cycles
-    pub fn build_graph(&mut self) -> Result<(), TopCatError> {
+    /// This is the common logic shared by build_graph() and validate_dependencies_only().
+    /// It collects, filters, and parses files, optionally performing SQL discovery.
+    fn load_file_nodes(&mut self) -> Result<(), TopCatError> {
         debug!("include globs: {:?}", self.include_globs);
         debug!("exclude globs: {:?}", self.exclude_globs);
         debug!("include extensions: {:?}", self.include_extensions);
@@ -164,6 +160,20 @@ impl TCGraph {
                 .insert(file_node_rc.path.clone(), file_node_rc);
         }
 
+        Ok(())
+    }
+
+    /// Build the dependency graph from the configured files.
+    ///
+    /// This will:
+    /// 1. Collect and filter files from the input directories
+    /// 2. Parse file headers to extract dependency metadata
+    /// 3. Optionally perform SQL discovery to extract additional dependencies
+    /// 4. Build layer graphs with nodes and edges
+    /// 5. Validate dependencies and check for cycles
+    pub fn build_graph(&mut self) -> Result<(), TopCatError> {
+        self.load_file_nodes()?;
+
         add_nodes_to_graphs(
             &mut self.layer_graphs,
             &mut self.layer_index_maps,
@@ -188,65 +198,8 @@ impl TCGraph {
     /// Returns a list of (file_name, missing_dependency) tuples for all missing dependencies.
     /// This allows reporting all missing dependencies at once instead of failing on the first one.
     pub fn validate_dependencies_only(&mut self) -> Result<Vec<(String, String)>, TopCatError> {
-        let files = collect_files(&self.file_dirs, self.include_hidden)?;
-        let filtered_files = filter_files(
-            &files,
-            &self.include_globs,
-            &self.exclude_globs,
-            &self.include_extensions,
-            &self.exclude_extensions,
-        );
-
-        // Create SQL analyzer if discovery is enabled
-        let sql_analyzer = if self.sql_discovery.enabled {
-            Some(SqlAnalyzer::new(self.sql_discovery.clone()).map_err(|e| {
-                TopCatError::ConfigError(format!("Failed to create SQL analyzer: {e}"))
-            })?)
-        } else {
-            None
-        };
-
         // Load all files into name_map (same as build_graph)
-        for file in filtered_files {
-            let mut file_node = match FileNode::from_file(
-                &self.comment_str,
-                file,
-                &self.layers,
-                &self.fallback_layer,
-            ) {
-                Ok(f) => f,
-                Err(e) => {
-                    handle_file_node_error(e)?;
-                    continue;
-                }
-            };
-
-            // Perform SQL discovery if enabled
-            if let Some(ref analyzer) = sql_analyzer {
-                match perform_sql_discovery(&mut file_node, analyzer) {
-                    Ok(_) => {
-                        file_node.merge_dependencies(self.sql_discovery.merge_strategy);
-                    }
-                    Err(e) => {
-                        info!("SQL discovery failed for {:?}: {}", file_node.path, e);
-                    }
-                }
-            }
-
-            if let Some(other_path) = self.name_map.get(&file_node.name) {
-                return Err(TopCatError::NameClash(
-                    file_node.name,
-                    file_node.path,
-                    other_path.path.clone(),
-                ));
-            }
-
-            let file_node_rc = Rc::new(file_node);
-            self.name_map
-                .insert(file_node_rc.name.clone(), Rc::clone(&file_node_rc));
-            self.path_map
-                .insert(file_node_rc.path.clone(), file_node_rc);
-        }
+        self.load_file_nodes()?;
 
         // Now collect all missing dependencies instead of failing on the first one
         let mut missing_deps = Vec::new();
@@ -328,54 +281,107 @@ impl TCGraph {
         self.name_map.values()
     }
 
+    /// Apply subdirectory filter to find nodes within subdirectory and their dependencies.
+    ///
+    /// Returns None if no subdirectory filter is set, or Some(HashSet) of required node names.
+    fn apply_subdirectory_filter(&self) -> Result<Option<HashSet<String>>, TopCatError> {
+        let Some(subdir_path) = &self.subdir_filter else {
+            return Ok(None);
+        };
+
+        info!("Applying subdirectory filter: {subdir_path:?}");
+        let canonical_subdir_path = subdir_path.canonicalize().map_err(TopCatError::Io)?;
+
+        let initial_nodes: HashSet<String> = self
+            .name_map
+            .values()
+            .filter_map(|node| {
+                node.path
+                    .canonicalize()
+                    .ok()
+                    .and_then(|canonical_node_path| {
+                        if canonical_node_path.starts_with(&canonical_subdir_path) {
+                            Some(node.name.clone())
+                        } else {
+                            None
+                        }
+                    })
+            })
+            .collect();
+
+        if initial_nodes.is_empty() {
+            info!("No files are found within the specified subdirectory filter: {subdir_path:?}");
+            return Ok(Some(HashSet::new()));
+        }
+
+        debug!("Initial nodes from subdir: {initial_nodes:?}");
+        let required = self.find_required_nodes(&initial_nodes)?;
+        debug!("Total required nodes (including dependencies): {required:?}");
+        Ok(Some(required))
+    }
+
+    /// Check if a node should be included based on prefix filters.
+    fn matches_prefix_filters(&self, node_name: &str) -> bool {
+        match (&self.include_node_prefixes, &self.exclude_node_prefixes) {
+            (Some(include), Some(exclude)) => {
+                include.iter().any(|p| node_name.starts_with(p))
+                    && !exclude.iter().any(|p| node_name.starts_with(p))
+            }
+            (Some(include), None) => include.iter().any(|p| node_name.starts_with(p)),
+            (None, Some(exclude)) => !exclude.iter().any(|p| node_name.starts_with(p)),
+            (None, None) => true,
+        }
+    }
+
+    /// Check if a node should be included in the output based on all filters.
+    fn should_include_node(
+        &self,
+        file_node: &FileNode,
+        required_node_names: &Option<HashSet<String>>,
+    ) -> bool {
+        // Check subdirectory filter
+        if let Some(required) = required_node_names {
+            if required.is_empty() {
+                // Empty set means no files in subdirectory
+                return false;
+            }
+            if !required.contains(&file_node.name) {
+                trace!(
+                    "Excluding node '{}' (not required by subdir filter)",
+                    file_node.name
+                );
+                return false;
+            }
+        }
+
+        // Check prefix filters
+        if !self.matches_prefix_filters(&file_node.name) {
+            trace!("Excluding node '{}' by prefix filter", file_node.name);
+            return false;
+        }
+
+        true
+    }
+
     /// Get files in topologically sorted order, respecting layer constraints.
     ///
     /// This returns file paths in an order where all dependencies come before their dependents.
     /// Layer ordering is enforced: all files in earlier layers come before later layers.
+    ///
+    /// Applies subdirectory and prefix filters if configured.
     pub fn get_sorted_files(&self) -> Result<Vec<PathBuf>, TopCatError> {
         if !self.graph_is_built {
             return Err(TopCatError::GraphMissing);
         }
         info!("Getting sorted files");
 
-        let required_node_names: Option<HashSet<String>> = if let Some(subdir_path) =
-            &self.subdir_filter
-        {
-            info!("Applying subdirectory filter: {subdir_path:?}");
-            let canonical_subdir_path = subdir_path.canonicalize().map_err(TopCatError::Io)?;
+        let required_node_names = self.apply_subdirectory_filter()?;
 
-            let initial_nodes: HashSet<String> = self
-                .name_map
-                .values()
-                .filter_map(|node| {
-                    node.path
-                        .canonicalize()
-                        .ok()
-                        .and_then(|canonical_node_path| {
-                            if canonical_node_path.starts_with(&canonical_subdir_path) {
-                                Some(node.name.clone())
-                            } else {
-                                None
-                            }
-                        })
-                })
-                .collect();
-
-            if initial_nodes.is_empty() {
-                info!(
-                    "No files are found within the specified subdirectory filter: {subdir_path:?}"
-                );
+        // Early return if subdirectory filter resulted in empty set
+        if let Some(ref required) = required_node_names {
+            if required.is_empty() {
                 return Ok(Vec::new());
             }
-
-            debug!("Initial nodes from subdir: {initial_nodes:?}");
-            Some(self.find_required_nodes(&initial_nodes)?)
-        } else {
-            None
-        };
-
-        if let Some(required) = &required_node_names {
-            debug!("Total required nodes (including dependencies): {required:?}");
         }
 
         let mut sorted_files = Vec::new();
@@ -401,39 +407,7 @@ impl TCGraph {
                 };
                 trace!("{} node: {:?}", layer_name, file_node.name);
 
-                let mut should_include = true;
-
-                if let Some(required) = &required_node_names {
-                    if !required.contains(&file_node.name) {
-                        trace!(
-                            "Excluding node '{}' (not required by subdir filter)",
-                            file_node.name
-                        );
-                        should_include = false;
-                    }
-                }
-
-                if should_include {
-                    should_include =
-                        match (&self.include_node_prefixes, &self.exclude_node_prefixes) {
-                            (Some(include), Some(exclude)) => {
-                                include.iter().any(|p| file_node.name.starts_with(p))
-                                    && !exclude.iter().any(|p| file_node.name.starts_with(p))
-                            }
-                            (Some(include), None) => {
-                                include.iter().any(|p| file_node.name.starts_with(p))
-                            }
-                            (None, Some(exclude)) => {
-                                !exclude.iter().any(|p| file_node.name.starts_with(p))
-                            }
-                            (None, None) => true,
-                        };
-                    if !should_include {
-                        trace!("Excluding node '{}' by prefix filter", file_node.name);
-                    }
-                }
-
-                if should_include {
+                if self.should_include_node(file_node, &required_node_names) {
                     sorted_files.push(file_node.path.clone());
                 }
             }

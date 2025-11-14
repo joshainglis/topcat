@@ -198,27 +198,19 @@ impl FileNode {
                         vec![name, line[name_str.len()..].trim().to_string()],
                     ));
                 }
-            } else if line.starts_with(&dep_str) {
+            } else if line.starts_with(&dep_str) || line.starts_with(&drop_str) {
+                // Both "requires:" and "dropped_by:" are dependencies with override support
                 // -- requires: tomato, !potato, orange -> normal: ["tomato", "orange"], override: ["potato"]
-                // Split dependencies with support for ! prefix
-                let (normal, overrides) =
-                    Self::split_dependencies_with_overrides(&line[dep_str.len()..]);
-                for item in normal {
-                    deps.insert(item);
-                }
-                for item in overrides {
-                    override_deps.insert(item);
-                }
-            } else if line.starts_with(&drop_str) {
                 // -- dropped_by: tomato, !potato -> normal: ["tomato"], override: ["potato"]
+                let prefix_len = if line.starts_with(&dep_str) {
+                    dep_str.len()
+                } else {
+                    drop_str.len()
+                };
                 let (normal, overrides) =
-                    Self::split_dependencies_with_overrides(&line[drop_str.len()..]);
-                for item in normal {
-                    deps.insert(item);
-                }
-                for item in overrides {
-                    override_deps.insert(item);
-                }
+                    Self::split_dependencies_with_overrides(&line[prefix_len..]);
+                deps.extend(normal);
+                override_deps.extend(overrides);
             } else if line.starts_with(&layer_str) {
                 // -- layer: prepend -> "prepend"
                 let declared_layer = line[layer_str.len()..].trim();
