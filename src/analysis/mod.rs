@@ -32,10 +32,8 @@ pub trait GraphAnalyzer {
 impl GraphAnalyzer for TCGraph {
     fn find_orphans(&self) -> HashSet<String> {
         let dependents_map = self.build_dependents_map();
-        let all_nodes = self.get_all_nodes();
 
-        all_nodes
-            .iter()
+        self.nodes()
             .filter(|node| {
                 // Has no dependencies and no dependents
                 node.deps.is_empty() && !dependents_map.contains_key(&node.name)
@@ -46,10 +44,8 @@ impl GraphAnalyzer for TCGraph {
 
     fn find_unrequired(&self) -> HashSet<String> {
         let dependents_map = self.build_dependents_map();
-        let all_nodes = self.get_all_nodes();
 
-        all_nodes
-            .iter()
+        self.nodes()
             .filter(|node| {
                 // Has no dependents (nothing depends on it)
                 !dependents_map.contains_key(&node.name)
@@ -60,10 +56,8 @@ impl GraphAnalyzer for TCGraph {
 
     fn find_leaf_nodes(&self) -> HashSet<String> {
         let dependents_map = self.build_dependents_map();
-        let all_nodes = self.get_all_nodes();
 
-        all_nodes
-            .iter()
+        self.nodes()
             .filter(|node| {
                 // Has dependencies but no dependents
                 !node.deps.is_empty() && !dependents_map.contains_key(&node.name)
@@ -74,10 +68,8 @@ impl GraphAnalyzer for TCGraph {
 
     fn find_root_nodes(&self) -> HashSet<String> {
         let dependents_map = self.build_dependents_map();
-        let all_nodes = self.get_all_nodes();
 
-        all_nodes
-            .iter()
+        self.nodes()
             .filter(|node| {
                 // Has dependents but no dependencies
                 node.deps.is_empty() && dependents_map.contains_key(&node.name)
@@ -102,7 +94,6 @@ impl GraphAnalyzer for TCGraph {
 
         // Build dependents map for efficient lookup
         let dependents_map = self.build_dependents_map();
-        let all_nodes = self.get_all_nodes();
 
         // Iteratively add nodes whose only dependents are already in dead_nodes
         // This creates the transitive closure of "dead" nodes
@@ -110,7 +101,7 @@ impl GraphAnalyzer for TCGraph {
         while changed {
             changed = false;
 
-            for node in &all_nodes {
+            for node in self.nodes() {
                 // Skip nodes already identified as dead
                 if dead_nodes.contains(&node.name) {
                     continue;
@@ -152,9 +143,8 @@ impl TCGraph {
     /// This is the "dependents" relationship (opposite of "dependencies")
     pub fn build_dependents_map(&self) -> HashMap<String, HashSet<String>> {
         let mut dependents: HashMap<String, HashSet<String>> = HashMap::new();
-        let all_nodes = self.get_all_nodes();
 
-        for node in &all_nodes {
+        for node in self.nodes() {
             for dep in &node.deps {
                 dependents
                     .entry(dep.clone())
@@ -169,8 +159,7 @@ impl TCGraph {
     /// Build a map from node names to their file paths
     /// Used by RootNodeMatcher to check path-based patterns
     pub fn build_node_to_path_map(&self) -> HashMap<String, std::path::PathBuf> {
-        self.get_all_nodes()
-            .iter()
+        self.nodes()
             .map(|node| (node.name.clone(), node.path.clone()))
             .collect()
     }
