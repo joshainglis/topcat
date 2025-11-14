@@ -156,9 +156,13 @@ impl SchemaFilter {
             return false;
         }
 
-        self.schemas
-            .iter()
-            .any(|schema| node_name == schema || node_name.starts_with(&format!("{schema}.")))
+        self.schemas.iter().any(|schema| {
+            // Exact match or starts with "schema."
+            node_name == schema.as_str()
+                || (node_name.len() > schema.len()
+                    && node_name.starts_with(schema.as_str())
+                    && node_name.as_bytes()[schema.len()] == b'.')
+        })
     }
 
     /// Filter a collection of nodes, keeping only those that match the schema filter.
