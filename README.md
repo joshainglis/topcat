@@ -221,6 +221,33 @@ topcat export -i sql/ -e sql --mode deps --node my_node -o deps.json json
 - `--node <NAME>` - Target node (required for deps/dependents/direct modes)
 - `--schema <SCHEMA>...` - Filter by schemas
 
+### `config` - Configuration Management
+
+Manage and inspect Topcat configuration from multiple sources.
+
+```bash
+topcat config show                          # Display effective configuration
+topcat config validate                      # Validate config file
+topcat config generate                      # Generate example config
+topcat config generate > topcat.toml        # Save example to file
+```
+
+**Configuration Operations:**
+- `show` - Display the effective configuration from all sources (CLI, env vars, config files, defaults) with precedence information
+- `validate` - Validate configuration file syntax and settings, with helpful error messages
+- `generate` - Generate a comprehensive example `topcat.toml` with all available options and inline documentation
+
+**Configuration Sources (Precedence Order):**
+1. CLI arguments (highest priority)
+2. Environment variables (`TOPCAT_*`)
+3. Project config (`./topcat.toml`)
+4. User config (`~/.config/topcat/config.toml`)
+5. System config (`/etc/topcat/config.toml`)
+6. Default values (lowest priority)
+
+**Options:**
+- `--config <PATH>` - Specify custom config file path (overrides default discovery)
+
 ## File Metadata
 
 Files specify dependencies and properties via header comments:
@@ -289,6 +316,23 @@ topcat concat -i sql/ -o output.sql --layers setup,functions,views,cleanup
 
 ## Configuration
 
+Topcat uses a unified configuration system that loads settings from multiple sources with clear precedence rules.
+
+### Configuration Precedence
+
+Settings are merged from multiple sources in this order (highest to lowest priority):
+
+1. **CLI arguments** - Command-line flags always take precedence
+2. **Environment variables** - `TOPCAT_*` variables
+3. **Project config** - `./topcat.toml` or `./.topcat.toml`
+4. **User config** - `~/.config/topcat/config.toml`
+5. **System config** - `/etc/topcat/config.toml`
+6. **Default values** - Built-in defaults
+
+This allows you to set baseline configuration in files and override specific settings via environment variables or CLI flags as needed.
+
+### Configuration File
+
 Use `topcat.toml` in your project root for persistent configuration:
 
 ```toml
@@ -322,6 +366,213 @@ root_dirs = ["api/", "migrations/"]
 # Check for external usage
 external_check_dirs = ["src/", "app/"]
 external_check_patterns = ["*.py", "*.rs", "*.ts"]
+
+[layers]
+names = ["prepend", "normal", "append"]
+fallback = "normal"
+
+[filters]
+include_extensions = ["sql"]
+exclude_patterns = ["*.backup.sql", "*.old.sql"]
+
+[behavior]
+verbose = false
+quiet = false
+dry_run = false
+```
+
+**Generate example config:**
+```bash
+topcat config generate > topcat.toml
+```
+
+### Environment Variables
+
+All configuration options can be set via environment variables using the `TOPCAT_` prefix. This is particularly useful for CI/CD pipelines and containerized environments.
+
+#### Variable Naming Convention
+
+- Prefix: `TOPCAT_`
+- Nested sections: Use double underscore `__` (e.g., `TOPCAT_SQL_DISCOVERY__ENABLED`)
+- Arrays: Comma-separated values (e.g., `"value1,value2,value3"`)
+- Booleans: `true` or `false` (case-insensitive)
+
+#### Basic Settings
+
+```bash
+# Verbose output
+export TOPCAT_VERBOSE=true
+
+# Quiet mode (suppress non-error output)
+export TOPCAT_QUIET=true
+
+# Dry-run mode
+export TOPCAT_BEHAVIOR__DRY_RUN=true
+
+# Force mode (skip confirmations)
+export TOPCAT_BEHAVIOR__FORCE=false
+
+# Input/output paths
+export TOPCAT_INPUT_DIRS="/path/to/sql,/path/to/more/sql"
+export TOPCAT_OUTPUT="/path/to/output.sql"
+```
+
+#### File Filters
+
+```bash
+# Include specific file extensions
+export TOPCAT_FILTERS__INCLUDE_EXTENSIONS="sql,ddl"
+
+# Exclude specific extensions
+export TOPCAT_FILTERS__EXCLUDE_EXTENSIONS="backup,tmp"
+
+# Include glob patterns
+export TOPCAT_FILTERS__INCLUDE_GLOBS="**/*.sql,**/*.ddl"
+
+# Exclude glob patterns
+export TOPCAT_FILTERS__EXCLUDE_GLOBS="**/*.backup.sql,**/temp/**"
+
+# Prefix filters
+export TOPCAT_FILTERS__INCLUDE_PREFIXES="api_,public_"
+export TOPCAT_FILTERS__EXCLUDE_PREFIXES="test_,deprecated_"
+```
+
+#### Layer Configuration
+
+```bash
+# Define layer ordering
+export TOPCAT_LAYERS__NAMES="prepend,normal,append"
+
+# Fallback layer for files without declaration
+export TOPCAT_LAYERS__FALLBACK="normal"
+```
+
+#### SQL Discovery
+
+```bash
+# Enable SQL dependency discovery
+export TOPCAT_SQL_DISCOVERY__ENABLED=true
+
+# Schema name pattern (regex)
+export TOPCAT_SQL_DISCOVERY__SCHEMA_PATTERN="myapp_\\w+"
+
+# Object name pattern (regex)
+export TOPCAT_SQL_DISCOVERY__OBJECT_PATTERN="\\w+"
+
+# Merge strategy
+export TOPCAT_SQL_DISCOVERY__MERGE_STRATEGY="discovery-only"
+
+# Type mappings (JSON format)
+export TOPCAT_SQL_DISCOVERY__TYPE_MAPPINGS='{"TSTZRANGE":"c_tmf.t_time_period"}'
+
+# Extension mappings (JSON format)
+export TOPCAT_SQL_DISCOVERY__EXTENSION_MAPPINGS='{"digest":"pgcrypto"}'
+
+# Strip suffixes
+export TOPCAT_SQL_DISCOVERY__STRIP_SUFFIXES="_or_ref,_view"
+
+# Model generation patterns
+export TOPCAT_SQL_DISCOVERY__MODEL_GEN_PATTERNS="codegen_tmf\\.proc_(?:make_model|combine_enums)"
+```
+
+#### Analysis Configuration
+
+```bash
+# Root node protection
+export TOPCAT_ANALYSIS__ROOT_NODES="api_main,public_entry"
+export TOPCAT_ANALYSIS__ROOT_PATTERNS="**/api/*.sql,**/migrations/*.sql"
+export TOPCAT_ANALYSIS__ROOT_REGEX="^api_.*,^public_.*"
+export TOPCAT_ANALYSIS__ROOT_DIRS="api/,migrations/"
+
+# External usage checking
+export TOPCAT_ANALYSIS__EXTERNAL_CHECK_DIRS="/app/src,/app/lib"
+export TOPCAT_ANALYSIS__EXTERNAL_CHECK_PATTERNS="*.py,*.ts,*.rs"
+```
+
+#### Formatting
+
+```bash
+# Comment prefix for headers
+export TOPCAT_FORMATTING__COMMENT_STR="--"
+
+# File separator in concatenated output
+export TOPCAT_FORMATTING__FILE_SEPARATOR_STR="---"
+
+# Required file suffix
+export TOPCAT_FORMATTING__SUFFIX_STR=";"
+```
+
+#### Schema Filtering
+
+```bash
+# Filter operations to specific schemas
+export TOPCAT_SCHEMA_FILTERING__SCHEMAS="auth,billing,analytics"
+```
+
+#### Export Configuration
+
+```bash
+# Export format
+export TOPCAT_EXPORT__FORMAT="json"
+
+# Export mode
+export TOPCAT_EXPORT__MODE="full"
+
+# Target node (for deps/dependents/direct modes)
+export TOPCAT_EXPORT__NODE="api_main"
+```
+
+### CI/CD Pipeline Example
+
+Example GitHub Actions workflow using environment variables:
+
+```yaml
+name: SQL Dependency Check
+
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      TOPCAT_VERBOSE: false
+      TOPCAT_QUIET: true
+      TOPCAT_FILTERS__INCLUDE_EXTENSIONS: sql
+      TOPCAT_ANALYSIS__ROOT_PATTERNS: "**/api/*.sql,**/migrations/*.sql"
+      TOPCAT_ANALYSIS__EXTERNAL_CHECK_DIRS: "src/,app/"
+      TOPCAT_ANALYSIS__EXTERNAL_CHECK_PATTERNS: "*.py,*.ts"
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo install topcat
+
+      # Fail on cycles
+      - name: Check for circular dependencies
+        run: topcat analyze -i sql/ -e sql cycles
+
+      # Fail on missing dependencies
+      - name: Check for missing dependencies
+        run: topcat analyze -i sql/ -e sql missing
+
+      # Report dead branches (informational)
+      - name: Find dead code
+        run: topcat analyze -i sql/ -e sql dead-branches
+```
+
+### Configuration Management Commands
+
+```bash
+# View effective configuration from all sources
+topcat config show
+
+# Validate configuration file
+topcat config validate
+
+# Generate example configuration file
+topcat config generate > topcat.toml
 ```
 
 ### SQL Discovery
@@ -338,7 +589,7 @@ topcat concat -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "mya
 - Type and extension mappings for system objects
 - Multiple merge strategies for combining with manual headers
 
-See configuration section for detailed `sql_discovery` options.
+See configuration section above for detailed `sql_discovery` options.
 
 ## Examples
 
