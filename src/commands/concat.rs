@@ -54,9 +54,63 @@ impl ConcatArgs {
 
         Builder::new().filter(None, log_level).try_init().ok();
 
-        // Convert Settings to ConfigBuilder (temporary bridge until TCGraph is refactored)
-        let config_builder = Self::settings_to_config_builder(&settings)?;
-        let config = config_builder.build()?;
+        // Create Config directly from Settings
+        let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
+            TopCatError::ConfigError("Fallback layer must be specified".to_string())
+        })?;
+
+        let output = settings
+            .output
+            .clone()
+            .ok_or_else(|| TopCatError::ConfigError("Output path must be specified".to_string()))?;
+
+        // Create Config struct with borrowed slices from Settings
+        let config = config::Config {
+            input_dirs: settings.input_dirs.clone(),
+            include_globs: if settings.filters.include_globs.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.include_globs)
+            },
+            exclude_globs: if settings.filters.exclude_globs.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.exclude_globs)
+            },
+            include_extensions: if settings.filters.include_extensions.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.include_extensions)
+            },
+            exclude_extensions: if settings.filters.exclude_extensions.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.exclude_extensions)
+            },
+            output,
+            comment_str: settings.formatting.comment_str.clone(),
+            file_separator_str: settings.formatting.file_separator_str.clone(),
+            file_end_str: settings.formatting.file_end_str.clone(),
+            verbose: settings.behavior.verbose,
+            dry_run: settings.behavior.dry_run,
+            include_node_prefixes: if settings.node_filtering.include_prefixes.is_empty() {
+                None
+            } else {
+                Some(&settings.node_filtering.include_prefixes)
+            },
+            exclude_node_prefixes: if settings.node_filtering.exclude_prefixes.is_empty() {
+                None
+            } else {
+                Some(&settings.node_filtering.exclude_prefixes)
+            },
+            include_hidden: settings.filters.include_hidden,
+            subdir_filter: settings.node_filtering.subdir_filter.clone(),
+            layers: settings.layers.names.clone(),
+            fallback_layer,
+            sql_discovery: settings.sql_discovery.clone(),
+            header_update_mode: settings.header_update_mode,
+            header_output_dir: settings.header_output_dir.clone(),
+        };
 
         // Build the dependency graph
         let mut filedag = TCGraph::new(&config);
@@ -105,85 +159,5 @@ impl ConcatArgs {
         }
 
         Ok(())
-    }
-
-    /// Convert Settings to ConfigBuilder (temporary bridge until TCGraph is refactored)
-    #[allow(deprecated)]
-    fn settings_to_config_builder(
-        settings: &Settings,
-    ) -> Result<config::ConfigBuilder, TopCatError> {
-        let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
-            TopCatError::ConfigError("Fallback layer must be specified".to_string())
-        })?;
-
-        let output = settings
-            .output
-            .clone()
-            .ok_or_else(|| TopCatError::ConfigError("Output path must be specified".to_string()))?;
-
-        // Since Config expects borrowed slices, we need to use ConfigBuilder
-        let builder = config::Config::builder()
-            .input_dirs(settings.input_dirs.clone())
-            .output(output)
-            .comment_str(settings.formatting.comment_str.clone())
-            .file_separator_str(settings.formatting.file_separator_str.clone())
-            .file_end_str(settings.formatting.file_end_str.clone())
-            .verbose(settings.behavior.verbose)
-            .dry_run(settings.behavior.dry_run)
-            .include_hidden(settings.filters.include_hidden)
-            .layers(settings.layers.names.clone())
-            .fallback_layer(&fallback_layer)
-            .sql_discovery(settings.sql_discovery.clone())
-            .header_update_mode(settings.header_update_mode);
-
-        let builder = if !settings.filters.include_globs.is_empty() {
-            builder.include_globs(settings.filters.include_globs.clone())
-        } else {
-            builder
-        };
-
-        let builder = if !settings.filters.exclude_globs.is_empty() {
-            builder.exclude_globs(settings.filters.exclude_globs.clone())
-        } else {
-            builder
-        };
-
-        let builder = if !settings.filters.include_extensions.is_empty() {
-            builder.include_extensions(settings.filters.include_extensions.clone())
-        } else {
-            builder
-        };
-
-        let builder = if !settings.filters.exclude_extensions.is_empty() {
-            builder.exclude_extensions(settings.filters.exclude_extensions.clone())
-        } else {
-            builder
-        };
-
-        let builder = if !settings.node_filtering.include_prefixes.is_empty() {
-            builder.include_node_prefixes(settings.node_filtering.include_prefixes.clone())
-        } else {
-            builder
-        };
-
-        let builder = if !settings.node_filtering.exclude_prefixes.is_empty() {
-            builder.exclude_node_prefixes(settings.node_filtering.exclude_prefixes.clone())
-        } else {
-            builder
-        };
-
-        let builder = if let Some(ref subdir) = settings.node_filtering.subdir_filter {
-            builder.subdir_filter(subdir.clone())
-        } else {
-            builder
-        };
-
-        let builder = if let Some(ref dir) = settings.header_output_dir {
-            builder.header_output_dir(dir.clone())
-        } else {
-            builder
-        };
-
-        Ok(builder)
     }
 }
