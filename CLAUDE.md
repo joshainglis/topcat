@@ -40,6 +40,7 @@ cargo run -- -i input_dir/ -o output.sql
 # Concatenation
 topcat concat -i sql/ -o migrations.sql             # Concatenate files
 topcat concat -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "myapp_\\w+"
+topcat concat -i sql/ -o out.sql --update-headers --rename-files  # Update headers & rename files
 
 # Analysis
 topcat analyze -i sql/ -e sql dead-branches         # Find dead code
@@ -254,6 +255,8 @@ Create `topcat.toml` in your project root for persistent settings:
 [sql_discovery]
 enabled = true
 schema_pattern = "(?:app|test)_\\w+"
+extension_mappings = { "nlevel" = "ltree", "digest" = "pgcrypto" }
+type_mappings = { "TSTZRANGE" = "c_tmf.t_time_period" }
 
 [analysis]
 root_patterns = ["**/api/*.sql", "**/migrations/*.sql"]

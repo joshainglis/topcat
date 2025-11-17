@@ -135,11 +135,22 @@ impl ConcatArgs {
         if settings.header_update_mode != sql_config::HeaderUpdateMode::Never {
             info!("Updating file headers...");
             let file_nodes: Vec<_> = filedag.get_all_nodes();
+
+            // Determine default extension from filters config, or use "sql" as fallback
+            let default_extension = settings
+                .filters
+                .include_extensions
+                .first()
+                .map(|s| s.as_str())
+                .unwrap_or("sql");
+
             header_generator::update_headers(
                 &file_nodes,
                 &settings.formatting.comment_str,
                 settings.header_update_mode,
                 settings.header_output_dir.as_deref(),
+                settings.rename_files,
+                default_extension,
             )?;
         }
 

@@ -58,11 +58,13 @@ pub fn update_headers(
     comment_str: &str,
     mode: HeaderUpdateMode,
     output_dir: Option<&Path>,
+    rename_files: bool,
+    default_extension: &str,
 ) -> Result<(), TopCatError> {
     match mode {
         HeaderUpdateMode::Never => Ok(()),
         HeaderUpdateMode::InPlace => {
-            update_headers_in_place(file_nodes, comment_str)?;
+            update_headers_in_place(file_nodes, comment_str, rename_files, default_extension)?;
             Ok(())
         }
         HeaderUpdateMode::Generate => {
@@ -71,14 +73,30 @@ pub fn update_headers(
                     "Output directory must be specified for generate mode".to_string(),
                 )
             })?;
-            generate_headers_to_dir(file_nodes, comment_str, output_dir)?;
+            generate_headers_to_dir(
+                file_nodes,
+                comment_str,
+                output_dir,
+                rename_files,
+                default_extension,
+            )?;
             Ok(())
         }
     }
 }
 
 /// Update file headers in-place
-fn update_headers_in_place(file_nodes: &[FileNode], comment_str: &str) -> Result<(), TopCatError> {
+fn update_headers_in_place(
+    file_nodes: &[FileNode],
+    comment_str: &str,
+    rename_files: bool,
+    default_extension: &str,
+) -> Result<(), TopCatError> {
+    // Check for filename conflicts before making any changes
+    if rename_files {
+        check_rename_conflicts(file_nodes, default_extension)?;
+    }
+
     for file_node in file_nodes {
         // Only update if we have discovered dependencies
         if file_node.discovered_deps.is_none() {
@@ -99,9 +117,33 @@ fn update_headers_in_place(file_nodes: &[FileNode], comment_str: &str) -> Result
 
         // Write updated file
         let updated_content = format!("{new_header}\n{original_body}");
-        fs::write(&file_node.path, updated_content)?;
 
-        info!("Updated headers in {:?}", file_node.path);
+        // Handle file renaming if enabled and needed
+        if rename_files && file_node.needs_rename(default_extension) {
+            if let Some(suggested_filename) = file_node.suggested_filename(default_extension) {
+                let parent_dir = file_node
+                    .path
+                    .parent()
+                    .ok_or_else(|| TopCatError::UnknownError("No parent directory".to_string()))?;
+                let new_path = parent_dir.join(&suggested_filename);
+
+                // Write to new location
+                fs::write(&new_path, &updated_content)?;
+
+                // Remove old file
+                fs::remove_file(&file_node.path)?;
+
+                info!(
+                    "Renamed {:?} to {}",
+                    file_node.path.file_name(),
+                    suggested_filename
+                );
+            }
+        } else {
+            // Just update the existing file
+            fs::write(&file_node.path, updated_content)?;
+            info!("Updated headers in {:?}", file_node.path);
+        }
     }
 
     Ok(())
@@ -112,9 +154,16 @@ fn generate_headers_to_dir(
     file_nodes: &[FileNode],
     comment_str: &str,
     output_dir: &Path,
+    rename_files: bool,
+    default_extension: &str,
 ) -> Result<(), TopCatError> {
     // Create output directory if it doesn't exist
     fs::create_dir_all(output_dir)?;
+
+    // Check for filename conflicts before making any changes
+    if rename_files {
+        check_rename_conflicts(file_nodes, default_extension)?;
+    }
 
     for file_node in file_nodes {
         // Only generate if we have discovered dependencies
@@ -134,16 +183,114 @@ fn generate_headers_to_dir(
         let content_start = find_content_start(&original_content, comment_str);
         let original_body = &original_content[content_start..];
 
-        // Write to output directory
-        let file_name = file_node.path.file_name().ok_or_else(|| {
-            TopCatError::UnknownError(format!("Invalid file path: {:?}", file_node.path))
-        })?;
-        let output_path = output_dir.join(file_name);
+        // Determine output filename (use suggested name if renaming, otherwise original)
+        let file_name = if rename_files {
+            file_node
+                .suggested_filename(default_extension)
+                .unwrap_or_else(|| {
+                    file_node
+                        .path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown.sql")
+                        .to_string()
+                })
+        } else {
+            file_node
+                .path
+                .file_name()
+                .ok_or_else(|| {
+                    TopCatError::UnknownError(format!("Invalid file path: {:?}", file_node.path))
+                })?
+                .to_string_lossy()
+                .to_string()
+        };
+
+        let output_path = output_dir.join(&file_name);
 
         let updated_content = format!("{new_header}\n{original_body}");
         fs::write(&output_path, updated_content)?;
 
-        info!("Generated updated file at {output_path:?}");
+        if rename_files && file_node.needs_rename(default_extension) {
+            info!(
+                "Generated file {:?} with new name: {}",
+                file_node.path.file_name(),
+                file_name
+            );
+        } else {
+            info!("Generated updated file at {output_path:?}");
+        }
+    }
+
+    Ok(())
+}
+
+/// Check for filename conflicts before renaming
+fn check_rename_conflicts(
+    file_nodes: &[FileNode],
+    default_extension: &str,
+) -> Result<(), TopCatError> {
+    use std::collections::HashMap;
+
+    // Build a map of suggested filenames to original paths
+    let mut filename_map: HashMap<String, Vec<&FileNode>> = HashMap::new();
+
+    for file_node in file_nodes {
+        if file_node.discovered_deps.is_none() {
+            continue;
+        }
+
+        if let Some(suggested) = file_node.suggested_filename(default_extension) {
+            filename_map.entry(suggested).or_default().push(file_node);
+        }
+    }
+
+    // Check for conflicts (multiple files wanting the same name)
+    let mut conflicts = Vec::new();
+    for (filename, nodes) in filename_map.iter() {
+        if nodes.len() > 1 {
+            let paths: Vec<String> = nodes.iter().map(|n| n.path.display().to_string()).collect();
+            conflicts.push(format!(
+                "Multiple files want to be named '{}': {:?}",
+                filename, paths
+            ));
+        }
+    }
+
+    // Also check if any suggested filename already exists as a different file
+    for file_node in file_nodes {
+        if file_node.discovered_deps.is_none() {
+            continue;
+        }
+
+        if let (Some(parent_dir), Some(suggested)) = (
+            file_node.path.parent(),
+            file_node.suggested_filename(default_extension),
+        ) {
+            let target_path = parent_dir.join(&suggested);
+
+            // Check if target exists and is a different file
+            if target_path.exists() && target_path != file_node.path {
+                // Check if this target is one of our managed files
+                let is_managed = file_nodes.iter().any(|n| n.path == target_path);
+
+                if !is_managed {
+                    conflicts.push(format!(
+                        "Cannot rename {:?} to '{}': file already exists at {:?}",
+                        file_node.path.file_name(),
+                        suggested,
+                        target_path
+                    ));
+                }
+            }
+        }
+    }
+
+    if !conflicts.is_empty() {
+        return Err(TopCatError::ConfigError(format!(
+            "File rename conflicts detected:\n{}",
+            conflicts.join("\n")
+        )));
     }
 
     Ok(())
@@ -244,12 +391,89 @@ mod tests {
         );
         file_node.discovered_deps = Some(HashSet::from(["new_dep".to_string()]));
 
-        update_headers_in_place(&[file_node], "--")?;
+        update_headers_in_place(&[file_node], "--", false, "sql")?;
 
         let updated_content = fs::read_to_string(&test_file)?;
         assert!(updated_content.contains("-- name: new_name"));
         assert!(updated_content.contains("-- requires: new_dep"));
         assert!(updated_content.contains("SELECT 1;"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_file_renaming() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let test_file = temp_dir.path().join("old_name.sql");
+
+        // Create a test file
+        fs::write(
+            &test_file,
+            "-- name: old_name\n-- requires: old_dep\n\nCREATE TABLE test_schema.new_table (id INT);\n",
+        )?;
+
+        let mut file_node = FileNode::new(
+            "test_schema.new_table".to_string(),
+            test_file.clone(),
+            HashSet::from(["test_schema".to_string()]),
+            "normal".to_string(),
+            HashSet::new(),
+        );
+        file_node.discovered_deps = Some(HashSet::from(["test_schema".to_string()]));
+
+        // Update with renaming enabled
+        update_headers_in_place(&[file_node], "--", true, "sql")?;
+
+        // Old file should not exist
+        assert!(!test_file.exists());
+
+        // New file should exist with correct name
+        let new_file = temp_dir.path().join("new_table.sql");
+        assert!(new_file.exists());
+
+        // Content should be updated
+        let updated_content = fs::read_to_string(&new_file)?;
+        assert!(updated_content.contains("-- name: test_schema.new_table"));
+        assert!(updated_content.contains("-- requires: test_schema"));
+        assert!(updated_content.contains("CREATE TABLE test_schema.new_table"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_rename_conflict_detection() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let test_file1 = temp_dir.path().join("file1.sql");
+        let test_file2 = temp_dir.path().join("file2.sql");
+
+        // Create two test files that would want the same name
+        fs::write(&test_file1, "CREATE TABLE test_schema.my_table (id INT);\n")?;
+        fs::write(
+            &test_file2,
+            "CREATE TABLE test_schema.my_table (name TEXT);\n",
+        )?;
+
+        let mut file_node1 = FileNode::new(
+            "test_schema.my_table".to_string(),
+            test_file1.clone(),
+            HashSet::new(),
+            "normal".to_string(),
+            HashSet::new(),
+        );
+        file_node1.discovered_deps = Some(HashSet::new());
+
+        let mut file_node2 = FileNode::new(
+            "test_schema.my_table".to_string(),
+            test_file2.clone(),
+            HashSet::new(),
+            "normal".to_string(),
+            HashSet::new(),
+        );
+        file_node2.discovered_deps = Some(HashSet::new());
+
+        // This should fail due to conflict
+        let result = update_headers_in_place(&[file_node1, file_node2], "--", true, "sql");
+        assert!(result.is_err());
 
         Ok(())
     }

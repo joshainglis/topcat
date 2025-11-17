@@ -51,6 +51,9 @@ pub struct Settings {
     /// Output directory for updated headers (if different from source)
     pub header_output_dir: Option<PathBuf>,
 
+    /// Rename files based on discovered node names
+    pub rename_files: bool,
+
     /// Analysis configuration (root nodes, external usage checking)
     pub analysis: AnalysisConfig,
 
@@ -90,6 +93,7 @@ impl Default for Settings {
             sql_discovery: SqlDiscoveryConfig::default(),
             header_update_mode: HeaderUpdateMode::Never,
             header_output_dir: None,
+            rename_files: false,
             analysis: AnalysisConfig::default(),
             formatting: FormattingConfig::default(),
             behavior: BehaviorConfig::default(),

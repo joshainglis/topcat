@@ -106,6 +106,7 @@ topcat concat -i dir1/ -i dir2/ -o output.sql --layers prepend,normal,append
 **Header Management:**
 - `--update-headers` - Update source files with discovered dependencies
 - `--generate-headers <DIR>` - Write files with updated headers to directory
+- `--rename-files` - Rename files based on discovered node names (use with header options)
 
 **Formatting Options:**
 - `-c, --comment-prefix <STR>` - Comment string (default: `--`)
@@ -588,6 +589,31 @@ topcat concat -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "mya
 - Configurable schema and object patterns
 - Type and extension mappings for system objects
 - Multiple merge strategies for combining with manual headers
+
+**Extension Mapping Example:**
+
+When SQL uses extension functions, map them to their providing extensions:
+
+```toml
+[sql_discovery]
+extension_mappings = { "nlevel" = "ltree", "lca" = "ltree", "digest" = "pgcrypto" }
+```
+
+Now when your SQL contains `SELECT e_extensions.nlevel(path)`, Topcat automatically creates a dependency on `e_extensions.ltree` instead of the non-existent `e_extensions.nlevel`.
+
+**File Renaming:**
+
+Use `--rename-files` with header management to rename files based on discovered node names:
+
+```bash
+# Update headers and rename files in-place
+topcat concat -i sql/ -o output.sql --enable-sql-discovery --update-headers --rename-files
+
+# Generate renamed files in a new directory
+topcat concat -i sql/ -o output.sql --enable-sql-discovery --generate-headers ./updated --rename-files
+```
+
+For schema.object nodes, files are renamed to `object.ext` (e.g., `my_schema.users` → `users.sql`). For schema-only nodes, files keep the schema name (e.g., `my_schema` → `my_schema.sql`).
 
 See configuration section above for detailed `sql_discovery` options.
 

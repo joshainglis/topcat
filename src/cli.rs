@@ -112,6 +112,12 @@ pub struct CommonArgs {
     )]
     pub generate_headers_dir: Option<PathBuf>,
 
+    #[arg(
+        long = "rename-files",
+        help = "Rename files based on discovered node names (requires --update-headers or --generate-headers)"
+    )]
+    pub rename_files: Option<bool>,
+
     // Formatting
     #[arg(
         short = 'c',
@@ -329,6 +335,10 @@ impl CommonArgs {
         if let Some(ref dir) = self.generate_headers_dir {
             settings.header_update_mode = HeaderUpdateMode::Generate;
             settings.header_output_dir = Some(dir.clone());
+        }
+
+        if let Some(rename_files) = self.rename_files {
+            settings.rename_files = rename_files;
         }
 
         // Formatting

@@ -424,4 +424,49 @@ CALL codegen_tmf.proc_make_model(
 
         assert_eq!(result.node_name, Some("c_test.my_model".to_string()));
     }
+
+    #[test]
+    fn test_extension_mappings() {
+        let mut config = make_simple_config();
+        // Configure extension mappings similar to the Python script
+        config
+            .extension_mappings
+            .insert("nlevel".to_string(), "ltree".to_string());
+        config
+            .extension_mappings
+            .insert("lca".to_string(), "ltree".to_string());
+        config
+            .extension_mappings
+            .insert("index".to_string(), "ltree".to_string());
+        config
+            .extension_mappings
+            .insert("digest".to_string(), "pgcrypto".to_string());
+
+        let analyzer = SqlAnalyzer::new(config).unwrap();
+
+        // Test that e_extensions.nlevel gets mapped to e_extensions.ltree
+        let sql = "SELECT e_extensions.nlevel(path) FROM my_table;";
+        let result = analyzer.analyze(sql);
+
+        assert!(
+            result.dependencies.contains("e_extensions.ltree"),
+            "Expected dependency on e_extensions.ltree, got {:?}",
+            result.dependencies
+        );
+        assert!(
+            !result.dependencies.contains("e_extensions.nlevel"),
+            "Should not have dependency on e_extensions.nlevel, got {:?}",
+            result.dependencies
+        );
+
+        // Test digest -> pgcrypto mapping
+        let sql2 = "SELECT e_extensions.digest('test', 'sha256');";
+        let result2 = analyzer.analyze(sql2);
+
+        assert!(
+            result2.dependencies.contains("e_extensions.pgcrypto"),
+            "Expected dependency on e_extensions.pgcrypto, got {:?}",
+            result2.dependencies
+        );
+    }
 }
