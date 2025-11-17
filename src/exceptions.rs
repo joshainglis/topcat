@@ -67,7 +67,7 @@ impl fmt::Display for TopCatError {
                 write!(f, "{error_message}")
             }
             Self::Io(err) => write!(f, "IO error: {err}"),
-            Self::ConfigError(s) => write!(f, "Configuration error: {s}"),
+            Self::ConfigError(s) => write!(f, "{s}"),
             Self::SerializationError(s) => write!(f, "Serialization error: {s}"),
             Self::UnknownError(s) => write!(f, "UnknownError: {s}"),
             Self::GraphBuildError(s) => write!(f, "Graph build error: {s}"),

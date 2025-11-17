@@ -1,7 +1,5 @@
 use clap::{Parser, Subcommand};
 
-use topcat::exceptions::TopCatError;
-
 mod commands;
 
 /// Topcat - Topological file concatenation and dependency analysis tool
@@ -31,10 +29,10 @@ enum Commands {
     Config(commands::config::ConfigArgs),
 }
 
-fn main() -> Result<(), TopCatError> {
+fn main() {
     let cli = Cli::parse();
 
-    match cli.command {
+    let result = match cli.command {
         Commands::Concat(args) => args.execute(),
         Commands::Update(args) => args.execute(),
         Commands::Analyze(args) => args.execute(),
@@ -42,5 +40,10 @@ fn main() -> Result<(), TopCatError> {
         Commands::Schema(args) => args.execute(),
         Commands::Export(args) => args.execute(),
         Commands::Config(args) => args.execute(),
+    };
+
+    if let Err(e) = result {
+        eprintln!("{e}");
+        std::process::exit(1);
     }
 }

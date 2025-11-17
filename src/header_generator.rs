@@ -231,28 +231,39 @@ fn check_rename_conflicts(
     default_extension: &str,
 ) -> Result<(), TopCatError> {
     use std::collections::HashMap;
+    use std::path::PathBuf;
 
-    // Build a map of suggested filenames to original paths
-    let mut filename_map: HashMap<String, Vec<&FileNode>> = HashMap::new();
+    // Build a map of (parent_dir, filename) to original paths
+    // This ensures we only detect conflicts within the same directory
+    let mut filename_map: HashMap<(PathBuf, String), Vec<&FileNode>> = HashMap::new();
 
     for file_node in file_nodes {
         if file_node.discovered_deps.is_none() {
             continue;
         }
 
-        if let Some(suggested) = file_node.suggested_filename(default_extension) {
-            filename_map.entry(suggested).or_default().push(file_node);
+        if let (Some(parent_dir), Some(suggested)) = (
+            file_node.path.parent(),
+            file_node.suggested_filename(default_extension),
+        ) {
+            let key = (parent_dir.to_path_buf(), suggested);
+            filename_map.entry(key).or_default().push(file_node);
         }
     }
 
-    // Check for conflicts (multiple files wanting the same name)
+    // Check for conflicts (multiple files wanting the same name in the same directory)
     let mut conflicts = Vec::new();
-    for (filename, nodes) in filename_map.iter() {
+    for ((parent_dir, filename), nodes) in filename_map.iter() {
         if nodes.len() > 1 {
-            let paths: Vec<String> = nodes.iter().map(|n| n.path.display().to_string()).collect();
-            conflicts.push(format!(
-                "Multiple files want to be named '{filename}': {paths:?}"
-            ));
+            let mut conflict_lines = vec![
+                format!("  Directory: {}", parent_dir.display()),
+                format!("  Target filename: {}", filename),
+                "  Conflicting files:".to_string(),
+            ];
+            for node in nodes {
+                conflict_lines.push(format!("    - {}", node.path.display()));
+            }
+            conflicts.push(conflict_lines.join("\n"));
         }
     }
 
@@ -275,10 +286,10 @@ fn check_rename_conflicts(
 
                 if !is_managed {
                     conflicts.push(format!(
-                        "Cannot rename {:?} to '{}': file already exists at {:?}",
-                        file_node.path.file_name(),
+                        "  Cannot rename: {}\n  Target name: {}\n  Blocked by existing file: {}",
+                        file_node.path.display(),
                         suggested,
-                        target_path
+                        target_path.display()
                     ));
                 }
             }
@@ -286,10 +297,11 @@ fn check_rename_conflicts(
     }
 
     if !conflicts.is_empty() {
-        return Err(TopCatError::ConfigError(format!(
-            "File rename conflicts detected:\n{}",
-            conflicts.join("\n")
-        )));
+        let error_msg = format!(
+            "\nFile rename conflicts detected:\n\n{}",
+            conflicts.join("\n\n")
+        );
+        return Err(TopCatError::ConfigError(error_msg));
     }
 
     Ok(())
