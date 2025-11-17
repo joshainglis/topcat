@@ -7,7 +7,7 @@ use crate::settings::{HeaderUpdateMode, MergeStrategy, Settings};
 ///
 /// These arguments can be used with any Topcat command and will override
 /// configuration file settings when specified.
-#[derive(Debug, Args, Clone)]
+#[derive(Debug, Args, Clone, Default)]
 pub struct CommonArgs {
     // File Sources
     #[arg(
@@ -309,10 +309,10 @@ impl CommonArgs {
             settings.sql_discovery.schema_pattern = Some(pattern.clone());
         }
 
-        if let Some(ref strategy) = self.merge_strategy {
-            if let Ok(parsed) = strategy.parse::<MergeStrategy>() {
-                settings.sql_discovery.merge_strategy = parsed;
-            }
+        if let Some(ref strategy) = self.merge_strategy
+            && let Ok(parsed) = strategy.parse::<MergeStrategy>()
+        {
+            settings.sql_discovery.merge_strategy = parsed;
         }
 
         if let Some(update_headers) = self.update_headers {
@@ -486,45 +486,5 @@ mod tests {
         args.apply_to_settings(&mut settings);
 
         assert!(!settings.behavior.dry_run);
-    }
-}
-
-impl Default for CommonArgs {
-    fn default() -> Self {
-        Self {
-            input_dirs: None,
-            output: None,
-            include_extensions: None,
-            exclude_extensions: None,
-            include_globs: None,
-            exclude_globs: None,
-            include_hidden: None,
-            layers: None,
-            fallback_layer: None,
-            enable_sql_discovery: None,
-            schema_pattern: None,
-            merge_strategy: None,
-            update_headers: None,
-            generate_headers_dir: None,
-            comment_str: None,
-            file_separator_str: None,
-            file_end_str: None,
-            verbose: None,
-            quiet: None,
-            dry_run: None,
-            no_dry_run: false,
-            force: None,
-            include_node_prefixes: None,
-            exclude_node_prefixes: None,
-            subdir_filter: None,
-            schemas: None,
-            root_nodes: None,
-            root_patterns: None,
-            root_regex: None,
-            root_dirs: None,
-            external_check_dirs: None,
-            external_check_patterns: None,
-            config_file: None,
-        }
     }
 }

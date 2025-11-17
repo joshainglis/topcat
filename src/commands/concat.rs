@@ -30,9 +30,7 @@ impl ConcatArgs {
         self.common.apply_to_settings(&mut settings);
 
         // Validate settings
-        settings
-            .validate()
-            .map_err(|e| TopCatError::ConfigError(e))?;
+        settings.validate().map_err(TopCatError::ConfigError)?;
 
         // Ensure required fields are set
         if settings.input_dirs.is_empty() {

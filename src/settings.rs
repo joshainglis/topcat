@@ -175,13 +175,13 @@ impl Settings {
             return Err("At least one layer must be specified".to_string());
         }
 
-        if let Some(ref fallback) = self.layers.fallback {
-            if !self.layers.names.contains(fallback) {
-                return Err(format!(
-                    "Fallback layer '{}' is not in layers list",
-                    fallback
-                ));
-            }
+        if let Some(ref fallback) = self.layers.fallback
+            && !self.layers.names.contains(fallback)
+        {
+            return Err(format!(
+                "Fallback layer '{}' is not in layers list",
+                fallback
+            ));
         }
 
         Ok(())
@@ -264,6 +264,7 @@ impl Default for FormattingConfig {
 /// Configuration for behavior flags.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct BehaviorConfig {
     /// Enable verbose output with detailed logging
     pub verbose: bool,
@@ -278,20 +279,10 @@ pub struct BehaviorConfig {
     pub force: bool,
 }
 
-impl Default for BehaviorConfig {
-    fn default() -> Self {
-        Self {
-            verbose: false,
-            quiet: false,
-            dry_run: false,
-            force: false,
-        }
-    }
-}
-
 /// Configuration for node filtering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct NodeFilteringConfig {
     /// Node name prefixes to include (e.g., ["auth::", "billing::"])
     pub include_prefixes: Vec<String>,
@@ -303,50 +294,25 @@ pub struct NodeFilteringConfig {
     pub subdir_filter: Option<PathBuf>,
 }
 
-impl Default for NodeFilteringConfig {
-    fn default() -> Self {
-        Self {
-            include_prefixes: Vec::new(),
-            exclude_prefixes: Vec::new(),
-            subdir_filter: None,
-        }
-    }
-}
-
 /// Configuration for schema filtering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct SchemaFilteringConfig {
     /// Schemas to include in operations
     pub schemas: Vec<String>,
 }
 
-impl Default for SchemaFilteringConfig {
-    fn default() -> Self {
-        Self {
-            schemas: Vec::new(),
-        }
-    }
-}
-
 /// Configuration for export operations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct ExportConfig {
     /// Export mode (full graph, dependencies, dependents, or direct)
     pub mode: Option<ExportMode>,
 
     /// Node name for dependency/dependents export
     pub node: Option<String>,
-}
-
-impl Default for ExportConfig {
-    fn default() -> Self {
-        Self {
-            mode: None,
-            node: None,
-        }
-    }
 }
 
 /// Export mode for graph export.

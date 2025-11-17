@@ -119,9 +119,7 @@ impl CleanArgs {
         self.common.apply_to_settings(&mut settings);
 
         // 3. Validate settings
-        settings
-            .validate()
-            .map_err(|e| TopCatError::ConfigError(e))?;
+        settings.validate().map_err(TopCatError::ConfigError)?;
 
         // 4. Ensure required fields are set
         if settings.input_dirs.is_empty() {
@@ -274,7 +272,7 @@ impl CleanArgs {
             .analysis
             .root_dirs
             .iter()
-            .map(|s| PathBuf::from(s))
+            .map(PathBuf::from)
             .collect();
 
         // Create matcher only if we have any root configuration
@@ -302,7 +300,7 @@ impl CleanArgs {
             .analysis
             .external_check_dirs
             .iter()
-            .map(|s| PathBuf::from(s))
+            .map(PathBuf::from)
             .collect();
         let patterns = settings.analysis.external_check_patterns.clone();
 
