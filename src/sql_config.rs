@@ -122,6 +122,50 @@ pub struct AnalysisConfig {
     /// Directories where all files are considered roots
     #[serde(default)]
     pub root_dirs: Vec<String>,
+
+    /// Directories to check for external usage of SQL objects
+    #[serde(default)]
+    pub external_check_dirs: Vec<String>,
+
+    /// File patterns to check for external usage (e.g., "*.py", "*.ts")
+    #[serde(default)]
+    pub external_check_patterns: Vec<String>,
+}
+
+/// Configuration for file filtering
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FiltersConfig {
+    /// Glob patterns for files to include (e.g., "**/*.sql")
+    #[serde(default)]
+    pub include_globs: Vec<String>,
+
+    /// Glob patterns for files to exclude (e.g., "**/test_*.sql")
+    #[serde(default)]
+    pub exclude_globs: Vec<String>,
+
+    /// File extensions to include (without leading dot)
+    #[serde(default)]
+    pub include_extensions: Vec<String>,
+
+    /// File extensions to exclude
+    #[serde(default)]
+    pub exclude_extensions: Vec<String>,
+
+    /// Include hidden files and directories
+    #[serde(default)]
+    pub include_hidden: bool,
+}
+
+/// Configuration for layer ordering
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LayersConfig {
+    /// Layer names in execution order (e.g., ["prepend", "normal", "append"])
+    #[serde(default)]
+    pub names: Vec<String>,
+
+    /// Default layer for files without explicit layer declaration
+    #[serde(default)]
+    pub fallback: Option<String>,
 }
 
 /// Full TOML configuration file structure
@@ -132,6 +176,12 @@ pub struct TopcatConfig {
 
     #[serde(default)]
     pub analysis: AnalysisConfig,
+
+    #[serde(default)]
+    pub filters: FiltersConfig,
+
+    #[serde(default)]
+    pub layers: LayersConfig,
 }
 
 impl TopcatConfig {
@@ -223,6 +273,8 @@ mod tests {
                 ..Default::default()
             },
             analysis: AnalysisConfig::default(),
+            filters: FiltersConfig::default(),
+            layers: LayersConfig::default(),
         };
 
         let overrides = SqlDiscoveryConfig {

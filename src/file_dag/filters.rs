@@ -152,18 +152,15 @@ impl TCGraph {
                     .expect("Layer graph should exist for node layer");
                 for dep in &node.deps {
                     // Only add edge if dependency is in the same layer and in the filtered set
-                    if nodes_to_keep.contains(dep) {
-                        if let Some(dep_node) = new_graph.name_map.get(dep) {
-                            if dep_node.layer == node.layer {
-                                if let Some(&target_idx) = new_graph
-                                    .layer_index_maps
-                                    .get(&node.layer)
-                                    .and_then(|m| m.get(dep))
-                                {
-                                    layer_graph.add_edge(source_idx, target_idx, ());
-                                }
-                            }
-                        }
+                    if nodes_to_keep.contains(dep)
+                        && let Some(dep_node) = new_graph.name_map.get(dep)
+                        && dep_node.layer == node.layer
+                        && let Some(&target_idx) = new_graph
+                            .layer_index_maps
+                            .get(&node.layer)
+                            .and_then(|m| m.get(dep))
+                    {
+                        layer_graph.add_edge(source_idx, target_idx, ());
                     }
                 }
             }

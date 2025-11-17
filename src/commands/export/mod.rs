@@ -130,6 +130,7 @@ impl ExportArgs {
     /// - Graph construction fails (file reading, parsing, cycle detection)
     fn build_graph(&self) -> Result<TCGraph, TopCatError> {
         let (layers, fallback_layer) = cmd_common::parse_and_validate_layers(
+            &None, // export doesn't have sql_config support yet
             &self.layers,
             &Some(self.fallback_layer.clone()),
         )?;

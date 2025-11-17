@@ -76,11 +76,11 @@ pub fn clean(
     let mut dependent_warnings = Vec::new();
 
     for target in &targets_to_delete {
-        if let Some(dependents) = dependents_map.get(target) {
-            if !dependents.is_empty() {
-                has_dependents = true;
-                dependent_warnings.push((target.clone(), dependents.clone()));
-            }
+        if let Some(dependents) = dependents_map.get(target)
+            && !dependents.is_empty()
+        {
+            has_dependents = true;
+            dependent_warnings.push((target.clone(), dependents.clone()));
         }
     }
 

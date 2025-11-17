@@ -49,45 +49,45 @@ pub(super) fn filter_files<'a>(
     debug!("exclude extensions: {exclude_extensions:?}");
     files.iter().filter(move |path| {
         trace!("checking filters for path: {path:?}");
-        if let Some(include) = include_extensions {
-            if !include.is_empty() {
-                let ext = match path.extension() {
-                    Some(e) => e.to_string_lossy().to_lowercase(),
-                    None => return false,
-                };
-                if !include.contains(&ext) {
-                    debug!(
-                        "Excluding file {path:?} as its extension {ext:?} isn't in the include set: {include:?}"
-                    );
-                    return false;
-                }
-            }
-        }
-        if let Some(exclude) = exclude_extensions {
-            if !exclude.is_empty() {
-                let ext = match path.extension() {
-                    Some(e) => e.to_string_lossy().to_lowercase(),
-                    None => return false,
-                };
-                if exclude.contains(&ext) {
-                    debug!(
-                        "Excluding file {path:?} as its extension '{ext:?}' is in the exclude set: {exclude:?}"
-                    );
-                    return false;
-                }
-            }
-        }
-        if let Some(include) = include_file_set {
-            if !include.is_empty() && !include.contains::<PathBuf>(path) {
-                debug!("Excluding file as it isn't in the include set: {path:?}");
+        if let Some(include) = include_extensions
+            && !include.is_empty()
+        {
+            let ext = match path.extension() {
+                Some(e) => e.to_string_lossy().to_lowercase(),
+                None => return false,
+            };
+            if !include.contains(&ext) {
+                debug!(
+                    "Excluding file {path:?} as its extension {ext:?} isn't in the include set: {include:?}"
+                );
                 return false;
             }
         }
-        if let Some(exclude) = exclude_file_set {
-            if !exclude.is_empty() && exclude.contains::<PathBuf>(path) {
-                debug!("Excluding file as it is in the exclude set: {path:?}");
+        if let Some(exclude) = exclude_extensions
+            && !exclude.is_empty()
+        {
+            let ext = match path.extension() {
+                Some(e) => e.to_string_lossy().to_lowercase(),
+                None => return false,
+            };
+            if exclude.contains(&ext) {
+                debug!(
+                    "Excluding file {path:?} as its extension '{ext:?}' is in the exclude set: {exclude:?}"
+                );
                 return false;
             }
+        }
+        if let Some(include) = include_file_set
+            && !include.is_empty() && !include.contains::<PathBuf>(path)
+        {
+            debug!("Excluding file as it isn't in the include set: {path:?}");
+            return false;
+        }
+        if let Some(exclude) = exclude_file_set
+            && !exclude.is_empty() && exclude.contains::<PathBuf>(path)
+        {
+            debug!("Excluding file as it is in the exclude set: {path:?}");
+            return false;
         }
         true
     })
@@ -129,17 +129,16 @@ pub(super) fn perform_sql_discovery(
     let analysis = analyzer.analyze(&content);
 
     // Update the node name if discovered and not already set
-    if let Some(discovered_name) = analysis.node_name {
-        if file_node.name_source == crate::file_node::NameSource::Discovered
-            || file_node.name.is_empty()
-        {
-            debug!(
-                "Discovered node name: {} for file {:?}",
-                discovered_name, file_node.path
-            );
-            file_node.name = discovered_name;
-            file_node.name_source = crate::file_node::NameSource::Discovered;
-        }
+    if let Some(discovered_name) = analysis.node_name
+        && (file_node.name_source == crate::file_node::NameSource::Discovered
+            || file_node.name.is_empty())
+    {
+        debug!(
+            "Discovered node name: {} for file {:?}",
+            discovered_name, file_node.path
+        );
+        file_node.name = discovered_name;
+        file_node.name_source = crate::file_node::NameSource::Discovered;
     }
 
     // Remove self-dependencies and subobjects

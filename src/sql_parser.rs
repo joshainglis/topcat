@@ -177,18 +177,18 @@ impl SqlAnalyzer {
 
                 // Extract node name from CREATE statements
                 if result.node_name.is_none() {
-                    if let Some(captures) = self.create_pattern.captures(clean_line) {
-                        if let Some(node_name) = self.node_name_from_captures(&captures) {
-                            result.node_name = Some(node_name.clone());
-                            // Don't add this as a subobject if it's the first node
-                        }
+                    if let Some(captures) = self.create_pattern.captures(clean_line)
+                        && let Some(node_name) = self.node_name_from_captures(&captures)
+                    {
+                        result.node_name = Some(node_name.clone());
+                        // Don't add this as a subobject if it's the first node
                     }
                 }
                 // If we already have a node name, subsequent CREATEs are subobjects
-                else if let Some(captures) = self.create_pattern.captures(clean_line) {
-                    if let Some(subobject_name) = self.node_name_from_captures(&captures) {
-                        result.subobjects.insert(subobject_name);
-                    }
+                else if let Some(captures) = self.create_pattern.captures(clean_line)
+                    && let Some(subobject_name) = self.node_name_from_captures(&captures)
+                {
+                    result.subobjects.insert(subobject_name);
                 }
 
                 // Extract dependencies from the line

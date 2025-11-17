@@ -334,10 +334,11 @@ impl AnalyzeArgs {
         // Build the dependency graph (for all other commands)
         let graph = self.build_graph()?;
 
-        // Check for external usage if requested
-        let external_checker = cmd_common::build_external_checker(
-            &self.external_check_dirs,
-            &self.external_check_patterns,
+        // Check for external usage if requested (merge CLI args with config file)
+        let external_checker = cmd_common::build_external_checker_with_config(
+            &self.sql_config_file,
+            self.external_check_dirs.clone(),
+            self.external_check_patterns.clone(),
             self.verbose,
         )?;
 
@@ -388,18 +389,35 @@ impl AnalyzeArgs {
             &self.schema_pattern,
             &self.merge_strategy,
         )?;
-        let (layers, fallback_layer) =
-            cmd_common::parse_and_validate_layers(&self.layers, &self.fallback_layer)?;
+
+        // Load layers from config file + CLI
+        let (layers, fallback_layer) = cmd_common::parse_and_validate_layers(
+            &self.sql_config_file,
+            &self.layers,
+            &self.fallback_layer,
+        )?;
+
+        // Merge file filters from config file + CLI
+        let (include_globs, exclude_globs, include_exts, exclude_exts, include_hidden) =
+            cmd_common::merge_file_filters(
+                &self.sql_config_file,
+                self.include_globs.clone(),
+                self.exclude_globs.clone(),
+                self.include_file_extensions.clone(),
+                self.exclude_file_extensions.clone(),
+                self.include_hidden_files_and_directories,
+            );
+
         let include_node_prefixes =
             cmd_common::build_schema_filter(&self.schema_filter).to_option();
 
         cmd_common::build_graph(
             self.input_dirs.clone(),
-            self.include_file_extensions.as_deref(),
-            self.exclude_file_extensions.as_deref(),
-            self.include_globs.as_deref(),
-            self.exclude_globs.as_deref(),
-            self.include_hidden_files_and_directories,
+            include_exts.as_deref(),
+            exclude_exts.as_deref(),
+            include_globs.as_deref(),
+            exclude_globs.as_deref(),
+            include_hidden,
             self.verbose,
             self.comment_str.clone(),
             layers,

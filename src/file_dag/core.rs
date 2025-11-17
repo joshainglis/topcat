@@ -250,7 +250,7 @@ impl TCGraph {
     pub fn graph_as_dot(
         &self,
         layer_name: &str,
-    ) -> Result<Dot<&DiGraph<Rc<FileNode>, ()>>, TopCatError> {
+    ) -> Result<Dot<'_, &DiGraph<Rc<FileNode>, ()>>, TopCatError> {
         if !self.graph_is_built {
             return Err(TopCatError::GraphMissing);
         }
@@ -378,10 +378,10 @@ impl TCGraph {
         let required_node_names = self.apply_subdirectory_filter()?;
 
         // Early return if subdirectory filter resulted in empty set
-        if let Some(ref required) = required_node_names {
-            if required.is_empty() {
-                return Ok(Vec::new());
-            }
+        if let Some(ref required) = required_node_names
+            && required.is_empty()
+        {
+            return Ok(Vec::new());
         }
 
         let mut sorted_files = Vec::new();

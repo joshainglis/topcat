@@ -60,8 +60,11 @@ impl SchemaArgs {
     }
 
     fn build_graph(&self) -> Result<TCGraph, TopCatError> {
-        let (layers, fallback_layer) =
-            common::parse_and_validate_layers(&self.layers, &Some(self.fallback_layer.clone()))?;
+        let (layers, fallback_layer) = common::parse_and_validate_layers(
+            &None, // schema doesn't have sql_config support yet
+            &self.layers,
+            &Some(self.fallback_layer.clone()),
+        )?;
 
         common::build_graph(
             self.input_dirs.clone(),

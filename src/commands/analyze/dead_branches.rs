@@ -115,7 +115,7 @@ pub fn analyze(
         "\n💡 These {} files can all be deleted together in one operation",
         dead_branches.len()
     ));
-    logger.info("   Use 'topcat clean dead-branches' to remove them (coming in Phase 3)");
+    logger.info("   Use 'topcat clean dead-branches' to remove them");
 
     Ok(())
 }

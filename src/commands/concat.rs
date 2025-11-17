@@ -200,9 +200,23 @@ impl ConcatArgs {
             &self.merge_strategy,
         )?;
 
-        // Parse and validate layers
-        let (layers, fallback_layer) =
-            common::parse_and_validate_layers(&self.layers, &self.fallback_layer)?;
+        // Load layers from config file + CLI
+        let (layers, fallback_layer) = common::parse_and_validate_layers(
+            &self.sql_config_file,
+            &self.layers,
+            &self.fallback_layer,
+        )?;
+
+        // Merge file filters from config file + CLI
+        let (include_globs, exclude_globs, include_exts, exclude_exts, include_hidden) =
+            common::merge_file_filters(
+                &self.sql_config_file,
+                self.include_globs.clone(),
+                self.exclude_globs.clone(),
+                self.include_file_extensions.clone(),
+                self.exclude_file_extensions.clone(),
+                self.include_hidden_files_and_directories,
+            );
 
         // Determine header update mode
         let header_update_mode = if self.update_headers {
@@ -215,15 +229,15 @@ impl ConcatArgs {
 
         let config = config::Config {
             input_dirs: self.input_dirs.clone(),
-            include_extensions: self.include_file_extensions.as_deref(),
-            exclude_extensions: self.exclude_file_extensions.as_deref(),
-            include_globs: self.include_globs.as_deref(),
-            exclude_globs: self.exclude_globs.as_deref(),
+            include_extensions: include_exts.as_deref(),
+            exclude_extensions: exclude_exts.as_deref(),
+            include_globs: include_globs.as_deref(),
+            exclude_globs: exclude_globs.as_deref(),
             output: self.output.clone(),
             comment_str: self.comment_str.clone(),
             file_separator_str: self.file_separator_str.clone(),
             file_end_str: self.ensure_each_file_ends_with_str.clone(),
-            include_hidden: self.include_hidden_files_and_directories,
+            include_hidden,
             verbose: self.verbose,
             include_node_prefixes: self.include_node_prefixes.as_deref(),
             exclude_node_prefixes: self.exclude_node_prefixes.as_deref(),

@@ -47,10 +47,10 @@ impl TCGraph {
         for node in self.name_map.values() {
             if node.schema.as_deref() == Some(schema) {
                 for dep in &node.deps {
-                    if let Some(dep_node) = self.name_map.get(dep) {
-                        if dep_node.schema.as_deref() == Some(schema) {
-                            internal_deps.insert((node.name.clone(), dep.clone()));
-                        }
+                    if let Some(dep_node) = self.name_map.get(dep)
+                        && dep_node.schema.as_deref() == Some(schema)
+                    {
+                        internal_deps.insert((node.name.clone(), dep.clone()));
                     }
                 }
             }
@@ -68,16 +68,11 @@ impl TCGraph {
         for node in self.name_map.values() {
             if node.schema.as_deref() == Some(schema) {
                 for dep in &node.deps {
-                    if let Some(dep_node) = self.name_map.get(dep) {
-                        if let Some(dep_schema) = &dep_node.schema {
-                            if dep_schema != schema {
-                                external_deps.push((
-                                    node.name.clone(),
-                                    dep.clone(),
-                                    dep_schema.clone(),
-                                ));
-                            }
-                        }
+                    if let Some(dep_node) = self.name_map.get(dep)
+                        && let Some(dep_schema) = &dep_node.schema
+                        && dep_schema != schema
+                    {
+                        external_deps.push((node.name.clone(), dep.clone(), dep_schema.clone()));
                     }
                 }
             }
@@ -93,14 +88,12 @@ impl TCGraph {
         for node in self.name_map.values() {
             // Check if this node depends on any node in the target schema
             for dep in &node.deps {
-                if let Some(dep_node) = self.name_map.get(dep) {
-                    if dep_node.schema.as_deref() == Some(schema) {
-                        if let Some(node_schema) = &node.schema {
-                            if node_schema != schema {
-                                dependent_schemas.insert(node_schema.clone());
-                            }
-                        }
-                    }
+                if let Some(dep_node) = self.name_map.get(dep)
+                    && dep_node.schema.as_deref() == Some(schema)
+                    && let Some(node_schema) = &node.schema
+                    && node_schema != schema
+                {
+                    dependent_schemas.insert(node_schema.clone());
                 }
             }
         }
@@ -115,12 +108,11 @@ impl TCGraph {
         for node in self.name_map.values() {
             if let Some(source_schema) = &node.schema {
                 for dep in &node.deps {
-                    if let Some(dep_node) = self.name_map.get(dep) {
-                        if let Some(target_schema) = &dep_node.schema {
-                            if source_schema != target_schema {
-                                cross_deps.insert((source_schema.clone(), target_schema.clone()));
-                            }
-                        }
+                    if let Some(dep_node) = self.name_map.get(dep)
+                        && let Some(target_schema) = &dep_node.schema
+                        && source_schema != target_schema
+                    {
+                        cross_deps.insert((source_schema.clone(), target_schema.clone()));
                     }
                 }
             }

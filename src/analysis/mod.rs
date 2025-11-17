@@ -108,10 +108,10 @@ impl GraphAnalyzer for TCGraph {
                 }
 
                 // Skip root nodes (protected from deletion)
-                if let Some(matcher) = root_matcher {
-                    if matcher.is_root(&node.name, &node.path) {
-                        continue;
-                    }
+                if let Some(matcher) = root_matcher
+                    && matcher.is_root(&node.name, &node.path)
+                {
+                    continue;
                 }
 
                 // Get dependents of this node

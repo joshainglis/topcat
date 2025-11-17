@@ -548,7 +548,7 @@ impl ConfigBuilder {
     /// - No output path is specified
     /// - The fallback layer is not in the layers list
     /// - Layers list is empty
-    pub fn build(&self) -> Result<Config, TopCatError> {
+    pub fn build(&self) -> Result<Config<'_>, TopCatError> {
         // Validation
         if self.input_dirs.is_empty() {
             return Err(TopCatError::ConfigError(

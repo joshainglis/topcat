@@ -130,10 +130,10 @@ where
     let mut results = finder(graph);
 
     // Apply external filtering if requested
-    if config.apply_external_filter {
-        if let Some(checker) = external_checker {
-            results = checker.filter_unused(&results);
-        }
+    if config.apply_external_filter
+        && let Some(checker) = external_checker
+    {
+        results = checker.filter_unused(&results);
     }
 
     if results.is_empty() {

@@ -16,6 +16,20 @@ use topcat::schema_utils::SchemaFilter;
 use topcat::sql_config;
 
 // ============================================================================
+// Types
+// ============================================================================
+
+/// Result type for file filter merging operations.
+/// Tuple of (include_globs, exclude_globs, include_exts, exclude_exts, include_hidden).
+type FileFiltersResult = (
+    Option<Vec<String>>,
+    Option<Vec<String>>,
+    Option<Vec<String>>,
+    Option<Vec<String>>,
+    bool,
+);
+
+// ============================================================================
 // Constants
 // ============================================================================
 
@@ -52,14 +66,15 @@ pub fn null_device() -> &'static str {
 // Layer Configuration
 // ============================================================================
 
-/// Parse and validate layers from CLI arguments.
+/// Parse and validate layers from CLI arguments and config file.
 ///
-/// Layers enforce ordering between groups of files. This function parses a
-/// comma-separated layer list (or uses defaults), validates that the fallback
-/// layer exists in the layer list, and returns both.
+/// Layers enforce ordering between groups of files. This function merges layer
+/// configuration from config file and CLI, validates that the fallback layer
+/// exists in the layer list, and returns both.
 ///
 /// # Arguments
 ///
+/// * `config_file` - Optional path to topcat.toml configuration file
 /// * `layers_arg` - Optional comma-separated layer string from CLI
 /// * `fallback_layer_arg` - Optional fallback layer name from CLI
 ///
@@ -68,37 +83,168 @@ pub fn null_device() -> &'static str {
 /// `Ok((layers, fallback_layer))` with the validated configuration, or
 /// `Err(TopCatError::ConfigError)` if the fallback layer is not in the layers list.
 ///
-/// # Default Configuration
+/// # Configuration Priority
 ///
-/// If not specified: `["prepend", "normal", "append"]` with fallback `"normal"`
+/// 1. CLI arguments override config file
+/// 2. Config file provides defaults
+/// 3. Hardcoded defaults if neither specified: `["prepend", "normal", "append"]` with fallback `"normal"`
 pub fn parse_and_validate_layers(
+    config_file: &Option<PathBuf>,
     layers_arg: &Option<String>,
     fallback_layer_arg: &Option<String>,
 ) -> Result<(Vec<String>, String), TopCatError> {
-    let layers = if let Some(layers_str) = layers_arg {
-        layers_str
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .collect()
+    // Load from config file first
+    let (mut layers, mut fallback_layer) = if let Some(config_path) = config_file {
+        if let Ok(cfg) = sql_config::TopcatConfig::from_file(config_path) {
+            let config_layers = if cfg.layers.names.is_empty() {
+                None
+            } else {
+                Some(cfg.layers.names)
+            };
+            let config_fallback = cfg.layers.fallback;
+
+            (config_layers, config_fallback)
+        } else {
+            (None, None)
+        }
     } else {
+        (None, None)
+    };
+
+    // Override with CLI arguments
+    if let Some(layers_str) = layers_arg {
+        layers = Some(
+            layers_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect(),
+        );
+    }
+
+    if fallback_layer_arg.is_some() {
+        fallback_layer = fallback_layer_arg.clone();
+    }
+
+    // Use defaults if still not set
+    let final_layers = layers.unwrap_or_else(|| {
         vec![
             DEFAULT_LAYER_PREPEND.to_string(),
             DEFAULT_LAYER_NORMAL.to_string(),
             DEFAULT_LAYER_APPEND.to_string(),
         ]
-    };
+    });
 
-    let fallback_layer = fallback_layer_arg
-        .clone()
-        .unwrap_or_else(|| DEFAULT_FALLBACK_LAYER.to_string());
+    let final_fallback = fallback_layer.unwrap_or_else(|| DEFAULT_FALLBACK_LAYER.to_string());
 
-    if !layers.contains(&fallback_layer) {
+    // Validate
+    if !final_layers.contains(&final_fallback) {
         return Err(TopCatError::ConfigError(format!(
-            "Fallback layer '{fallback_layer}' is not in the layers list: {layers:?}"
+            "Fallback layer '{final_fallback}' is not in the layers list: {final_layers:?}"
         )));
     }
 
-    Ok((layers, fallback_layer))
+    Ok((final_layers, final_fallback))
+}
+
+// ============================================================================
+// File Filters Configuration
+// ============================================================================
+
+/// Merge file filter configuration from config file and CLI arguments.
+///
+/// File filters control which files are included in dependency graph construction.
+/// This function merges settings from both config file and CLI, with CLI taking precedence.
+///
+/// # Arguments
+///
+/// * `config_file` - Optional path to topcat.toml configuration file
+/// * `cli_include_globs` - Glob patterns from CLI
+/// * `cli_exclude_globs` - Glob patterns from CLI
+/// * `cli_include_exts` - File extensions from CLI
+/// * `cli_exclude_exts` - File extensions from CLI
+/// * `cli_include_hidden` - Whether to include hidden files from CLI
+///
+/// # Returns
+///
+/// Tuple of `(include_globs, exclude_globs, include_exts, exclude_exts, include_hidden)`
+/// with merged configuration. CLI arguments extend (not replace) config file settings.
+pub fn merge_file_filters(
+    config_file: &Option<PathBuf>,
+    cli_include_globs: Option<Vec<String>>,
+    cli_exclude_globs: Option<Vec<String>>,
+    cli_include_exts: Option<Vec<String>>,
+    cli_exclude_exts: Option<Vec<String>>,
+    cli_include_hidden: bool,
+) -> FileFiltersResult {
+    // Load from config file
+    let (
+        mut include_globs,
+        mut exclude_globs,
+        mut include_exts,
+        mut exclude_exts,
+        mut include_hidden,
+    ) = if let Some(config_path) = config_file {
+        if let Ok(cfg) = sql_config::TopcatConfig::from_file(config_path) {
+            let filters = cfg.filters;
+            (
+                if filters.include_globs.is_empty() {
+                    None
+                } else {
+                    Some(filters.include_globs)
+                },
+                if filters.exclude_globs.is_empty() {
+                    None
+                } else {
+                    Some(filters.exclude_globs)
+                },
+                if filters.include_extensions.is_empty() {
+                    None
+                } else {
+                    Some(filters.include_extensions)
+                },
+                if filters.exclude_extensions.is_empty() {
+                    None
+                } else {
+                    Some(filters.exclude_extensions)
+                },
+                filters.include_hidden,
+            )
+        } else {
+            (None, None, None, None, false)
+        }
+    } else {
+        (None, None, None, None, false)
+    };
+
+    // Extend with CLI arguments (CLI args are additive)
+    if let Some(cli_globs) = cli_include_globs {
+        include_globs.get_or_insert_with(Vec::new).extend(cli_globs);
+    }
+
+    if let Some(cli_globs) = cli_exclude_globs {
+        exclude_globs.get_or_insert_with(Vec::new).extend(cli_globs);
+    }
+
+    if let Some(cli_exts) = cli_include_exts {
+        include_exts.get_or_insert_with(Vec::new).extend(cli_exts);
+    }
+
+    if let Some(cli_exts) = cli_exclude_exts {
+        exclude_exts.get_or_insert_with(Vec::new).extend(cli_exts);
+    }
+
+    // CLI include_hidden flag overrides config
+    if cli_include_hidden {
+        include_hidden = true;
+    }
+
+    (
+        include_globs,
+        exclude_globs,
+        include_exts,
+        exclude_exts,
+        include_hidden,
+    )
 }
 
 // ============================================================================
@@ -195,14 +341,14 @@ pub fn build_root_matcher(
     let mut all_root_dirs = root_dirs;
 
     // Load additional configuration from config file
-    if let Some(config_path) = config_file {
-        if let Ok(cfg) = sql_config::TopcatConfig::from_file(config_path) {
-            let analysis_cfg = cfg.analysis;
-            all_root_nodes.extend(analysis_cfg.root_nodes);
-            all_root_patterns.extend(analysis_cfg.root_patterns);
-            all_root_regex.extend(analysis_cfg.root_regex);
-            all_root_dirs.extend(analysis_cfg.root_dirs.into_iter().map(PathBuf::from));
-        }
+    if let Some(config_path) = config_file
+        && let Ok(cfg) = sql_config::TopcatConfig::from_file(config_path)
+    {
+        let analysis_cfg = cfg.analysis;
+        all_root_nodes.extend(analysis_cfg.root_nodes);
+        all_root_patterns.extend(analysis_cfg.root_patterns);
+        all_root_regex.extend(analysis_cfg.root_regex);
+        all_root_dirs.extend(analysis_cfg.root_dirs.into_iter().map(PathBuf::from));
     }
 
     // Create matcher only if we have any root configuration
@@ -256,6 +402,49 @@ pub fn build_schema_filter(schema_filter: &[String]) -> SchemaFilter {
 // ============================================================================
 // External Usage Checking
 // ============================================================================
+
+/// Build an external usage checker from CLI arguments and config file.
+///
+/// Merges external usage checking configuration from both CLI arguments and
+/// config file, with CLI arguments taking precedence.
+///
+/// # Arguments
+///
+/// * `config_file` - Optional path to topcat.toml configuration file
+/// * `cli_external_check_dirs` - Directories from CLI arguments
+/// * `cli_external_check_patterns` - Patterns from CLI arguments
+/// * `verbose` - Whether to show verbose output during scanning
+///
+/// # Returns
+///
+/// `Ok(Some(ExternalUsageChecker))` if configured,
+/// `Ok(None)` if not configured,
+/// `Err(TopCatError)` if checker initialization fails
+pub fn build_external_checker_with_config(
+    config_file: &Option<PathBuf>,
+    cli_external_check_dirs: Vec<PathBuf>,
+    cli_external_check_patterns: Vec<String>,
+    verbose: bool,
+) -> Result<Option<ExternalUsageChecker>, TopCatError> {
+    let mut all_dirs = cli_external_check_dirs;
+    let mut all_patterns = cli_external_check_patterns;
+
+    // Load additional configuration from config file
+    if let Some(config_path) = config_file
+        && let Ok(cfg) = sql_config::TopcatConfig::from_file(config_path)
+    {
+        let analysis_cfg = cfg.analysis;
+        all_dirs.extend(
+            analysis_cfg
+                .external_check_dirs
+                .into_iter()
+                .map(PathBuf::from),
+        );
+        all_patterns.extend(analysis_cfg.external_check_patterns);
+    }
+
+    build_external_checker(&all_dirs, &all_patterns, verbose)
+}
 
 /// Build an external usage checker from CLI arguments.
 ///
@@ -396,7 +585,7 @@ mod tests {
 
     #[test]
     fn test_parse_and_validate_layers_with_defaults() {
-        let result = parse_and_validate_layers(&None, &None);
+        let result = parse_and_validate_layers(&None, &None, &None);
         assert!(result.is_ok());
         let (layers, fallback) = result.unwrap();
         assert_eq!(layers, vec!["prepend", "normal", "append"]);
@@ -407,7 +596,7 @@ mod tests {
     fn test_parse_and_validate_layers_custom() {
         let layers_str = Some("first,second,third".to_string());
         let fallback = Some("second".to_string());
-        let result = parse_and_validate_layers(&layers_str, &fallback);
+        let result = parse_and_validate_layers(&None, &layers_str, &fallback);
         assert!(result.is_ok());
         let (layers, fallback_layer) = result.unwrap();
         assert_eq!(layers, vec!["first", "second", "third"]);
@@ -418,7 +607,7 @@ mod tests {
     fn test_parse_and_validate_layers_invalid_fallback() {
         let layers_str = Some("first,second,third".to_string());
         let fallback = Some("invalid".to_string());
-        let result = parse_and_validate_layers(&layers_str, &fallback);
+        let result = parse_and_validate_layers(&None, &layers_str, &fallback);
         assert!(result.is_err());
     }
 

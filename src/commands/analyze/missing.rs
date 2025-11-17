@@ -73,7 +73,7 @@ pub fn analyze(
         merge_strategy,
     )?;
     let (layers_parsed, fallback_layer_parsed) =
-        cmd_common::parse_and_validate_layers(layers, fallback_layer)?;
+        cmd_common::parse_and_validate_layers(sql_config_file, layers, fallback_layer)?;
     let include_node_prefixes = cmd_common::build_schema_filter(schema_filter).to_option();
 
     let config = config::Config {
