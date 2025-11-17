@@ -123,7 +123,7 @@ cargo run -- -i tests/input/sql -o /tmp/output.sql
 
 **Analyze Command** (`commands/analyze/`): Broken down from 1,329 lines into 10 focused modules
 - `mod.rs` - CLI routing and dispatch
-- `common.rs` - AnalysisLogger, generic display utilities
+- `common.rs` - Generic display utilities, shared analysis logic
 - `cycles.rs`, `dead_branches.rs`, `file.rs`, `missing.rs` - Analysis implementations
 - `leaf_nodes.rs`, `orphans.rs`, `root_nodes.rs`, `unrequired.rs` - Node categorization
 
