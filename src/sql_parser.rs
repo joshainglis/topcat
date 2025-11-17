@@ -203,6 +203,16 @@ impl SqlAnalyzer {
             }
         }
 
+        // Add implicit schema dependency when node name contains a schema component
+        // E.g., if node_name is "md_tmf.util_to_snake_case", add "md_tmf" as a dependency
+        // because you can't create objects in a schema that doesn't exist yet
+        if let Some(ref node_name) = result.node_name {
+            if let Some(dot_pos) = node_name.find('.') {
+                let schema = &node_name[..dot_pos];
+                result.dependencies.insert(schema.to_string());
+            }
+        }
+
         debug!(
             "SQL analysis result: node={:?}, deps={:?}, subobjects={:?}",
             result.node_name, result.dependencies, result.subobjects
@@ -467,6 +477,55 @@ CALL codegen_tmf.proc_make_model(
             result2.dependencies.contains("e_extensions.pgcrypto"),
             "Expected dependency on e_extensions.pgcrypto, got {:?}",
             result2.dependencies
+        );
+    }
+
+    #[test]
+    fn test_implicit_schema_dependency() {
+        let config = make_simple_config();
+        let analyzer = SqlAnalyzer::new(config).unwrap();
+
+        // Test that creating a function in a schema adds the schema as a dependency
+        let sql = r#"
+CREATE OR REPLACE FUNCTION c_test.my_function(param1 INT)
+RETURNS INT AS $$
+BEGIN
+    RETURN param1 + 1;
+END;
+$$ LANGUAGE plpgsql;
+"#;
+        let result = analyzer.analyze(sql);
+
+        assert_eq!(
+            result.node_name,
+            Some("c_test.my_function".to_string()),
+            "Node name should be c_test.my_function"
+        );
+        assert!(
+            result.dependencies.contains("c_test"),
+            "Should have implicit dependency on c_test schema, got {:?}",
+            result.dependencies
+        );
+    }
+
+    #[test]
+    fn test_implicit_schema_dependency_for_table() {
+        let config = make_simple_config();
+        let analyzer = SqlAnalyzer::new(config).unwrap();
+
+        // Test that creating a table in a schema adds the schema as a dependency
+        let sql = "CREATE TABLE c_test.my_table (id INT, name TEXT);";
+        let result = analyzer.analyze(sql);
+
+        assert_eq!(
+            result.node_name,
+            Some("c_test.my_table".to_string()),
+            "Node name should be c_test.my_table"
+        );
+        assert!(
+            result.dependencies.contains("c_test"),
+            "Should have implicit dependency on c_test schema, got {:?}",
+            result.dependencies
         );
     }
 }
