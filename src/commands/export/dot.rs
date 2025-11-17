@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
 use topcat::file_node::FileNode;
+use topcat::logging::Logger;
 
 use super::common::{
     SCHEMA_COLORS, group_nodes_by_schema, is_cross_schema_edge, sanitize_schema_name,
@@ -69,7 +70,11 @@ fn render_dot_edges(
 /// # Errors
 ///
 /// Returns an error if file writing fails.
-pub fn export_dot(graph: &TCGraph, output_path: &PathBuf) -> Result<(), TopCatError> {
+pub fn export_dot(
+    graph: &TCGraph,
+    output_path: &PathBuf,
+    logger: &Logger,
+) -> Result<(), TopCatError> {
     let mut output = String::new();
     output.push_str("digraph dependencies {\n");
     output.push_str("    rankdir=LR;\n");
@@ -106,6 +111,6 @@ pub fn export_dot(graph: &TCGraph, output_path: &PathBuf) -> Result<(), TopCatEr
     output.push_str("}\n");
     write_output_file(output_path, &output)?;
 
-    println!("Exported DOT to: {}", output_path.display());
+    logger.success(&format!("Exported DOT to: {}", output_path.display()));
     Ok(())
 }

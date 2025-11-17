@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use topcat::cli::CommonArgs;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::{Logger, init_logging};
 use topcat::settings::Settings;
 
 use super::common as cmd_common;
@@ -100,35 +101,41 @@ impl ExportArgs {
             ));
         }
 
-        // 5. Extract schema filter
+        // 5. Initialize logging
+        let quiet = settings.behavior.quiet;
+        let verbose = settings.behavior.verbose;
+        init_logging(verbose, quiet);
+        let logger = Logger::new(quiet, verbose);
+
+        // 6. Extract schema filter
         let schema_filter: Vec<String> = self
             .common
             .schemas
             .clone()
             .unwrap_or_else(|| settings.schema_filtering.schemas.clone());
 
-        // 6. Build the graph
+        // 7. Build the graph
         let mut graph = self.build_graph(&settings)?;
 
-        // 7. Apply schema filtering if requested
+        // 8. Apply schema filtering if requested
         if !schema_filter.is_empty() {
             graph = self.filter_by_schemas(&graph, &schema_filter)?;
         }
 
-        // 8. Apply export mode filtering
+        // 9. Apply export mode filtering
         let graph = self.apply_export_mode(&graph)?;
 
-        // 9. Get output path from settings
+        // 10. Get output path from settings
         let output = settings
             .output
             .ok_or_else(|| TopCatError::ConfigError("Output path required".to_string()))?;
 
-        // 10. Execute the export command
+        // 11. Execute the export command
         match &self.command {
-            ExportCommand::Json => json::export_json(&graph, &output),
-            ExportCommand::Dot => dot::export_dot(&graph, &output),
-            ExportCommand::Graphml => graphml::export_graphml(&graph, &output),
-            ExportCommand::Mermaid => mermaid::export_mermaid(&graph, &output),
+            ExportCommand::Json => json::export_json(&graph, &output, &logger),
+            ExportCommand::Dot => dot::export_dot(&graph, &output, &logger),
+            ExportCommand::Graphml => graphml::export_graphml(&graph, &output, &logger),
+            ExportCommand::Mermaid => mermaid::export_mermaid(&graph, &output, &logger),
         }
     }
 

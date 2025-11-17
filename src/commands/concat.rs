@@ -1,12 +1,17 @@
 use std::collections::HashMap;
 
 use clap::Args;
-use env_logger::Builder;
-use log::{LevelFilter, error, info};
 
 use topcat::{
-    cli::CommonArgs, config, exceptions::TopCatError, file_dag::TCGraph, fs, header_generator,
-    output, settings::Settings, sql_config,
+    cli::CommonArgs,
+    config,
+    exceptions::TopCatError,
+    file_dag::TCGraph,
+    fs, header_generator,
+    logging::{Logger, init_logging},
+    output,
+    settings::Settings,
+    sql_config,
 };
 
 /// Concatenate files in topological order based on dependencies
@@ -46,13 +51,10 @@ impl ConcatArgs {
         }
 
         // Initialize logging
-        let log_level = if settings.behavior.verbose {
-            LevelFilter::Debug
-        } else {
-            LevelFilter::Info
-        };
-
-        Builder::new().filter(None, log_level).try_init().ok();
+        let quiet = settings.behavior.quiet;
+        let verbose = settings.behavior.verbose;
+        init_logging(verbose, quiet);
+        let logger = Logger::new(quiet, verbose);
 
         // Create Config directly from Settings
         let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
@@ -117,23 +119,27 @@ impl ConcatArgs {
         let res = filedag.build_graph();
         match res {
             Ok(_) => {
-                info!("Graph built successfully!");
+                logger.info("Graph built successfully!");
             }
             Err(e) => {
-                eprintln!("Error Encountered:\n{e}\n\nExiting.");
+                logger.error(&format!("Error Encountered:\n{e}\n\nExiting."));
                 std::process::exit(1);
             }
         }
 
         if settings.behavior.verbose {
             for layer in &settings.layers.names {
-                println!("{} Graph: {:#?}", layer, filedag.graph_as_dot(layer)?);
+                logger.debug(&format!(
+                    "{} Graph: {:#?}",
+                    layer,
+                    filedag.graph_as_dot(layer)?
+                ));
             }
         }
 
         // Update headers if requested
         if settings.header_update_mode != sql_config::HeaderUpdateMode::Never {
-            info!("Updating file headers...");
+            logger.info("Updating file headers...");
             let file_nodes: Vec<_> = filedag.get_all_nodes();
 
             // Determine default extension from filters config, or use "sql" as fallback
@@ -159,12 +165,12 @@ impl ConcatArgs {
 
         match result {
             Ok(()) => {
-                info!("Generation Successful!");
+                logger.success("Generation Successful!");
             }
             Err(e) => {
                 let mut map = HashMap::new();
                 map.insert(1, e);
-                error!("Initialization Failure:\n{map:#?}\n\nExiting.");
+                logger.error(&format!("Initialization Failure:\n{map:#?}\n\nExiting."));
                 std::process::exit(1);
             }
         }

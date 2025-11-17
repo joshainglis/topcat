@@ -251,8 +251,7 @@ fn check_rename_conflicts(
         if nodes.len() > 1 {
             let paths: Vec<String> = nodes.iter().map(|n| n.path.display().to_string()).collect();
             conflicts.push(format!(
-                "Multiple files want to be named '{}': {:?}",
-                filename, paths
+                "Multiple files want to be named '{filename}': {paths:?}"
             ));
         }
     }

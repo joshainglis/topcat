@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
 use topcat::file_node::FileNode;
+use topcat::logging::Logger;
 
 use super::common::EDGE_TYPE_REQUIRES;
 
@@ -184,7 +185,11 @@ fn write_graphml_edges(
 /// # Errors
 ///
 /// Returns an error if XML writing or file creation fails.
-pub fn export_graphml(graph: &TCGraph, output_path: &PathBuf) -> Result<(), TopCatError> {
+pub fn export_graphml(
+    graph: &TCGraph,
+    output_path: &PathBuf,
+    logger: &Logger,
+) -> Result<(), TopCatError> {
     let file = File::create(output_path)?;
     let buf_writer = BufWriter::new(file);
     let mut writer = Writer::new_with_indent(buf_writer, b' ', 2);
@@ -225,6 +230,6 @@ pub fn export_graphml(graph: &TCGraph, output_path: &PathBuf) -> Result<(), TopC
         .write_event(Event::End(BytesEnd::new("graphml")))
         .map_err(|e| TopCatError::SerializationError(format!("XML write error: {e}")))?;
 
-    println!("Exported GraphML to: {}", output_path.display());
+    logger.success(&format!("Exported GraphML to: {}", output_path.display()));
     Ok(())
 }

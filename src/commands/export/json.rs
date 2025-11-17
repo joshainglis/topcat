@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::Logger;
 
 use super::common::{
     EDGE_TYPE_REQUIRES, NODE_TYPE_INTERMEDIATE, NODE_TYPE_LEAF, NODE_TYPE_ROOT, write_output_file,
@@ -181,13 +182,17 @@ impl JsonExport {
 /// # Errors
 ///
 /// Returns an error if JSON serialization or file writing fails.
-pub fn export_json(graph: &TCGraph, output_path: &PathBuf) -> Result<(), TopCatError> {
+pub fn export_json(
+    graph: &TCGraph,
+    output_path: &PathBuf,
+    logger: &Logger,
+) -> Result<(), TopCatError> {
     let export_data = JsonExport::from_graph(graph);
     let json = serde_json::to_string_pretty(&export_data)
         .map_err(|e| TopCatError::SerializationError(format!("JSON serialization failed: {e}")))?;
 
     write_output_file(output_path, &json)?;
 
-    println!("Exported JSON to: {}", output_path.display());
+    logger.success(&format!("Exported JSON to: {}", output_path.display()));
     Ok(())
 }

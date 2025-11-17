@@ -26,6 +26,7 @@ use clap::{Args, Subcommand};
 
 use topcat::cli::CommonArgs;
 use topcat::exceptions::TopCatError;
+use topcat::logging::{Logger, init_logging};
 use topcat::settings::Settings;
 
 /// Command-line arguments for the config subcommand.
@@ -84,13 +85,19 @@ impl ConfigArgs {
         // Validate
         settings.validate().map_err(TopCatError::ConfigError)?;
 
+        // Initialize logging after settings are loaded
+        let quiet = settings.behavior.quiet;
+        let verbose = settings.behavior.verbose;
+        init_logging(verbose, quiet);
+        let logger = Logger::new(quiet, verbose);
+
         // Serialize to TOML for display
         let toml_str = toml::to_string_pretty(&settings)
             .map_err(|e| TopCatError::ConfigError(format!("Failed to serialize config: {e}")))?;
 
-        println!("# Effective Configuration");
-        println!("# (merged from all sources: CLI, env vars, config files, defaults)\n");
-        println!("{toml_str}");
+        logger.info("# Effective Configuration");
+        logger.info("# (merged from all sources: CLI, env vars, config files, defaults)\n");
+        logger.info(&toml_str);
 
         Ok(())
     }
@@ -99,11 +106,15 @@ impl ConfigArgs {
     fn validate(&self) -> Result<(), TopCatError> {
         let config_path = self.common.config_path();
 
+        // Initialize logging with defaults (no settings loaded yet for validate command)
+        init_logging(false, false);
+        let logger = Logger::new(false, false);
+
         if config_path.is_none() {
-            eprintln!(
-                "⚠️  No config file specified. Use --config <path> to validate a specific file."
+            logger.warn(
+                "⚠️  No config file specified. Use --config <path> to validate a specific file.",
             );
-            eprintln!("   Checking default locations...\n");
+            logger.info("   Checking default locations...\n");
         }
 
         match Settings::load(config_path) {
@@ -114,19 +125,19 @@ impl ConfigArgs {
                     } else {
                         "Default configuration".to_string()
                     };
-                    println!("✅ Configuration is valid");
-                    println!("   Source: {source}");
+                    logger.success("✅ Configuration is valid");
+                    logger.info(&format!("   Source: {source}"));
                     Ok(())
                 }
                 Err(e) => {
-                    eprintln!("❌ Configuration validation failed:");
-                    eprintln!("   {e}");
+                    logger.error("❌ Configuration validation failed:");
+                    logger.error(&format!("   {e}"));
                     Err(TopCatError::ConfigError(e))
                 }
             },
             Err(e) => {
-                eprintln!("❌ Failed to load configuration:");
-                eprintln!("   {e}");
+                logger.error("❌ Failed to load configuration:");
+                logger.error(&format!("   {e}"));
                 Err(TopCatError::ConfigError(format!("{e}")))
             }
         }
@@ -134,6 +145,9 @@ impl ConfigArgs {
 
     /// Generate an example configuration file.
     fn generate(&self) -> Result<(), TopCatError> {
+        // Note: We use raw print! here (not logger) because users typically
+        // redirect this output to a file: `topcat config generate > topcat.toml`
+        // Using the logger would add unwanted formatting/colors to the output file.
         let example = include_str!("../../topcat.toml.example");
         print!("{example}");
         Ok(())

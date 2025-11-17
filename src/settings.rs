@@ -71,9 +71,6 @@ pub struct Settings {
 
     /// Export-specific settings
     pub export: ExportConfig,
-
-    /// Logging configuration
-    pub logging: LoggingConfig,
 }
 
 impl Default for Settings {
@@ -100,7 +97,6 @@ impl Default for Settings {
             node_filtering: NodeFilteringConfig::default(),
             schema_filtering: SchemaFilteringConfig::default(),
             export: ExportConfig::default(),
-            logging: LoggingConfig::default(),
         }
     }
 }
@@ -347,53 +343,6 @@ impl std::str::FromStr for ExportMode {
             "dependents" => Ok(ExportMode::Dependents),
             "direct" => Ok(ExportMode::Direct),
             _ => Err(format!("Invalid export mode: {s}")),
-        }
-    }
-}
-
-/// Configuration for logging.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct LoggingConfig {
-    /// Log level (error, warn, info, debug, trace)
-    pub level: LogLevel,
-
-    /// Log to file instead of stderr
-    pub file: Option<PathBuf>,
-
-    /// Include timestamps in log output
-    pub timestamps: bool,
-}
-
-impl Default for LoggingConfig {
-    fn default() -> Self {
-        Self {
-            level: LogLevel::Info,
-            file: None,
-            timestamps: false,
-        }
-    }
-}
-
-/// Log level configuration.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum LogLevel {
-    Error,
-    Warn,
-    Info,
-    Debug,
-    Trace,
-}
-
-impl From<LogLevel> for log::LevelFilter {
-    fn from(level: LogLevel) -> Self {
-        match level {
-            LogLevel::Error => log::LevelFilter::Error,
-            LogLevel::Warn => log::LevelFilter::Warn,
-            LogLevel::Info => log::LevelFilter::Info,
-            LogLevel::Debug => log::LevelFilter::Debug,
-            LogLevel::Trace => log::LevelFilter::Trace,
         }
     }
 }

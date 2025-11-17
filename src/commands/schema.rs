@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use topcat::cli::CommonArgs;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::{Logger, init_logging};
 use topcat::settings::Settings;
 
 use super::common;
@@ -52,14 +53,20 @@ impl SchemaArgs {
             ));
         }
 
-        // 5. Build the graph
+        // 5. Initialize logging
+        let quiet = settings.behavior.quiet;
+        let verbose = settings.behavior.verbose;
+        init_logging(verbose, quiet);
+        let logger = Logger::new(quiet, verbose);
+
+        // 6. Build the graph
         let graph = self.build_graph(&settings)?;
 
-        // 6. Execute the requested schema operation
+        // 7. Execute the requested schema operation
         match &self.command {
-            SchemaCommand::List => self.list_schemas(&graph),
-            SchemaCommand::Analyze { schema } => self.analyze_schema(&graph, schema),
-            SchemaCommand::Dependencies => self.show_dependencies(&graph),
+            SchemaCommand::List => self.list_schemas(&graph, &logger),
+            SchemaCommand::Analyze { schema } => self.analyze_schema(&graph, schema, &logger),
+            SchemaCommand::Dependencies => self.show_dependencies(&graph, &logger),
         }
     }
 
@@ -101,11 +108,11 @@ impl SchemaArgs {
         )
     }
 
-    fn list_schemas(&self, graph: &TCGraph) -> Result<(), TopCatError> {
+    fn list_schemas(&self, graph: &TCGraph, logger: &Logger) -> Result<(), TopCatError> {
         let schemas = graph.get_schemas();
 
         if schemas.is_empty() {
-            println!("No schemas found in the project.");
+            logger.info("No schemas found in the project.");
             return Ok(());
         }
 
@@ -150,44 +157,52 @@ impl SchemaArgs {
             ]);
         }
 
-        println!("{table}");
+        logger.table(&table);
         Ok(())
     }
 
-    fn analyze_schema(&self, graph: &TCGraph, schema: &str) -> Result<(), TopCatError> {
+    fn analyze_schema(
+        &self,
+        graph: &TCGraph,
+        schema: &str,
+        logger: &Logger,
+    ) -> Result<(), TopCatError> {
         let schemas = graph.get_schemas();
         let nodes = schemas
             .get(schema)
             .ok_or_else(|| TopCatError::UnknownError(format!("Schema '{schema}' not found")))?;
 
-        println!("\nSchema: {schema}\n");
+        logger.newline();
+        logger.section(&format!("Schema: {schema}"));
 
         // Files in schema
-        println!("Files ({}):", nodes.len());
+        logger.info(&format!("Files ({}):", nodes.len()));
         let mut node_names: Vec<_> = nodes.iter().map(|n| &n.name).collect();
         node_names.sort();
         for name in node_names {
-            println!("  - {name}");
+            logger.info(&format!("  - {name}"));
         }
 
         // Internal dependencies
         let internal_deps = graph.get_internal_dependencies(schema);
-        println!("\nInternal Dependencies ({}):", internal_deps.len());
+        logger.newline();
+        logger.info(&format!("Internal Dependencies ({}):", internal_deps.len()));
         if internal_deps.is_empty() {
-            println!("  (none)");
+            logger.info("  (none)");
         } else {
             let mut deps: Vec<_> = internal_deps.iter().collect();
             deps.sort();
             for (source, target) in deps {
-                println!("  {source} → {target}");
+                logger.info(&format!("  {source} → {target}"));
             }
         }
 
         // External dependencies
         let external_deps = graph.get_external_dependencies(schema);
-        println!("\nExternal Dependencies ({}):", external_deps.len());
+        logger.newline();
+        logger.info(&format!("External Dependencies ({}):", external_deps.len()));
         if external_deps.is_empty() {
-            println!("  (none)");
+            logger.info("  (none)");
         } else {
             // Group by target schema
             let mut by_schema: HashMap<String, Vec<(String, String)>> = HashMap::new();
@@ -205,38 +220,41 @@ impl SchemaArgs {
                 let deps = by_schema
                     .get(target_schema)
                     .expect("schema key must exist in map we just collected from");
-                println!("\n  To schema '{target_schema}':");
+                logger.newline();
+                logger.info(&format!("  To schema '{target_schema}':"));
                 for (source, target) in deps {
-                    println!("    {source} → {target}");
+                    logger.info(&format!("    {source} → {target}"));
                 }
             }
         }
 
         // Dependent schemas (who depends on this schema)
         let dependent_schemas = graph.get_dependent_schemas(schema);
-        println!("\nDependent Schemas ({}):", dependent_schemas.len());
+        logger.newline();
+        logger.info(&format!("Dependent Schemas ({}):", dependent_schemas.len()));
         if dependent_schemas.is_empty() {
-            println!("  (none)");
+            logger.info("  (none)");
         } else {
             let mut deps: Vec<_> = dependent_schemas.iter().collect();
             deps.sort();
             for dep_schema in deps {
-                println!("  {dep_schema}");
+                logger.info(&format!("  {dep_schema}"));
             }
         }
 
         Ok(())
     }
 
-    fn show_dependencies(&self, graph: &TCGraph) -> Result<(), TopCatError> {
+    fn show_dependencies(&self, graph: &TCGraph, logger: &Logger) -> Result<(), TopCatError> {
         let cross_deps = graph.get_cross_schema_dependencies();
 
         if cross_deps.is_empty() {
-            println!("No cross-schema dependencies found.");
+            logger.info("No cross-schema dependencies found.");
             return Ok(());
         }
 
-        println!("\nCross-Schema Dependencies:\n");
+        logger.newline();
+        logger.section("Cross-Schema Dependencies");
 
         // Create table
         let mut table = Table::new();
@@ -257,7 +275,7 @@ impl SchemaArgs {
             ]);
         }
 
-        println!("{table}");
+        logger.table(&table);
 
         Ok(())
     }

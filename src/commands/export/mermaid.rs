@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
 use topcat::file_node::FileNode;
+use topcat::logging::Logger;
 
 use super::common::{
     group_nodes_by_schema, is_cross_schema_edge, sanitize_schema_name, write_output_file,
@@ -71,7 +72,11 @@ fn render_mermaid_edges(
 /// # Errors
 ///
 /// Returns an error if file writing fails.
-pub fn export_mermaid(graph: &TCGraph, output_path: &PathBuf) -> Result<(), TopCatError> {
+pub fn export_mermaid(
+    graph: &TCGraph,
+    output_path: &PathBuf,
+    logger: &Logger,
+) -> Result<(), TopCatError> {
     let mut output = String::new();
     output.push_str("```mermaid\n");
     output.push_str("graph TD\n");
@@ -115,6 +120,9 @@ pub fn export_mermaid(graph: &TCGraph, output_path: &PathBuf) -> Result<(), TopC
     output.push_str("```\n");
     write_output_file(output_path, &output)?;
 
-    println!("Exported Mermaid diagram to: {}", output_path.display());
+    logger.success(&format!(
+        "Exported Mermaid diagram to: {}",
+        output_path.display()
+    ));
     Ok(())
 }
