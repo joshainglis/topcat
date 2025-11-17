@@ -285,7 +285,7 @@ pub fn build_tree_forest(
     let mut roots: Vec<_> = nodes
         .iter()
         .filter(|node| {
-            let deps = deps_map.get(*node).map(|d| d.clone()).unwrap_or_default();
+            let deps = deps_map.get(*node).cloned().unwrap_or_default();
             let internal_deps: HashSet<_> = deps.intersection(nodes).collect();
             internal_deps.is_empty()
         })
@@ -426,17 +426,17 @@ pub fn render_tree(node: &TreeNode, prefix: &str, is_last: bool) -> String {
             node_line.push_str(" [shown above]");
         } else {
             let deps = node.additional_parents.join(", ");
-            node_line.push_str(&format!(" [also depends on: {}]", deps));
+            node_line.push_str(&format!(" [also depends on: {deps}]"));
         }
     }
 
-    output.push_str(&format!("{}{}{}\n", prefix, connector, node_line));
+    output.push_str(&format!("{prefix}{connector}{node_line}\n"));
 
     // Render children
     let child_prefix = if is_last {
-        format!("{}{}", prefix, TREE_SPACE)
+        format!("{prefix}{TREE_SPACE}")
     } else {
-        format!("{}{}", prefix, TREE_VERTICAL)
+        format!("{prefix}{TREE_VERTICAL}")
     };
 
     for (i, child) in node.children.iter().enumerate() {
@@ -465,12 +465,11 @@ pub fn render_forest(forest: &[TreeNode], title_prefix: &str) -> String {
         let node_count = count_nodes(tree);
 
         output.push_str(&format!(
-            "{} {} ({} nodes):\n",
-            title_prefix, tree_num, node_count
+            "{title_prefix} {tree_num} ({node_count} nodes):\n"
         ));
 
         // Render the root node without prefix
-        output.push_str(&format!("{}", tree.name));
+        output.push_str(&tree.name.to_string());
         if let Some(ref path) = tree.path {
             output.push_str(&format!(" ({})", path.display()));
         }
@@ -502,6 +501,104 @@ fn count_nodes(node: &TreeNode) -> usize {
     }
 
     1 + node.children.iter().map(count_nodes).sum::<usize>()
+}
+
+/// Render a tree node and its children in minimal format (names only).
+///
+/// Similar to `render_tree()` but omits file paths and additional dependency annotations.
+/// Only shows node names with tree structure characters.
+///
+/// # Arguments
+///
+/// * `node` - The tree node to render
+/// * `prefix` - Current line prefix for indentation
+/// * `is_last` - Whether this is the last child at this level
+///
+/// # Returns
+///
+/// A formatted string representation of the tree with minimal information
+pub fn render_tree_minimal(node: &TreeNode, prefix: &str, is_last: bool) -> String {
+    let mut output = String::new();
+
+    // Skip nodes that are references to already-shown nodes
+    let is_reference =
+        node.additional_parents.len() == 1 && node.additional_parents[0] == "[shown above]";
+    if is_reference {
+        return output;
+    }
+
+    // Render current node with just the name
+    let connector = if is_last { TREE_LAST } else { TREE_BRANCH };
+    output.push_str(&format!("{prefix}{connector}{}\n", node.name));
+
+    // Render children
+    let child_prefix = if is_last {
+        format!("{prefix}{TREE_SPACE}")
+    } else {
+        format!("{prefix}{TREE_VERTICAL}")
+    };
+
+    for (i, child) in node.children.iter().enumerate() {
+        let is_last_child = i == node.children.len() - 1;
+        output.push_str(&render_tree_minimal(child, &child_prefix, is_last_child));
+    }
+
+    output
+}
+
+/// Render a forest as a unified tree sorted by size and name.
+///
+/// Sorts trees by node count (descending), then by root node name (ascending).
+/// Displays all trees together without separate numbering or metadata.
+///
+/// # Arguments
+///
+/// * `forest` - Vector of root tree nodes
+///
+/// # Returns
+///
+/// A formatted string representation of the unified forest
+pub fn render_forest_unified(forest: &[TreeNode]) -> String {
+    let mut output = String::new();
+
+    // Create a vector of (tree, node_count) for sorting
+    let mut trees_with_counts: Vec<_> = forest
+        .iter()
+        .map(|tree| {
+            let count = count_nodes(tree);
+            (tree, count)
+        })
+        .collect();
+
+    // Sort by node count (descending), then by root name (ascending)
+    trees_with_counts.sort_by(|(tree_a, count_a), (tree_b, count_b)| {
+        count_b
+            .cmp(count_a)
+            .then_with(|| tree_a.name.cmp(&tree_b.name))
+    });
+
+    // Render all trees in unified format
+    for (i, (tree, _count)) in trees_with_counts.iter().enumerate() {
+        let is_last = i == trees_with_counts.len() - 1;
+
+        // Render the root node
+        let connector = if is_last { TREE_LAST } else { TREE_BRANCH };
+        output.push_str(&format!("{}{}\n", connector, tree.name));
+
+        // Render children
+        let child_prefix = if is_last {
+            TREE_SPACE.to_string()
+        } else {
+            TREE_VERTICAL.to_string()
+        };
+
+        for (j, child) in tree.children.iter().enumerate() {
+            let is_last_child = j == tree.children.len() - 1;
+            output.push_str(&render_tree_minimal(child, &child_prefix, is_last_child));
+        }
+    }
+
+    output
 }
 
 #[cfg(test)]

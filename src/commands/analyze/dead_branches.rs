@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use topcat::analysis::GraphAnalyzer;
 use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::analysis::root_matcher::RootNodeMatcher;
-use topcat::display_utils::{build_tree_forest, render_forest};
+use topcat::display_utils::{build_tree_forest, render_forest_unified};
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
 use topcat::logging::Logger;
@@ -103,7 +103,7 @@ pub fn analyze(
     // Render and display the forest
     if !forest.is_empty() {
         logger.info("");
-        let tree_output = render_forest(&forest, "Tree");
+        let tree_output = render_forest_unified(&forest);
         logger.info(&tree_output);
     }
 
