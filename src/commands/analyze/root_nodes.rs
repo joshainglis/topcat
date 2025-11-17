@@ -7,6 +7,7 @@ use comfy_table::Cell;
 use topcat::analysis::GraphAnalyzer;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::Logger;
 
 use super::common::{AnalysisDisplayConfig, analyze_and_display};
 
@@ -17,13 +18,13 @@ use super::common::{AnalysisDisplayConfig, analyze_and_display};
 ///
 /// # Arguments
 ///
-/// * `quiet` - Whether to suppress output
+/// * `logger` - Logger instance for output
 /// * `graph` - The dependency graph to analyze
 ///
 /// # Returns
 ///
 /// `Ok(())` on success, `Err(TopCatError)` on error
-pub fn analyze(quiet: bool, graph: &TCGraph) -> Result<(), TopCatError> {
+pub fn analyze(logger: &Logger, graph: &TCGraph) -> Result<(), TopCatError> {
     let config = AnalysisDisplayConfig {
         title: "🌱 Root Nodes Analysis".to_string(),
         empty_message: "✅ No root nodes found".to_string(),
@@ -37,7 +38,7 @@ pub fn analyze(quiet: bool, graph: &TCGraph) -> Result<(), TopCatError> {
     };
 
     analyze_and_display(
-        quiet,
+        logger,
         graph,
         None,
         config,

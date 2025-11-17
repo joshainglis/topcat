@@ -10,8 +10,7 @@ use topcat::analysis::GraphAnalyzer;
 use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
-
-use super::common::AnalysisLogger;
+use topcat::logging::Logger;
 
 /// Perform detailed analysis of a specific file.
 ///
@@ -25,7 +24,7 @@ use super::common::AnalysisLogger;
 ///
 /// # Arguments
 ///
-/// * `quiet` - Whether to suppress output
+/// * `logger` - Logger instance for output
 /// * `graph` - The dependency graph containing the file
 /// * `path` - Path to the file to analyze
 /// * `external_checker` - Optional checker for external usage status
@@ -35,12 +34,11 @@ use super::common::AnalysisLogger;
 /// `Ok(())` on success, or `Err(TopCatError::ConfigError)` if the file
 /// is not found in the graph.
 pub fn analyze(
-    quiet: bool,
+    logger: &Logger,
     graph: &TCGraph,
     path: &PathBuf,
     external_checker: Option<&ExternalUsageChecker>,
 ) -> Result<(), TopCatError> {
-    let logger = AnalysisLogger::new(quiet);
     logger.section(&format!("📄 File Analysis: {}", path.display()));
 
     // Find the node in the graph

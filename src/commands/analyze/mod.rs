@@ -57,12 +57,11 @@ mod unrequired;
 use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
-use env_logger::Builder;
-use log::LevelFilter;
 
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::cli::CommonArgs;
 use topcat::exceptions::TopCatError;
+use topcat::logging::{Logger, init_logging};
 use topcat::settings::Settings;
 
 use super::common as cmd_common;
@@ -141,56 +140,53 @@ impl AnalyzeArgs {
             ));
         }
 
-        // 5. Initialize logging (unless quiet mode)
+        // 5. Initialize logging
         let quiet = settings.behavior.quiet;
-        if !quiet {
-            let log_level = if settings.behavior.verbose {
-                LevelFilter::Debug
-            } else {
-                LevelFilter::Info
-            };
-            Builder::new().filter(None, log_level).try_init().ok();
-        }
+        let verbose = settings.behavior.verbose;
+        init_logging(verbose, quiet);
 
-        // 6. For cycles and missing commands, we handle graph building specially
+        // 6. Create logger instance
+        let logger = Logger::new(quiet, verbose);
+
+        // 7. For cycles and missing commands, we handle graph building specially
         // (They bypass full graph construction to catch errors that would prevent it)
         match &self.command {
             AnalyzeCommand::Cycles => {
-                return cycles::analyze(quiet, &self.common.schemas, &settings);
+                return cycles::analyze(&logger, &self.common.schemas, &settings);
             }
             AnalyzeCommand::Missing => {
-                return missing::analyze(quiet, &self.common.schemas, &settings);
+                return missing::analyze(&logger, &self.common.schemas, &settings);
             }
             _ => {}
         }
 
-        // 7. Build the dependency graph (for all other commands)
+        // 8. Build the dependency graph (for all other commands)
         let graph = self.build_graph(&settings)?;
 
-        // 8. Check for external usage if requested
+        // 9. Check for external usage if requested
         let external_checker = self.build_external_checker(&settings)?;
 
-        // 9. Build root matcher from settings
+        // 10. Build root matcher from settings
         let root_matcher = self.build_root_matcher(&settings)?;
 
-        // 10. Execute the requested analysis
+        // 11. Execute the requested analysis
         match &self.command {
             AnalyzeCommand::DeadBranches => dead_branches::analyze(
-                quiet,
+                &logger,
                 &graph,
                 external_checker.as_ref(),
                 root_matcher.as_ref(),
             ),
-            AnalyzeCommand::Orphans => orphans::analyze(quiet, &graph, external_checker.as_ref()),
+            AnalyzeCommand::Orphans => orphans::analyze(&logger, &graph, external_checker.as_ref()),
             AnalyzeCommand::Unrequired => {
-                unrequired::analyze(quiet, &graph, external_checker.as_ref())
+                unrequired::analyze(&logger, &graph, external_checker.as_ref())
             }
             AnalyzeCommand::LeafNodes => {
-                leaf_nodes::analyze(quiet, &graph, external_checker.as_ref())
+                leaf_nodes::analyze(&logger, &graph, external_checker.as_ref())
             }
-            AnalyzeCommand::RootNodes => root_nodes::analyze(quiet, &graph),
+            AnalyzeCommand::RootNodes => root_nodes::analyze(&logger, &graph),
             AnalyzeCommand::File { path } => {
-                file::analyze(quiet, &graph, path, external_checker.as_ref())
+                file::analyze(&logger, &graph, path, external_checker.as_ref())
             }
             // Cycles and Missing are handled earlier
             AnalyzeCommand::Cycles | AnalyzeCommand::Missing => unreachable!(),

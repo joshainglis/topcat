@@ -5,9 +5,9 @@
 use comfy_table::Cell;
 
 use topcat::exceptions::TopCatError;
+use topcat::logging::Logger;
 use topcat::settings::Settings;
 
-use super::common::AnalysisLogger;
 use crate::commands::common as cmd_common;
 
 /// Detect and display cycles in the dependency graph.
@@ -18,7 +18,7 @@ use crate::commands::common as cmd_common;
 ///
 /// # Arguments
 ///
-/// * `quiet` - Whether to suppress output
+/// * `logger` - Logger instance for output
 /// * `schemas` - Optional schema filter from CLI (overrides settings)
 /// * `settings` - Configuration settings
 ///
@@ -28,11 +28,10 @@ use crate::commands::common as cmd_common;
 /// - `Err(TopCatError::CyclicDependency)` if cycles exist
 /// - `Err(TopCatError)` for other errors during graph building
 pub fn analyze(
-    quiet: bool,
+    logger: &Logger,
     schemas: &Option<Vec<String>>,
     settings: &Settings,
 ) -> Result<(), TopCatError> {
-    let logger = AnalysisLogger::new(quiet);
     logger.section("🔄 Cycle Detection Analysis");
 
     // Try to build the graph - if it has cycles, it will return a CyclicDependency error

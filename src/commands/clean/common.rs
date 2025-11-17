@@ -7,7 +7,6 @@
 //! - `apply_external_filter`: Filter out externally-used nodes
 
 use std::collections::HashSet;
-use std::io::{self, Write};
 
 use comfy_table::{Cell, Color, Table};
 
@@ -15,6 +14,7 @@ use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::Logger;
 
 /// Display a preview of files that will be deleted.
 ///
@@ -23,6 +23,7 @@ use topcat::file_dag::TCGraph;
 ///
 /// # Arguments
 ///
+/// * `logger` - Logger instance for output
 /// * `graph` - The dependency graph
 /// * `nodes_to_delete` - Set of node names to delete
 /// * `category` - Category label for the output (e.g., "Dead Branches")
@@ -31,6 +32,7 @@ use topcat::file_dag::TCGraph;
 ///
 /// `Ok(())` on success, `Err(TopCatError)` on error
 pub fn show_deletion_preview(
+    logger: &Logger,
     graph: &TCGraph,
     nodes_to_delete: &HashSet<String>,
     category: &str,
@@ -57,11 +59,12 @@ pub fn show_deletion_preview(
         ]);
     }
 
-    println!(
+    logger.info(&format!(
         "📋 {category} to be deleted ({} files):\n",
         nodes_to_delete.len()
-    );
-    println!("{table}\n");
+    ));
+    logger.table(&table);
+    logger.newline();
 
     Ok(())
 }
@@ -73,19 +76,19 @@ pub fn show_deletion_preview(
 ///
 /// # Arguments
 ///
+/// * `logger` - Logger instance for output
 /// * `graph` - The dependency graph
 /// * `nodes_to_delete` - Set of node names to delete
 /// * `force` - Skip confirmation prompt if true
-/// * `verbose` - Show each file as it's deleted
 ///
 /// # Returns
 ///
 /// `Ok(())` if all files deleted successfully, `Err(TopCatError)` if any deletions failed
 pub fn perform_deletion(
+    logger: &Logger,
     graph: &TCGraph,
     nodes_to_delete: &HashSet<String>,
     force: bool,
-    verbose: bool,
 ) -> Result<(), TopCatError> {
     if nodes_to_delete.is_empty() {
         return Ok(());
@@ -93,25 +96,18 @@ pub fn perform_deletion(
 
     // Ask for confirmation unless --force is set
     if !force {
-        print!(
+        let confirmed = logger.prompt(&format!(
             "\n⚠️  Are you sure you want to delete {} files? [y/N]: ",
             nodes_to_delete.len()
-        );
-        io::stdout().flush().map_err(TopCatError::Io)?;
+        ))?;
 
-        let mut response = String::new();
-        io::stdin()
-            .read_line(&mut response)
-            .map_err(TopCatError::Io)?;
-        let response = response.trim().to_lowercase();
-
-        if response != "y" && response != "yes" {
-            println!("❌ Deletion cancelled");
+        if !confirmed {
+            logger.info("❌ Deletion cancelled");
             return Ok(());
         }
     }
 
-    println!("\n🗑️  Deleting files...\n");
+    logger.progress("\n🗑️  Deleting files...\n");
 
     let node_to_path = graph.build_node_to_path_map();
     let mut success_count = 0;
@@ -123,14 +119,12 @@ pub fn perform_deletion(
             match std::fs::remove_file(path) {
                 Ok(_) => {
                     success_count += 1;
-                    if verbose {
-                        println!("✅ Deleted: {}", path.display());
-                    }
+                    logger.debug(&format!("✅ Deleted: {}", path.display()));
                 }
                 Err(e) => {
                     failure_count += 1;
                     let error_msg = format!("Failed to delete {}: {e}", path.display());
-                    eprintln!("❌ {error_msg}");
+                    logger.error(&format!("❌ {error_msg}"));
                     errors.push(error_msg);
                 }
             }
@@ -138,18 +132,18 @@ pub fn perform_deletion(
     }
 
     // Show summary
-    println!("\n📊 Deletion Summary:");
-    println!("  ✅ Successfully deleted: {success_count} files");
+    logger.info("\n📊 Deletion Summary:");
+    logger.info(&format!("  ✅ Successfully deleted: {success_count} files"));
     if failure_count > 0 {
-        println!("  ❌ Failed to delete: {failure_count} files");
+        logger.error(&format!("  ❌ Failed to delete: {failure_count} files"));
     }
 
     if failure_count > 0 {
-        Err(TopCatError::Io(io::Error::other(format!(
+        Err(TopCatError::Io(std::io::Error::other(format!(
             "Failed to delete {failure_count} file(s)"
         ))))
     } else {
-        println!("\n✅ All files deleted successfully!");
+        logger.success("\n✅ All files deleted successfully!");
         Ok(())
     }
 }

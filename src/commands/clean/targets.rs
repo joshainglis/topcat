@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::Logger;
 
 use super::common;
 
@@ -17,25 +18,25 @@ use super::common;
 ///
 /// # Arguments
 ///
+/// * `logger` - Logger instance for output
 /// * `graph` - The dependency graph
 /// * `target_files` - File patterns or names to remove
 /// * `root_matcher` - Optional matcher to identify protected nodes
 /// * `actually_delete` - Whether to actually delete files (false = dry-run)
 /// * `force` - Skip confirmation prompt if true
-/// * `verbose` - Show each file as it's deleted
 ///
 /// # Returns
 ///
 /// `Ok(())` on success, `Err(TopCatError)` on error
 pub fn clean(
+    logger: &Logger,
     graph: &TCGraph,
     target_files: &[String],
     root_matcher: Option<&RootNodeMatcher>,
     actually_delete: bool,
     force: bool,
-    verbose: bool,
 ) -> Result<(), TopCatError> {
-    println!("\n🎯 Processing target files for deletion...\n");
+    logger.progress("\n🎯 Processing target files for deletion...\n");
 
     if target_files.is_empty() {
         return Err(TopCatError::ConfigError(
@@ -58,12 +59,14 @@ pub fn clean(
             }
         }
         if !found_match {
-            eprintln!("⚠️  Warning: No files matched pattern '{pattern}'");
+            logger.warn(&format!(
+                "⚠️  Warning: No files matched pattern '{pattern}'"
+            ));
         }
     }
 
     if targets_to_delete.is_empty() {
-        println!("❌ No files matched the specified patterns");
+        logger.error("❌ No files matched the specified patterns");
         return Ok(());
     }
 
@@ -85,27 +88,27 @@ pub fn clean(
     }
 
     if has_dependents {
-        println!("⚠️  WARNING: Some target files have dependents!\n");
+        logger.warn("⚠️  WARNING: Some target files have dependents!\n");
         for (target, dependents) in &dependent_warnings {
-            println!("  {target} is required by:");
+            logger.info(&format!("  {target} is required by:"));
             for dep in dependents {
-                println!("    - {dep}");
+                logger.info(&format!("    - {dep}"));
             }
-            println!();
+            logger.newline();
         }
-        println!("❌ Cannot delete files that are still required by others");
-        println!("💡 Tip: Use 'clean dead-branches' to remove entire unused subtrees\n");
+        logger.error("❌ Cannot delete files that are still required by others");
+        logger.info("💡 Tip: Use 'clean dead-branches' to remove entire unused subtrees\n");
         return Ok(());
     }
 
     // Show what will be deleted
-    common::show_deletion_preview(graph, &targets_to_delete, "Target Files")?;
+    common::show_deletion_preview(logger, graph, &targets_to_delete, "Target Files")?;
 
     // Delete files if not dry-run
     if actually_delete {
-        common::perform_deletion(graph, &targets_to_delete, force, verbose)?;
+        common::perform_deletion(logger, graph, &targets_to_delete, force)?;
     } else {
-        println!("\n💡 Run with --no-dry-run to actually delete these files");
+        logger.info("\n💡 Run with --no-dry-run to actually delete these files");
     }
 
     Ok(())

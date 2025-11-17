@@ -1,7 +1,6 @@
 //! Common utilities for analysis commands.
 //!
 //! This module provides shared functionality used across different analysis types:
-//! - `AnalysisLogger`: Output abstraction that respects quiet mode
 //! - `AnalysisDisplayConfig`: Configuration for formatted table output
 //! - `analyze_and_display`: Generic analysis function pattern
 
@@ -13,59 +12,9 @@ use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
 use topcat::file_node::FileNode;
+use topcat::logging::Logger;
 
 use crate::commands::common as cmd_common;
-
-/// Abstraction for analysis output that respects quiet mode.
-///
-/// Centralizes all output logic to avoid scattered `if !self.quiet` checks
-/// throughout the codebase. All output methods are no-ops when quiet mode is enabled.
-pub struct AnalysisLogger {
-    quiet: bool,
-}
-
-impl AnalysisLogger {
-    /// Create a new logger with the specified quiet mode setting.
-    pub fn new(quiet: bool) -> Self {
-        Self { quiet }
-    }
-
-    /// Print a section header with title and separator line.
-    pub fn section(&self, title: &str) {
-        if !self.quiet {
-            println!("\n{title}");
-            println!("═══════════════════════════════════════════════════════════\n");
-        }
-    }
-
-    /// Print a regular info message.
-    pub fn info(&self, msg: &str) {
-        if !self.quiet {
-            println!("{msg}");
-        }
-    }
-
-    /// Print a formatted table.
-    pub fn table(&self, table: &Table) {
-        if !self.quiet {
-            println!("{table}");
-        }
-    }
-
-    /// Print a separator line for visual organization.
-    pub fn separator(&self) {
-        if !self.quiet {
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        }
-    }
-
-    /// Print a blank line for spacing.
-    pub fn newline(&self) {
-        if !self.quiet {
-            println!();
-        }
-    }
-}
 
 /// Configuration for displaying analysis results in a table format.
 ///
@@ -102,7 +51,7 @@ pub struct AnalysisDisplayConfig {
 ///
 /// # Arguments
 ///
-/// * `quiet` - Whether to suppress output
+/// * `logger` - Logger instance for output
 /// * `graph` - The dependency graph to analyze
 /// * `external_checker` - Optional checker to filter out externally-used nodes
 /// * `config` - Display configuration (titles, headers, messages)
@@ -113,7 +62,7 @@ pub struct AnalysisDisplayConfig {
 ///
 /// `Ok(())` on success, `Err(TopCatError)` on error
 pub fn analyze_and_display<F, R>(
-    quiet: bool,
+    logger: &Logger,
     graph: &TCGraph,
     external_checker: Option<&ExternalUsageChecker>,
     config: AnalysisDisplayConfig,
@@ -124,7 +73,6 @@ where
     F: Fn(&TCGraph) -> HashSet<String>,
     R: Fn(&FileNode) -> Vec<Cell>,
 {
-    let logger = AnalysisLogger::new(quiet);
     logger.section(&config.title);
 
     let mut results = finder(graph);

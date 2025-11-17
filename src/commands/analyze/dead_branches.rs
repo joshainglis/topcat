@@ -11,8 +11,8 @@ use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::Logger;
 
-use super::common::AnalysisLogger;
 use crate::commands::common as cmd_common;
 
 /// Find and display dead branches (complete subtrees that can be removed together).
@@ -23,7 +23,7 @@ use crate::commands::common as cmd_common;
 ///
 /// # Arguments
 ///
-/// * `quiet` - Whether to suppress output
+/// * `logger` - Logger instance for output
 /// * `graph` - The dependency graph to analyze
 /// * `external_checker` - Optional checker to filter out externally-used nodes
 /// * `root_matcher` - Optional matcher to identify entry point nodes
@@ -32,12 +32,11 @@ use crate::commands::common as cmd_common;
 ///
 /// `Ok(())` on success, `Err(TopCatError)` on error
 pub fn analyze(
-    quiet: bool,
+    logger: &Logger,
     graph: &TCGraph,
     external_checker: Option<&ExternalUsageChecker>,
     root_matcher: Option<&RootNodeMatcher>,
 ) -> Result<(), TopCatError> {
-    let logger = AnalysisLogger::new(quiet);
     logger.section("🌳 Dead Branches Analysis");
 
     let mut dead_branches = graph.find_dead_branches(root_matcher);

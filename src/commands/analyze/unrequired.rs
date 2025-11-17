@@ -8,6 +8,7 @@ use topcat::analysis::GraphAnalyzer;
 use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::Logger;
 
 use super::common::{AnalysisDisplayConfig, analyze_and_display};
 
@@ -18,7 +19,7 @@ use super::common::{AnalysisDisplayConfig, analyze_and_display};
 ///
 /// # Arguments
 ///
-/// * `quiet` - Whether to suppress output
+/// * `logger` - Logger instance for output
 /// * `graph` - The dependency graph to analyze
 /// * `external_checker` - Optional checker to filter out externally-used nodes
 ///
@@ -26,7 +27,7 @@ use super::common::{AnalysisDisplayConfig, analyze_and_display};
 ///
 /// `Ok(())` on success, `Err(TopCatError)` on error
 pub fn analyze(
-    quiet: bool,
+    logger: &Logger,
     graph: &TCGraph,
     external_checker: Option<&ExternalUsageChecker>,
 ) -> Result<(), TopCatError> {
@@ -45,7 +46,7 @@ pub fn analyze(
     };
 
     analyze_and_display(
-        quiet,
+        logger,
         graph,
         external_checker,
         config,

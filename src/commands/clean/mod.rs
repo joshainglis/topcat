@@ -52,12 +52,11 @@ mod targets;
 mod unrequired;
 
 use clap::{Args, Subcommand};
-use env_logger::Builder;
-use log::LevelFilter;
 
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::cli::CommonArgs;
 use topcat::exceptions::TopCatError;
+use topcat::logging::{Logger, init_logging};
 use topcat::settings::Settings;
 
 use super::common as cmd_common;
@@ -132,71 +131,68 @@ impl CleanArgs {
             settings.behavior.dry_run = true;
         }
 
-        // 6. Determine if we're actually deleting or just previewing
+        // 6. Initialize logging
+        let quiet = settings.behavior.quiet;
+        let verbose = settings.behavior.verbose;
+        init_logging(verbose, quiet);
+
+        // 7. Create logger instance
+        let logger = Logger::new(quiet, verbose);
+
+        // 8. Determine if we're actually deleting or just previewing
         let actually_delete = self.common.no_dry_run || !settings.behavior.dry_run;
 
         if actually_delete {
-            println!("⚠️  DELETION MODE: Files will be permanently removed!");
+            logger.warn("⚠️  DELETION MODE: Files will be permanently removed!");
         } else {
-            println!("🔍 DRY-RUN MODE: No files will be deleted");
+            logger.info("🔍 DRY-RUN MODE: No files will be deleted");
         }
 
-        // 7. Initialize logging
-        if !settings.behavior.quiet {
-            let log_level = if settings.behavior.verbose {
-                LevelFilter::Debug
-            } else {
-                LevelFilter::Info
-            };
-            Builder::new().filter(None, log_level).try_init().ok();
-        }
-
-        // 8. Build the dependency graph
+        // 9. Build the dependency graph
         let graph = self.build_graph(&settings)?;
 
-        // 9. Check for external usage if requested
+        // 10. Check for external usage if requested
         let external_checker = self.build_external_checker(&settings)?;
 
-        // 10. Build root matcher from settings
+        // 11. Build root matcher from settings
         let root_matcher = self.build_root_matcher(&settings)?;
 
-        // 11. Extract force and verbose from settings
+        // 12. Extract force flag from settings
         let force = settings.behavior.force;
-        let verbose = settings.behavior.verbose;
 
-        // 12. Execute the requested cleanup
+        // 13. Execute the requested cleanup
         match &self.command {
             CleanCommand::DeadBranches => dead_branches::clean(
+                &logger,
                 &graph,
                 external_checker.as_ref(),
                 root_matcher.as_ref(),
                 actually_delete,
                 force,
-                verbose,
             ),
             CleanCommand::Orphans => orphans::clean(
+                &logger,
                 &graph,
                 external_checker.as_ref(),
                 root_matcher.as_ref(),
                 actually_delete,
                 force,
-                verbose,
             ),
             CleanCommand::Unrequired => unrequired::clean(
+                &logger,
                 &graph,
                 external_checker.as_ref(),
                 root_matcher.as_ref(),
                 actually_delete,
                 force,
-                verbose,
             ),
             CleanCommand::Targets { files } => targets::clean(
+                &logger,
                 &graph,
                 files,
                 root_matcher.as_ref(),
                 actually_delete,
                 force,
-                verbose,
             ),
         }
     }

@@ -9,10 +9,10 @@ use comfy_table::{Cell, Color};
 use topcat::config;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::Logger;
 use topcat::settings::Settings;
 use topcat::sql_config;
 
-use super::common::AnalysisLogger;
 use crate::commands::common as cmd_common;
 
 /// Find and display missing dependencies (referenced but non-existent files).
@@ -22,7 +22,7 @@ use crate::commands::common as cmd_common;
 ///
 /// # Arguments
 ///
-/// * `quiet` - Whether to suppress output
+/// * `logger` - Logger instance for output
 /// * `schemas` - Optional schema filter from CLI (overrides settings)
 /// * `settings` - Configuration settings
 ///
@@ -32,11 +32,10 @@ use crate::commands::common as cmd_common;
 /// - `Err(TopCatError::MissingDependency)` if any are found (with full list)
 /// - `Err(TopCatError)` for other errors during scanning
 pub fn analyze(
-    quiet: bool,
+    logger: &Logger,
     schemas: &Option<Vec<String>>,
     settings: &Settings,
 ) -> Result<(), TopCatError> {
-    let logger = AnalysisLogger::new(quiet);
     logger.section("🔍 Missing Dependencies Analysis");
 
     // Build config for validation - we need the old Config struct for TCGraph::new()

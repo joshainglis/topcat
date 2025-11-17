@@ -7,6 +7,7 @@ use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::Logger;
 
 use super::common;
 
@@ -17,25 +18,25 @@ use super::common;
 ///
 /// # Arguments
 ///
+/// * `logger` - Logger instance for output
 /// * `graph` - The dependency graph
 /// * `external_checker` - Optional checker to filter out externally-used nodes
 /// * `root_matcher` - Optional matcher to identify protected nodes
 /// * `actually_delete` - Whether to actually delete files (false = dry-run)
 /// * `force` - Skip confirmation prompt if true
-/// * `verbose` - Show each file as it's deleted
 ///
 /// # Returns
 ///
 /// `Ok(())` on success, `Err(TopCatError)` on error
 pub fn clean(
+    logger: &Logger,
     graph: &TCGraph,
     external_checker: Option<&ExternalUsageChecker>,
     root_matcher: Option<&RootNodeMatcher>,
     actually_delete: bool,
     force: bool,
-    verbose: bool,
 ) -> Result<(), TopCatError> {
-    println!("\n🍃 Finding unrequired files...\n");
+    logger.progress("\n🍃 Finding unrequired files...\n");
 
     // Find unrequired
     let mut unrequired = graph.find_unrequired();
@@ -47,18 +48,18 @@ pub fn clean(
     unrequired = common::apply_external_filter(unrequired, external_checker);
 
     if unrequired.is_empty() {
-        println!("✅ No unrequired files found!");
+        logger.success("✅ No unrequired files found!");
         return Ok(());
     }
 
     // Show what will be deleted
-    common::show_deletion_preview(graph, &unrequired, "Unrequired Files")?;
+    common::show_deletion_preview(logger, graph, &unrequired, "Unrequired Files")?;
 
     // Delete files if not dry-run
     if actually_delete {
-        common::perform_deletion(graph, &unrequired, force, verbose)?;
+        common::perform_deletion(logger, graph, &unrequired, force)?;
     } else {
-        println!("\n💡 Run with --no-dry-run to actually delete these files");
+        logger.info("\n💡 Run with --no-dry-run to actually delete these files");
     }
 
     Ok(())

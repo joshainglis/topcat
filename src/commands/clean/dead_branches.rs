@@ -7,6 +7,7 @@ use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::Logger;
 
 use super::common;
 
@@ -17,25 +18,25 @@ use super::common;
 ///
 /// # Arguments
 ///
+/// * `logger` - Logger instance for output
 /// * `graph` - The dependency graph
 /// * `external_checker` - Optional checker to filter out externally-used nodes
 /// * `root_matcher` - Optional matcher to identify protected nodes
 /// * `actually_delete` - Whether to actually delete files (false = dry-run)
 /// * `force` - Skip confirmation prompt if true
-/// * `verbose` - Show each file as it's deleted
 ///
 /// # Returns
 ///
 /// `Ok(())` on success, `Err(TopCatError)` on error
 pub fn clean(
+    logger: &Logger,
     graph: &TCGraph,
     external_checker: Option<&ExternalUsageChecker>,
     root_matcher: Option<&RootNodeMatcher>,
     actually_delete: bool,
     force: bool,
-    verbose: bool,
 ) -> Result<(), TopCatError> {
-    println!("\n🌳 Finding dead branches...\n");
+    logger.progress("\n🌳 Finding dead branches...\n");
 
     // Find dead branches
     let dead_branches = graph.find_dead_branches(root_matcher);
@@ -44,18 +45,18 @@ pub fn clean(
     let dead_branches = common::apply_external_filter(dead_branches, external_checker);
 
     if dead_branches.is_empty() {
-        println!("✅ No dead branches found! Your codebase is clean.");
+        logger.success("✅ No dead branches found! Your codebase is clean.");
         return Ok(());
     }
 
     // Show what will be deleted
-    common::show_deletion_preview(graph, &dead_branches, "Dead Branches")?;
+    common::show_deletion_preview(logger, graph, &dead_branches, "Dead Branches")?;
 
     // Delete files if not dry-run
     if actually_delete {
-        common::perform_deletion(graph, &dead_branches, force, verbose)?;
+        common::perform_deletion(logger, graph, &dead_branches, force)?;
     } else {
-        println!("\n💡 Run with --no-dry-run to actually delete these files");
+        logger.info("\n💡 Run with --no-dry-run to actually delete these files");
     }
 
     Ok(())
