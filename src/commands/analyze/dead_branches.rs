@@ -78,7 +78,7 @@ pub fn analyze(
         }
     }
 
-    // Build the forest
+    // Build the forest with stable ordering (tree building now uses stable sort internally)
     let forest = build_tree_forest(&dead_branches, &deps_map, &dependents_map, &node_paths);
 
     logger.info(&format!(

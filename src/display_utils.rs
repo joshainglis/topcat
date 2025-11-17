@@ -253,14 +253,14 @@ impl TreeNode {
     }
 }
 
-/// Build a forest of trees from a DAG structure.
+/// Build a forest of trees from dependency relationships with stable ordering.
 ///
-/// Converts a directed acyclic graph into a forest of trees for display.
-/// For dead branches, trees are built from root nodes (no dependencies) downward
-/// through their dependents.
+/// Converts a DAG represented as dependency maps into a forest of trees for display.
+/// Uses stable sorting based on node names for consistent output across runs.
 ///
-/// Handles nodes with multiple parents by selecting a primary parent and
-/// marking additional parent relationships.
+/// Trees are built from root nodes (no dependencies) downward through their dependents.
+/// Handles nodes with multiple dependencies by selecting a primary parent and
+/// marking additional dependencies.
 ///
 /// # Arguments
 ///
@@ -291,6 +291,8 @@ pub fn build_tree_forest(
         })
         .cloned()
         .collect();
+
+    // Stable sort for consistent ordering
     roots.sort();
 
     // Build a tree for each root node
@@ -315,7 +317,7 @@ pub fn build_tree_forest(
 /// Recursively build a tree from a starting node.
 ///
 /// Builds a tree from a root node downward through its dependents.
-/// Tracks nodes with multiple dependencies (multiple parents in the dependency graph).
+/// Uses stable sorting for consistent output across runs.
 fn build_tree_recursive(
     node_name: &str,
     all_nodes: &HashSet<String>,
@@ -330,7 +332,7 @@ fn build_tree_recursive(
     visited.insert(node_name.to_string());
 
     // Find all dependencies (parents) within the set - nodes this one depends on
-    let all_dependencies: HashSet<_> = deps_map
+    let mut all_dependencies: Vec<_> = deps_map
         .get(node_name)
         .map(|deps| {
             deps.iter()
@@ -340,8 +342,10 @@ fn build_tree_recursive(
         })
         .unwrap_or_default();
 
-    // Add additional dependencies (those other than the primary parent)
-    // These are other nodes this node also depends on
+    // Stable sort for consistent ordering
+    all_dependencies.sort();
+
+    // Mark additional dependencies (those other than the primary parent)
     if let Some(primary) = primary_parent {
         for dep in all_dependencies.iter() {
             if dep != primary {
@@ -360,6 +364,8 @@ fn build_tree_recursive(
                 .collect()
         })
         .unwrap_or_default();
+
+    // Stable sort for consistent ordering
     children.sort();
 
     // Build child trees (traverse dependents)

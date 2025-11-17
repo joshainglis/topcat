@@ -414,4 +414,33 @@ impl TCGraph {
         }
         Ok(sorted_files)
     }
+
+    /// Get the layer graph for a given layer name.
+    ///
+    /// Returns a reference to the petgraph DiGraph for the specified layer.
+    /// Useful for direct graph operations like tree building.
+    pub fn get_layer_graph(&self, layer: &str) -> Option<&DiGraph<Rc<FileNode>, ()>> {
+        self.layer_graphs.get(layer)
+    }
+
+    /// Get the layer index map for a given layer name.
+    ///
+    /// Returns a reference to the map from node names to their indices in the layer graph.
+    pub fn get_layer_index_map(&self, layer: &str) -> Option<&HashMap<String, NodeIndex>> {
+        self.layer_index_maps.get(layer)
+    }
+
+    /// Get all layer graphs.
+    ///
+    /// Returns a reference to all layer graphs.
+    pub fn get_all_layer_graphs(&self) -> &HashMap<String, DiGraph<Rc<FileNode>, ()>> {
+        &self.layer_graphs
+    }
+
+    /// Get all layer index maps.
+    ///
+    /// Returns a reference to all layer index maps.
+    pub fn get_all_layer_index_maps(&self) -> &HashMap<String, HashMap<String, NodeIndex>> {
+        &self.layer_index_maps
+    }
 }
