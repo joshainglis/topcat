@@ -22,9 +22,8 @@ impl ConcatArgs {
     pub fn execute(&self) -> Result<(), TopCatError> {
         // Load settings from config files and environment variables
         let config_path = self.common.config_path();
-        let mut settings = Settings::load(config_path).map_err(|e| {
-            TopCatError::ConfigError(format!("Failed to load configuration: {}", e))
-        })?;
+        let mut settings = Settings::load(config_path)
+            .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
 
         // Apply CLI overrides
         self.common.apply_to_settings(&mut settings);

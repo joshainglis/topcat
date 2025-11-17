@@ -185,10 +185,7 @@ impl Settings {
         if let Some(ref fallback) = self.layers.fallback
             && !self.layers.names.contains(fallback)
         {
-            return Err(format!(
-                "Fallback layer '{}' is not in layers list",
-                fallback
-            ));
+            return Err(format!("Fallback layer '{fallback}' is not in layers list"));
         }
 
         Ok(())

@@ -124,9 +124,8 @@ impl AnalyzeArgs {
     pub fn execute(&self) -> Result<(), TopCatError> {
         // 1. Load settings from all sources (config files, env vars)
         let config_path = self.common.config_path();
-        let mut settings = Settings::load(config_path).map_err(|e| {
-            TopCatError::ConfigError(format!("Failed to load configuration: {}", e))
-        })?;
+        let mut settings = Settings::load(config_path)
+            .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
 
         // 2. Apply CLI overrides
         self.common.apply_to_settings(&mut settings);
