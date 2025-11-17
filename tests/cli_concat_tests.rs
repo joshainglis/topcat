@@ -87,7 +87,7 @@ fn test_concat_missing_required_args() {
         .arg("concat")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("required"));
+        .stderr(predicate::str::contains("must be specified"));
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn test_concat_missing_output_arg() {
         .args(["concat", "-i", test_input_dir().to_str().unwrap()])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("required"));
+        .stderr(predicate::str::contains("must be specified"));
 }
 
 #[test]
