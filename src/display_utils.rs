@@ -4,6 +4,7 @@
 //! all Topcat commands. It includes table formatting helpers and path display
 //! utilities.
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use comfy_table::{Attribute, Cell, ContentArrangement, Table};
@@ -213,6 +214,291 @@ pub fn separator_line() -> &'static str {
 /// ```
 pub fn section_header_line() -> &'static str {
     "═══════════════════════════════════════════════════════════"
+}
+
+// Tree display constants
+const TREE_BRANCH: &str = "├── ";
+const TREE_LAST: &str = "└── ";
+const TREE_VERTICAL: &str = "│   ";
+const TREE_SPACE: &str = "    ";
+
+/// Represents a node in a tree structure for display purposes.
+#[derive(Debug, Clone)]
+pub struct TreeNode {
+    pub name: String,
+    pub path: Option<PathBuf>,
+    pub children: Vec<TreeNode>,
+    pub additional_parents: Vec<String>,
+}
+
+impl TreeNode {
+    /// Create a new tree node.
+    pub fn new(name: String, path: Option<PathBuf>) -> Self {
+        Self {
+            name,
+            path,
+            children: Vec::new(),
+            additional_parents: Vec::new(),
+        }
+    }
+
+    /// Add a child to this node.
+    pub fn add_child(&mut self, child: TreeNode) {
+        self.children.push(child);
+    }
+
+    /// Add an additional parent reference.
+    pub fn add_additional_parent(&mut self, parent: String) {
+        self.additional_parents.push(parent);
+    }
+}
+
+/// Build a forest of trees from a DAG structure.
+///
+/// Converts a directed acyclic graph into a forest of trees for display.
+/// For dead branches, trees are built from leaf nodes (no dependents) downward
+/// through their dependencies.
+///
+/// Handles nodes with multiple parents by selecting a primary parent and
+/// marking additional parent relationships.
+///
+/// # Arguments
+///
+/// * `nodes` - Set of node names to include in the forest
+/// * `deps_map` - Map of node -> dependencies (used to traverse tree)
+/// * `dependents_map` - Map of node -> dependents (used to find roots)
+/// * `node_paths` - Map of node names to their file paths
+///
+/// # Returns
+///
+/// A vector of root `TreeNode` objects, one for each disconnected tree
+pub fn build_tree_forest(
+    nodes: &HashSet<String>,
+    deps_map: &HashMap<String, HashSet<String>>,
+    dependents_map: &HashMap<String, HashSet<String>>,
+    node_paths: &HashMap<String, PathBuf>,
+) -> Vec<TreeNode> {
+    let mut visited = HashSet::new();
+    let mut forest = Vec::new();
+
+    // Find root nodes (leaf nodes - nodes with no dependents within the set)
+    let mut roots: Vec<_> = nodes
+        .iter()
+        .filter(|node| {
+            let dependents = dependents_map
+                .get(*node)
+                .map(|d| d.clone())
+                .unwrap_or_default();
+            let internal_dependents: HashSet<_> = dependents.intersection(nodes).collect();
+            internal_dependents.is_empty()
+        })
+        .cloned()
+        .collect();
+    roots.sort();
+
+    // Build a tree for each root (leaf node)
+    for root in roots {
+        if !visited.contains(&root) {
+            let tree = build_tree_recursive(
+                &root,
+                nodes,
+                deps_map,
+                dependents_map,
+                node_paths,
+                &mut visited,
+                None,
+            );
+            forest.push(tree);
+        }
+    }
+
+    forest
+}
+
+/// Recursively build a tree from a starting node.
+///
+/// Builds a tree from a leaf node downward through its dependencies.
+/// Tracks nodes with multiple dependents (multiple parents in the tree).
+fn build_tree_recursive(
+    node_name: &str,
+    all_nodes: &HashSet<String>,
+    deps_map: &HashMap<String, HashSet<String>>,
+    dependents_map: &HashMap<String, HashSet<String>>,
+    node_paths: &HashMap<String, PathBuf>,
+    visited: &mut HashSet<String>,
+    primary_parent: Option<&str>,
+) -> TreeNode {
+    let mut tree_node = TreeNode::new(node_name.to_string(), node_paths.get(node_name).cloned());
+
+    visited.insert(node_name.to_string());
+
+    // Find all parents (dependents) within the set - nodes that depend on this one
+    let all_parents: HashSet<_> = dependents_map
+        .get(node_name)
+        .map(|deps| {
+            deps.iter()
+                .filter(|p| all_nodes.contains(*p))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Add additional parents (those other than the primary parent)
+    // These are other nodes that also depend on this one
+    if let Some(primary) = primary_parent {
+        for parent in all_parents.iter() {
+            if parent != primary {
+                tree_node.add_additional_parent(parent.clone());
+            }
+        }
+    }
+
+    // Get children (dependencies within the set) - nodes this one depends on
+    let mut children: Vec<_> = deps_map
+        .get(node_name)
+        .map(|deps| {
+            deps.iter()
+                .filter(|d| all_nodes.contains(*d))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    children.sort();
+
+    // Build child trees (traverse dependencies)
+    for child in children {
+        if visited.contains(&child) {
+            // Node already shown elsewhere, add a reference
+            let mut ref_node = TreeNode::new(child.clone(), None);
+            ref_node
+                .additional_parents
+                .push("[shown above]".to_string());
+            tree_node.add_child(ref_node);
+        } else {
+            let child_tree = build_tree_recursive(
+                &child,
+                all_nodes,
+                deps_map,
+                dependents_map,
+                node_paths,
+                visited,
+                Some(node_name),
+            );
+            tree_node.add_child(child_tree);
+        }
+    }
+
+    tree_node
+}
+
+/// Render a tree node and its children to a string.
+///
+/// Uses Unicode box-drawing characters to create a visual tree structure.
+///
+/// # Arguments
+///
+/// * `node` - The tree node to render
+/// * `prefix` - Current line prefix for indentation
+/// * `is_last` - Whether this is the last child at this level
+///
+/// # Returns
+///
+/// A formatted string representation of the tree
+pub fn render_tree(node: &TreeNode, prefix: &str, is_last: bool) -> String {
+    let mut output = String::new();
+
+    // Render current node
+    let connector = if is_last { TREE_LAST } else { TREE_BRANCH };
+
+    let mut node_line = node.name.clone();
+
+    // Add path if available
+    if let Some(ref path) = node.path {
+        node_line.push_str(&format!(" ({})", path.display()));
+    }
+
+    // Add additional parents if any
+    if !node.additional_parents.is_empty() {
+        if node.additional_parents.len() == 1 && node.additional_parents[0] == "[shown above]" {
+            node_line.push_str(" [shown above]");
+        } else {
+            let parents = node.additional_parents.join(", ");
+            node_line.push_str(&format!(" [also used by: {}]", parents));
+        }
+    }
+
+    output.push_str(&format!("{}{}{}\n", prefix, connector, node_line));
+
+    // Render children
+    let child_prefix = if is_last {
+        format!("{}{}", prefix, TREE_SPACE)
+    } else {
+        format!("{}{}", prefix, TREE_VERTICAL)
+    };
+
+    for (i, child) in node.children.iter().enumerate() {
+        let is_last_child = i == node.children.len() - 1;
+        output.push_str(&render_tree(child, &child_prefix, is_last_child));
+    }
+
+    output
+}
+
+/// Render an entire forest of trees.
+///
+/// # Arguments
+///
+/// * `forest` - Vector of root tree nodes
+/// * `title_prefix` - Prefix for tree titles (e.g., "Tree")
+///
+/// # Returns
+///
+/// A formatted string representation of the entire forest
+pub fn render_forest(forest: &[TreeNode], title_prefix: &str) -> String {
+    let mut output = String::new();
+
+    for (i, tree) in forest.iter().enumerate() {
+        let tree_num = i + 1;
+        let node_count = count_nodes(tree);
+
+        output.push_str(&format!(
+            "{} {} ({} nodes):\n",
+            title_prefix, tree_num, node_count
+        ));
+
+        // Render the root node without prefix
+        output.push_str(&format!("{}", tree.name));
+        if let Some(ref path) = tree.path {
+            output.push_str(&format!(" ({})", path.display()));
+        }
+        output.push('\n');
+
+        // Render children
+        for (j, child) in tree.children.iter().enumerate() {
+            let is_last = j == tree.children.len() - 1;
+            output.push_str(&render_tree(child, "", is_last));
+        }
+
+        // Add spacing between trees (but not after the last one)
+        if i < forest.len() - 1 {
+            output.push('\n');
+        }
+    }
+
+    output
+}
+
+/// Count total unique nodes in a tree (excluding references to nodes shown elsewhere).
+fn count_nodes(node: &TreeNode) -> usize {
+    // Check if this is a reference to a node shown elsewhere
+    let is_reference =
+        node.additional_parents.len() == 1 && node.additional_parents[0] == "[shown above]";
+
+    if is_reference {
+        return 0; // Don't count references
+    }
+
+    1 + node.children.iter().map(count_nodes).sum::<usize>()
 }
 
 #[cfg(test)]
