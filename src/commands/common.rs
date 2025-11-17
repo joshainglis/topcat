@@ -215,7 +215,7 @@ pub fn build_node_map(
 pub fn build_graph_from_settings(
     schemas: &Option<Vec<String>>,
     settings: &topcat::settings::Settings,
-) -> Result<topcat::file_dag::TCGraph, TopCatError> {
+) -> Result<TCGraph, TopCatError> {
     // Extract schema filter for node prefixes
     let schema_filter: Vec<String> = schemas
         .clone()
@@ -326,7 +326,7 @@ pub fn build_root_matcher_from_settings(
 /// `Err(TopCatError)` if checker initialization fails
 pub fn build_external_checker_from_settings(
     settings: &topcat::settings::Settings,
-) -> Result<Option<topcat::analysis::external_usage::ExternalUsageChecker>, TopCatError> {
+) -> Result<Option<ExternalUsageChecker>, TopCatError> {
     let dirs: Vec<PathBuf> = settings
         .analysis
         .external_check_dirs
