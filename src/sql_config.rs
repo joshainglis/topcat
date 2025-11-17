@@ -93,7 +93,8 @@ impl std::str::FromStr for MergeStrategy {
 }
 
 /// Header update mode
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum HeaderUpdateMode {
     /// Never modify files
     #[default]

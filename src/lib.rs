@@ -196,6 +196,7 @@
 //! - Input validation for regex patterns and paths
 
 pub mod analysis;
+pub mod cli;
 pub mod config;
 pub mod display_utils;
 pub mod exceptions;
@@ -207,6 +208,7 @@ pub mod header_generator;
 pub mod output;
 pub mod platform;
 pub mod schema_utils;
+pub mod settings;
 pub mod sql_config;
 
 mod io_utils;
