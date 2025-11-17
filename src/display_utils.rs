@@ -256,8 +256,8 @@ impl TreeNode {
 /// Build a forest of trees from a DAG structure.
 ///
 /// Converts a directed acyclic graph into a forest of trees for display.
-/// For dead branches, trees are built from leaf nodes (no dependents) downward
-/// through their dependencies.
+/// For dead branches, trees are built from root nodes (no dependencies) downward
+/// through their dependents.
 ///
 /// Handles nodes with multiple parents by selecting a primary parent and
 /// marking additional parent relationships.
@@ -265,8 +265,8 @@ impl TreeNode {
 /// # Arguments
 ///
 /// * `nodes` - Set of node names to include in the forest
-/// * `deps_map` - Map of node -> dependencies (used to traverse tree)
-/// * `dependents_map` - Map of node -> dependents (used to find roots)
+/// * `deps_map` - Map of node -> dependencies (used to find roots)
+/// * `dependents_map` - Map of node -> dependents (used to traverse tree)
 /// * `node_paths` - Map of node names to their file paths
 ///
 /// # Returns
@@ -281,22 +281,19 @@ pub fn build_tree_forest(
     let mut visited = HashSet::new();
     let mut forest = Vec::new();
 
-    // Find root nodes (leaf nodes - nodes with no dependents within the set)
+    // Find root nodes (nodes with no dependencies within the set)
     let mut roots: Vec<_> = nodes
         .iter()
         .filter(|node| {
-            let dependents = dependents_map
-                .get(*node)
-                .map(|d| d.clone())
-                .unwrap_or_default();
-            let internal_dependents: HashSet<_> = dependents.intersection(nodes).collect();
-            internal_dependents.is_empty()
+            let deps = deps_map.get(*node).map(|d| d.clone()).unwrap_or_default();
+            let internal_deps: HashSet<_> = deps.intersection(nodes).collect();
+            internal_deps.is_empty()
         })
         .cloned()
         .collect();
     roots.sort();
 
-    // Build a tree for each root (leaf node)
+    // Build a tree for each root node
     for root in roots {
         if !visited.contains(&root) {
             let tree = build_tree_recursive(
@@ -317,8 +314,8 @@ pub fn build_tree_forest(
 
 /// Recursively build a tree from a starting node.
 ///
-/// Builds a tree from a leaf node downward through its dependencies.
-/// Tracks nodes with multiple dependents (multiple parents in the tree).
+/// Builds a tree from a root node downward through its dependents.
+/// Tracks nodes with multiple dependencies (multiple parents in the dependency graph).
 fn build_tree_recursive(
     node_name: &str,
     all_nodes: &HashSet<String>,
@@ -332,8 +329,8 @@ fn build_tree_recursive(
 
     visited.insert(node_name.to_string());
 
-    // Find all parents (dependents) within the set - nodes that depend on this one
-    let all_parents: HashSet<_> = dependents_map
+    // Find all dependencies (parents) within the set - nodes this one depends on
+    let all_dependencies: HashSet<_> = deps_map
         .get(node_name)
         .map(|deps| {
             deps.iter()
@@ -343,18 +340,18 @@ fn build_tree_recursive(
         })
         .unwrap_or_default();
 
-    // Add additional parents (those other than the primary parent)
-    // These are other nodes that also depend on this one
+    // Add additional dependencies (those other than the primary parent)
+    // These are other nodes this node also depends on
     if let Some(primary) = primary_parent {
-        for parent in all_parents.iter() {
-            if parent != primary {
-                tree_node.add_additional_parent(parent.clone());
+        for dep in all_dependencies.iter() {
+            if dep != primary {
+                tree_node.add_additional_parent(dep.clone());
             }
         }
     }
 
-    // Get children (dependencies within the set) - nodes this one depends on
-    let mut children: Vec<_> = deps_map
+    // Get children (dependents within the set) - nodes that depend on this one
+    let mut children: Vec<_> = dependents_map
         .get(node_name)
         .map(|deps| {
             deps.iter()
@@ -365,7 +362,7 @@ fn build_tree_recursive(
         .unwrap_or_default();
     children.sort();
 
-    // Build child trees (traverse dependencies)
+    // Build child trees (traverse dependents)
     for child in children {
         if visited.contains(&child) {
             // Node already shown elsewhere, add a reference
@@ -422,8 +419,8 @@ pub fn render_tree(node: &TreeNode, prefix: &str, is_last: bool) -> String {
         if node.additional_parents.len() == 1 && node.additional_parents[0] == "[shown above]" {
             node_line.push_str(" [shown above]");
         } else {
-            let parents = node.additional_parents.join(", ");
-            node_line.push_str(&format!(" [also used by: {}]", parents));
+            let deps = node.additional_parents.join(", ");
+            node_line.push_str(&format!(" [also depends on: {}]", deps));
         }
     }
 
