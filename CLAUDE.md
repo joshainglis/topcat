@@ -57,6 +57,11 @@ topcat schema -i sql/ -e sql analyze my_schema      # Detailed schema view
 # Export
 topcat export -i sql/ -e sql -o graph.json json     # Export to JSON
 topcat export -i sql/ -e sql -o graph.dot dot       # Export to GraphViz
+
+# Configuration management
+topcat config show                                  # View effective config
+topcat config validate                              # Validate config file
+topcat config generate                              # Generate example config
 ```
 
 ## Development Commands
@@ -84,11 +89,15 @@ cargo run -- -i tests/input/sql -o /tmp/output.sql
 | Module | Purpose |
 |--------|---------|
 | `main.rs` | CLI parsing, command routing |
+| `settings.rs` | Unified configuration system, multi-source loading |
+| `cli.rs` | CommonArgs shared across commands |
+| `config.rs` | Config struct for graph operations |
 | `file_node.rs` | File representation with metadata, schema extraction |
 | `file_dag.rs` | DAG management, validation, schema operations |
 | `stable_topo.rs` | Deterministic topological sort |
 | `commands/common.rs` | Shared command utilities, GraphBuilder pattern |
 | `commands/concat.rs` | File concatenation command |
+| `commands/config.rs` | Configuration management (show/validate/generate) |
 | `commands/analyze/` | Modularized dependency analysis (10 modules) |
 | `commands/clean/` | Modularized safe file deletion (6 modules) |
 | `commands/schema.rs` | Schema operations |
@@ -96,7 +105,6 @@ cargo run -- -i tests/input/sql -o /tmp/output.sql
 | `analysis/mod.rs` | GraphAnalyzer trait, analysis algorithms |
 | `analysis/root_matcher.rs` | Root node protection patterns |
 | `analysis/external_usage.rs` | External usage checking |
-| `config.rs` | Configuration management |
 | `output.rs` | Output generation |
 | `io_utils.rs` | File system operations |
 
@@ -227,7 +235,20 @@ topcat export -i sql/ -e sql --schema auth -o auth.dot dot  # Schema-filtered
 
 ## Configuration
 
-Use `topcat.toml` for project-specific settings:
+Topcat uses a unified configuration system with multiple sources and clear precedence.
+
+### Configuration Precedence (Highest to Lowest)
+
+1. **CLI arguments** - Command-line flags and options
+2. **Environment variables** - `TOPCAT_*` variables
+3. **Project config** - `./topcat.toml` or `./.topcat.toml`
+4. **User config** - `~/.config/topcat/config.toml`
+5. **System config** - `/etc/topcat/config.toml`
+6. **Default values** - Built-in defaults
+
+### Configuration Files
+
+Create `topcat.toml` in your project root for persistent settings:
 
 ```toml
 [sql_discovery]
@@ -236,9 +257,43 @@ schema_pattern = "(?:app|test)_\\w+"
 
 [analysis]
 root_patterns = ["**/api/*.sql", "**/migrations/*.sql"]
+external_check_dirs = ["src/", "app/"]
+external_check_patterns = ["*.py", "*.ts"]
+
+[layers]
+names = ["prepend", "normal", "append"]
+fallback = "normal"
 ```
 
-See `discovering-sql-dependencies` and `analyzing-dependencies` skills for detailed configuration.
+Generate example config: `topcat config generate > topcat.toml`
+
+### Environment Variables
+
+All settings can be configured via `TOPCAT_*` environment variables:
+
+```bash
+# Basic settings
+export TOPCAT_VERBOSE=true
+export TOPCAT_INPUT_DIRS="/path/one,/path/two"
+
+# Nested settings (use double underscore)
+export TOPCAT_SQL_DISCOVERY__ENABLED=true
+export TOPCAT_SQL_DISCOVERY__SCHEMA_PATTERN="myapp_\\w+"
+
+# Arrays (comma-separated)
+export TOPCAT_FILTERS__INCLUDE_EXTENSIONS="sql,ddl"
+export TOPCAT_ANALYSIS__ROOT_PATTERNS="**/api/*.sql,**/*_init.sql"
+```
+
+### Configuration Commands
+
+```bash
+topcat config show                 # View effective configuration from all sources
+topcat config validate             # Validate config file syntax and values
+topcat config generate             # Generate example configuration file
+```
+
+See README.md for comprehensive environment variable reference and `discovering-sql-dependencies` skill for SQL discovery configuration.
 
 ## Error Resolution
 
