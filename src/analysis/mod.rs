@@ -25,7 +25,12 @@ pub trait GraphAnalyzer {
 
     /// Find complete dead branches (subtrees that can be trimmed together)
     /// Optionally accepts a RootNodeMatcher to protect certain nodes from being marked as dead
-    fn find_dead_branches(&self, root_matcher: Option<&RootNodeMatcher>) -> HashSet<String>;
+    /// If protect_implicit is true, nodes marked with `-- implicit` will be protected
+    fn find_dead_branches(
+        &self,
+        root_matcher: Option<&RootNodeMatcher>,
+        protect_implicit: bool,
+    ) -> HashSet<String>;
 }
 
 // Implementation of GraphAnalyzer for TCGraph
@@ -78,7 +83,11 @@ impl GraphAnalyzer for TCGraph {
             .collect()
     }
 
-    fn find_dead_branches(&self, root_matcher: Option<&RootNodeMatcher>) -> HashSet<String> {
+    fn find_dead_branches(
+        &self,
+        root_matcher: Option<&RootNodeMatcher>,
+        protect_implicit: bool,
+    ) -> HashSet<String> {
         // Start with leaf nodes (files with dependencies but no dependents)
         let mut dead_nodes = self.find_leaf_nodes();
 
@@ -86,6 +95,11 @@ impl GraphAnalyzer for TCGraph {
         if let Some(matcher) = root_matcher {
             let node_to_path = self.build_node_to_path_map();
             dead_nodes = matcher.filter_non_roots(&dead_nodes, &node_to_path);
+        }
+
+        // Remove implicit nodes from initial leaf nodes (if protection is enabled)
+        if protect_implicit {
+            dead_nodes = self.filter_non_implicit(&dead_nodes);
         }
 
         if dead_nodes.is_empty() {
@@ -111,6 +125,11 @@ impl GraphAnalyzer for TCGraph {
                 if let Some(matcher) = root_matcher
                     && matcher.is_root(&node.name, &node.path)
                 {
+                    continue;
+                }
+
+                // Skip implicit nodes (protected from deletion)
+                if protect_implicit && node.implicit {
                     continue;
                 }
 
@@ -157,6 +176,23 @@ impl TCGraph {
     pub fn build_node_to_path_map(&self) -> HashMap<String, std::path::PathBuf> {
         self.nodes()
             .map(|node| (node.name.clone(), node.path.clone()))
+            .collect()
+    }
+
+    /// Filter out implicit nodes from the given set
+    /// Implicit nodes (marked with `-- implicit` header) should be protected from cleanup
+    /// even when they have no explicit dependents (e.g., CAST and OPERATOR objects)
+    pub fn filter_non_implicit(&self, nodes: &HashSet<String>) -> HashSet<String> {
+        nodes
+            .iter()
+            .filter(|node_name| {
+                if let Some(node) = self.get_node(node_name) {
+                    !node.implicit // Keep only non-implicit nodes
+                } else {
+                    true // Keep if not found (shouldn't happen)
+                }
+            })
+            .cloned()
             .collect()
     }
 }

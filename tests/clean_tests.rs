@@ -89,7 +89,7 @@ fn test_clean_dead_branches_simple() {
     );
 
     let graph = build_test_graph(&dir);
-    let dead_branches = graph.find_dead_branches(None);
+    let dead_branches = graph.find_dead_branches(None, false);
 
     // In a closed system, root and leaf are also dead (no external references)
     // dead_branches contains root and leaf, but not orphan (orphans are separate)
@@ -142,7 +142,7 @@ fn test_clean_dead_branches_with_subtree() {
     );
 
     let graph = build_test_graph(&dir);
-    let dead_branches = graph.find_dead_branches(None);
+    let dead_branches = graph.find_dead_branches(None, false);
 
     // In a closed system without external references, all 5 nodes are dead
     assert_eq!(dead_branches.len(), 5);
@@ -186,7 +186,7 @@ fn test_clean_with_root_node_protection() {
 
     // Find dead branches without protection - unprotected is an orphan, not in dead_branches
     // protected_root and protected_leaf are in dead_branches (closed system)
-    let dead_without_protection = graph.find_dead_branches(None);
+    let dead_without_protection = graph.find_dead_branches(None, false);
     assert_eq!(dead_without_protection.len(), 2);
     assert!(dead_without_protection.contains("protected_root"));
     assert!(dead_without_protection.contains("protected_leaf"));
@@ -197,7 +197,7 @@ fn test_clean_with_root_node_protection() {
         RootNodeMatcher::new(vec!["protected_leaf".to_string()], vec![], vec![], vec![]).unwrap();
 
     // Find dead branches with protection
-    let dead_with_protection = graph.find_dead_branches(Some(&root_matcher));
+    let dead_with_protection = graph.find_dead_branches(Some(&root_matcher), false);
 
     // Nothing should be in dead_branches now (protected_leaf protects the whole tree)
     assert_eq!(dead_with_protection.len(), 0);

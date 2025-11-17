@@ -17,6 +17,8 @@ struct Cli {
 enum Commands {
     /// Concatenate files in topological order based on dependencies
     Concat(commands::concat::ConcatArgs),
+    /// Update file headers with discovered dependencies and optionally rename files
+    Update(commands::update::UpdateArgs),
     /// Analyze dependency structure and find cleanup candidates
     Analyze(commands::analyze::AnalyzeArgs),
     /// Remove unused files based on dependency analysis
@@ -34,6 +36,7 @@ fn main() -> Result<(), TopCatError> {
 
     match cli.command {
         Commands::Concat(args) => args.execute(),
+        Commands::Update(args) => args.execute(),
         Commands::Analyze(args) => args.execute(),
         Commands::Clean(args) => args.execute(),
         Commands::Schema(args) => args.execute(),

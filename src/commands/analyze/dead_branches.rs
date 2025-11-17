@@ -28,6 +28,7 @@ use crate::commands::common as cmd_common;
 /// * `graph` - The dependency graph to analyze
 /// * `external_checker` - Optional checker to filter out externally-used nodes
 /// * `root_matcher` - Optional matcher to identify entry point nodes
+/// * `protect_implicit` - Whether to protect implicit nodes from being marked as dead
 ///
 /// # Returns
 ///
@@ -37,15 +38,35 @@ pub fn analyze(
     graph: &TCGraph,
     external_checker: Option<&ExternalUsageChecker>,
     root_matcher: Option<&RootNodeMatcher>,
+    protect_implicit: bool,
 ) -> Result<(), TopCatError> {
     logger.section("🌳 Dead Branches Analysis");
 
-    let mut dead_branches = graph.find_dead_branches(root_matcher);
+    let mut dead_branches = graph.find_dead_branches(root_matcher, protect_implicit);
     let leaf_nodes = graph.find_leaf_nodes();
 
     // Filter by external usage if checker is provided
     if let Some(checker) = external_checker {
         dead_branches = checker.filter_unused(&dead_branches);
+    }
+
+    // Track which implicit nodes were protected (if protection is enabled)
+    if protect_implicit {
+        let implicit_nodes: Vec<_> = leaf_nodes
+            .iter()
+            .filter(|name| graph.get_node(name).map(|n| n.implicit).unwrap_or(false))
+            .cloned()
+            .collect();
+
+        if !implicit_nodes.is_empty() {
+            let mut sorted_implicit = implicit_nodes.clone();
+            sorted_implicit.sort();
+            logger.info(&format!(
+                "ℹ️  Protected {} implicit node(s): {}",
+                sorted_implicit.len(),
+                sorted_implicit.join(", ")
+            ));
+        }
     }
 
     if dead_branches.is_empty() {

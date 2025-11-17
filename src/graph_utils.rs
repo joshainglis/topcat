@@ -246,6 +246,7 @@ mod tests {
                 discovered_deps: None,
                 override_deps: HashSet::new(),
                 name_source: NameSource::Header,
+                implicit: false,
             },
             FileNode {
                 name: "node2".to_string(),
@@ -257,6 +258,7 @@ mod tests {
                 discovered_deps: None,
                 override_deps: HashSet::new(),
                 name_source: NameSource::Header,
+                implicit: false,
             },
             FileNode {
                 name: "node3".to_string(),
@@ -268,6 +270,7 @@ mod tests {
                 discovered_deps: None,
                 override_deps: HashSet::new(),
                 name_source: NameSource::Header,
+                implicit: false,
             },
         ]
     }

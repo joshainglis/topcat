@@ -255,6 +255,13 @@ pub struct CommonArgs {
     )]
     pub external_check_patterns: Option<Vec<String>>,
 
+    #[arg(
+        long = "no-protect-implicit",
+        help = "Don't protect implicit nodes (CAST, OPERATOR) from cleanup",
+        action = clap::ArgAction::SetTrue
+    )]
+    pub no_protect_implicit: bool,
+
     // Configuration
     #[arg(
         long = "config",
@@ -417,6 +424,10 @@ impl CommonArgs {
 
         if let Some(ref patterns) = self.external_check_patterns {
             settings.analysis.external_check_patterns = patterns.clone();
+        }
+
+        if self.no_protect_implicit {
+            settings.analysis.protect_implicit = false;
         }
     }
 

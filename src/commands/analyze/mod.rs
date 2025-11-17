@@ -176,8 +176,14 @@ impl AnalyzeArgs {
                 &graph,
                 external_checker.as_ref(),
                 root_matcher.as_ref(),
+                settings.analysis.protect_implicit,
             ),
-            AnalyzeCommand::Orphans => orphans::analyze(&logger, &graph, external_checker.as_ref()),
+            AnalyzeCommand::Orphans => orphans::analyze(
+                &logger,
+                &graph,
+                external_checker.as_ref(),
+                settings.analysis.protect_implicit,
+            ),
             AnalyzeCommand::Unrequired => {
                 unrequired::analyze(&logger, &graph, external_checker.as_ref())
             }

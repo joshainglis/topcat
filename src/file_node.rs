@@ -48,6 +48,9 @@ pub struct FileNode {
     pub name_source: NameSource,
     /// Schema extracted from node name (e.g., "my_schema" from "my_schema.table")
     pub schema: Option<String>,
+    /// Mark nodes that are implicitly referenced (e.g., CAST, OPERATOR objects)
+    /// These nodes should be protected from dead-branch cleanup even when they have no explicit dependents
+    pub implicit: bool,
 }
 
 /// Source of node name
@@ -113,6 +116,7 @@ impl FileNode {
             override_deps: HashSet::new(),
             name_source: NameSource::Header,
             schema,
+            implicit: false,
         }
     }
 
@@ -214,12 +218,14 @@ impl FileNode {
         let prepend_str = format!("{comment_str} is_initial");
         let append_str = format!("{comment_str} is_final");
         let ensure_exists_str = format!("{comment_str} exists:");
+        let implicit_str = format!("{comment_str} implicit");
 
         let mut name = String::new();
         let mut deps = HashSet::new();
         let mut layer = fallback_layer.to_string();
         let mut ensure_exists = HashSet::new();
         let mut override_deps = HashSet::new();
+        let mut implicit = false;
 
         for unprocessed_line in &file_data {
             let line = unprocessed_line.trim().to_lowercase();
@@ -263,6 +269,9 @@ impl FileNode {
                 for item in Self::split_dependencies(&line[ensure_exists_str.len()..]) {
                     ensure_exists.insert(item);
                 }
+            } else if line.starts_with(&implicit_str) {
+                // -- implicit -> mark node as implicitly referenced
+                implicit = true;
             }
         }
         if name.is_empty() {
@@ -276,6 +285,7 @@ impl FileNode {
 
         let mut file_node = FileNode::new(name, path.clone(), deps, layer, ensure_exists);
         file_node.override_deps = override_deps;
+        file_node.implicit = implicit;
         Ok(file_node)
     }
 

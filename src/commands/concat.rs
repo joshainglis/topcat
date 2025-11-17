@@ -7,11 +7,10 @@ use topcat::{
     config,
     exceptions::TopCatError,
     file_dag::TCGraph,
-    fs, header_generator,
+    fs,
     logging::{Logger, init_logging},
     output,
     settings::Settings,
-    sql_config,
 };
 
 /// Concatenate files in topological order based on dependencies
@@ -137,27 +136,22 @@ impl ConcatArgs {
             }
         }
 
-        // Update headers if requested
-        if settings.header_update_mode != sql_config::HeaderUpdateMode::Never {
-            logger.info("Updating file headers...");
-            let file_nodes: Vec<_> = filedag.get_all_nodes();
-
-            // Determine default extension from filters config, or use "sql" as fallback
-            let default_extension = settings
-                .filters
-                .include_extensions
-                .first()
-                .map(|s| s.as_str())
-                .unwrap_or("sql");
-
-            header_generator::update_headers(
-                &file_nodes,
-                &settings.formatting.comment_str,
-                settings.header_update_mode,
-                settings.header_output_dir.as_deref(),
-                settings.rename_files,
-                default_extension,
-            )?;
+        // Warn if header update flags are used with concat
+        if self.common.update_headers.is_some()
+            || self.common.generate_headers_dir.is_some()
+            || self.common.rename_files == Some(true)
+        {
+            logger.error("Header update flags (--update-headers, --generate-headers, --rename-files) are no longer supported by the concat command.");
+            logger.error(
+                "Please use the 'topcat update' command to update file headers and rename files.",
+            );
+            logger.error(
+                "Example: topcat update -i sql/ -e sql --enable-sql-discovery --update-headers",
+            );
+            return Err(TopCatError::ConfigError(
+                "Use 'topcat update' command for header updates instead of 'topcat concat'"
+                    .to_string(),
+            ));
         }
 
         // Generate output

@@ -5,3 +5,4 @@ pub mod concat;
 pub mod config;
 pub mod export;
 pub mod schema;
+pub mod update;

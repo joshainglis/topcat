@@ -191,7 +191,7 @@ fn test_find_dead_branches_simple() {
     );
 
     let graph = build_test_graph(&dir);
-    let dead_branches = graph.find_dead_branches(None);
+    let dead_branches = graph.find_dead_branches(None, false);
 
     // In a closed system without external references, all nodes that lead to leaf nodes
     // are considered dead. This includes the entire "live" tree because entry_point is a leaf.
@@ -261,7 +261,7 @@ fn test_find_dead_branches_complex() {
     );
 
     let graph = build_test_graph(&dir);
-    let dead_branches = graph.find_dead_branches(None);
+    let dead_branches = graph.find_dead_branches(None, false);
 
     // All nodes are dead in a closed system
     assert_eq!(dead_branches.len(), 9, "Found: {dead_branches:?}");
@@ -307,7 +307,7 @@ fn test_dead_branches_with_shared_dependency() {
     );
 
     let graph = build_test_graph(&dir);
-    let dead_branches = graph.find_dead_branches(None);
+    let dead_branches = graph.find_dead_branches(None, false);
 
     // In a closed system, all 4 nodes are dead
     // (dead_a and dead_b are leaves, which makes shared dead, which makes live_root dead)
@@ -351,7 +351,7 @@ fn test_dead_branches_diamond_dependency() {
     );
 
     let graph = build_test_graph(&dir);
-    let dead_branches = graph.find_dead_branches(None);
+    let dead_branches = graph.find_dead_branches(None, false);
 
     // All 4 nodes should be dead
     assert_eq!(dead_branches.len(), 4);
@@ -376,7 +376,7 @@ fn test_no_dead_branches_in_live_graph() {
     create_test_file(&dir, "user.sql", "-- name: user\n-- requires: c\nSELECT 1;");
 
     let graph = build_test_graph(&dir);
-    let dead_branches = graph.find_dead_branches(None);
+    let dead_branches = graph.find_dead_branches(None, false);
 
     // All nodes are dead because 'user' is a leaf (nothing depends on it)
     // In production, external usage checking would identify if 'user' is referenced externally
@@ -410,7 +410,7 @@ fn test_multiple_independent_dead_branches() {
     create_test_file(&dir, "c1.sql", "-- name: c1\nSELECT 1;");
 
     let graph = build_test_graph(&dir);
-    let dead_branches = graph.find_dead_branches(None);
+    let dead_branches = graph.find_dead_branches(None, false);
     let orphans = graph.find_orphans();
 
     // All nodes should be dead (6 total)
@@ -450,14 +450,14 @@ fn test_dead_branches_with_specific_root_nodes() {
     let graph = build_test_graph(&dir);
 
     // Without root matcher, all nodes are dead
-    let dead_no_roots = graph.find_dead_branches(None);
+    let dead_no_roots = graph.find_dead_branches(None, false);
     assert_eq!(dead_no_roots.len(), 3);
 
     // With root matcher protecting "leaf", nothing should be dead
     let root_matcher =
         RootNodeMatcher::new(vec!["leaf".to_string()], vec![], vec![], vec![]).unwrap();
 
-    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher));
+    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher), false);
     assert_eq!(dead_with_roots.len(), 0); // leaf protects the whole tree!
 }
 
@@ -477,7 +477,7 @@ fn test_dead_branches_with_glob_pattern() {
     let graph = build_test_graph(&dir);
 
     // Without root matcher, all files are dead
-    let dead_no_roots = graph.find_dead_branches(None);
+    let dead_no_roots = graph.find_dead_branches(None, false);
     assert_eq!(dead_no_roots.len(), 2); // endpoint and handler (util is orphan)
 
     // Protect all files in api/ directory
@@ -489,7 +489,7 @@ fn test_dead_branches_with_glob_pattern() {
     )
     .unwrap();
 
-    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher));
+    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher), false);
     assert_eq!(dead_with_roots.len(), 0); // API files are protected
 }
 
@@ -518,7 +518,7 @@ fn test_dead_branches_with_regex_pattern() {
     )
     .unwrap();
 
-    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher));
+    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher), false);
 
     // Only util should remain (it's an orphan, not in dead_branches)
     assert_eq!(dead_with_roots.len(), 0);
@@ -552,7 +552,7 @@ fn test_dead_branches_with_directory_roots() {
     )
     .unwrap();
 
-    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher));
+    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher), false);
 
     // entry_points files are protected, util is still an orphan
     assert_eq!(dead_with_roots.len(), 0);
@@ -600,7 +600,7 @@ fn test_dead_branches_partial_protection() {
     let root_matcher =
         RootNodeMatcher::new(vec!["protected_leaf".to_string()], vec![], vec![], vec![]).unwrap();
 
-    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher));
+    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher), false);
 
     // Only the dead chain should be marked as dead
     assert_eq!(dead_with_roots.len(), 3);
@@ -642,7 +642,7 @@ fn test_dead_branches_combined_root_patterns() {
     )
     .unwrap();
 
-    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher));
+    let dead_with_roots = graph.find_dead_branches(Some(&root_matcher), false);
 
     // No dead branches (all protected files are orphans with no deps/dependents)
     assert_eq!(dead_with_roots.len(), 0);

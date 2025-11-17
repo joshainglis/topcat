@@ -271,7 +271,7 @@ fn bench_dead_branches(c: &mut Criterion) {
                 let matcher =
                     RootNodeMatcher::new(vec!["main_root".to_string()], vec![], vec![], vec![])
                         .unwrap();
-                let dead_branches = graph.find_dead_branches(Some(&matcher));
+                let dead_branches = graph.find_dead_branches(Some(&matcher), true);
                 black_box(dead_branches);
             });
         });

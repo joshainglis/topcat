@@ -22,6 +22,7 @@ use super::common;
 /// * `graph` - The dependency graph
 /// * `external_checker` - Optional checker to filter out externally-used nodes
 /// * `root_matcher` - Optional matcher to identify protected nodes
+/// * `protect_implicit` - Whether to protect implicit nodes from cleanup
 /// * `actually_delete` - Whether to actually delete files (false = dry-run)
 /// * `force` - Skip confirmation prompt if true
 ///
@@ -33,6 +34,7 @@ pub fn clean(
     graph: &TCGraph,
     external_checker: Option<&ExternalUsageChecker>,
     root_matcher: Option<&RootNodeMatcher>,
+    protect_implicit: bool,
     actually_delete: bool,
     force: bool,
 ) -> Result<(), TopCatError> {
@@ -40,6 +42,11 @@ pub fn clean(
 
     // Find unrequired
     let mut unrequired = graph.find_unrequired();
+
+    // Filter out implicit nodes if protection is enabled
+    if protect_implicit {
+        unrequired = graph.filter_non_implicit(&unrequired);
+    }
 
     // Filter out root nodes if specified
     unrequired = common::filter_by_root_matcher(unrequired, graph, root_matcher);

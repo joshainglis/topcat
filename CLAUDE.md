@@ -37,10 +37,14 @@ Primary use case: Ordering SQL migration files where execution order matters bas
 cargo build --release
 cargo run -- -i input_dir/ -o output.sql
 
+# Update file headers (with SQL discovery)
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --dry-run true  # Preview
+
 # Concatenation
 topcat concat -i sql/ -o migrations.sql             # Concatenate files
-topcat concat -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "myapp_\\w+"
-topcat concat -i sql/ -o out.sql --update-headers --rename-files  # Update headers & rename files
+topcat concat -i sql/ -o output.sql                 # Basic concatenation
 
 # Analysis
 topcat analyze -i sql/ -e sql dead-branches         # Find dead code
@@ -98,6 +102,7 @@ cargo run -- -i tests/input/sql -o /tmp/output.sql
 | `stable_topo.rs` | Deterministic topological sort |
 | `commands/common.rs` | Shared command utilities, GraphBuilder pattern |
 | `commands/concat.rs` | File concatenation command |
+| `commands/update.rs` | Header update and file renaming command |
 | `commands/config.rs` | Configuration management (show/validate/generate) |
 | `commands/analyze/` | Modularized dependency analysis (10 modules) |
 | `commands/clean/` | Modularized safe file deletion (6 modules) |
@@ -166,8 +171,37 @@ Layers enforce ordering between groups of files:
 
 ```bash
 topcat concat -i sql/ -o output.sql                      # Basic concat
-topcat concat -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "myapp_\\w+"
 # See 'discovering-sql-dependencies' skill for detailed workflows
+```
+
+### Update Commands
+
+The `update` command discovers dependencies from SQL content and updates file headers accordingly. It can also rename files based on discovered node names.
+
+```bash
+# Update headers in-place with SQL discovery
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
+
+# Preview changes without modifying files
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --dry-run true
+
+# Update headers and rename files based on node names
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
+
+# Generate updated files to a separate directory
+topcat update -i sql/ -e sql --enable-sql-discovery true --generate-headers ./updated/
+
+# With custom schema pattern
+topcat update -i sql/ -e sql --enable-sql-discovery true --schema-pattern "myapp_\\w+" --update-headers true
+```
+
+**Typical workflow:**
+```bash
+# Step 1: Discover dependencies and update headers
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
+
+# Step 2: Concatenate the properly annotated files
+topcat concat -i sql/ -o migrations.sql
 ```
 
 ### Analysis Commands

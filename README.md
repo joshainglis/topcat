@@ -11,6 +11,7 @@ Topcat is a Rust CLI tool that reads files with dependency metadata, builds a di
 ## Features
 
 - 🔗 **Topological Concatenation** - Order files correctly based on dependencies
+- 📝 **Header Management** - Update file headers with discovered dependencies and rename files
 - 🔍 **Dependency Analysis** - Find dead code, cycles, orphans, and missing dependencies
 - 🧹 **Safe Cleanup** - Remove unused files with multi-stage verification
 - 📊 **Schema Management** - Analyze and filter by schema boundaries
@@ -46,6 +47,9 @@ nix develop  # Enter development environment with all dependencies
 ## Quick Start
 
 ```bash
+# Update file headers with discovered SQL dependencies
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
+
 # Concatenate SQL files in dependency order
 topcat concat -i sql/ -o migrations.sql
 
@@ -103,15 +107,51 @@ topcat concat -i dir1/ -i dir2/ -o output.sql --layers prepend,normal,append
   - `header-with-fallback` - Manual if present, else discovered
   - `validate` - Check for discrepancies (fails on mismatch)
 
-**Header Management:**
-- `--update-headers` - Update source files with discovered dependencies
-- `--generate-headers <DIR>` - Write files with updated headers to directory
-- `--rename-files` - Rename files based on discovered node names (use with header options)
-
 **Formatting Options:**
 - `-c, --comment-prefix <STR>` - Comment string (default: `--`)
 - `-s, --file-separator <STR>` - Separator between concatenated files
 - `-a, --file-suffix <STR>` - Ensure files end with this (default: `;`)
+
+### `update` - Update File Headers
+
+Discover dependencies from SQL content and update file headers accordingly. Optionally rename files based on discovered node names.
+
+```bash
+# Update headers in-place with SQL discovery
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
+
+# Preview changes without modifying files
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --dry-run true
+
+# Update headers and rename files
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
+
+# Generate updated files to a separate directory
+topcat update -i sql/ -e sql --enable-sql-discovery true --generate-headers ./updated/
+```
+
+**Header Management Options:**
+- `--update-headers` - Update source files in-place with discovered dependencies
+- `--generate-headers <DIR>` - Write files with updated headers to a separate directory
+- `--rename-files` - Rename files based on discovered node names (use with header options)
+- `--dry-run` - Preview changes without modifying files
+
+**SQL Discovery Options:**
+- `--enable-sql-discovery` - Extract dependencies from SQL code (required)
+- `--schema-pattern <REGEX>` - Pattern for schema names (e.g., `"myapp_\\w+"`)
+- `--merge-strategy <STRATEGY>` - How to merge manual vs discovered dependencies
+
+**Typical Workflow:**
+
+```bash
+# Step 1: Discover dependencies and update headers
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
+
+# Step 2: Concatenate the properly annotated files
+topcat concat -i sql/ -o migrations.sql
+```
+
+**Note:** The `concat` command no longer supports header updates. Use `topcat update` for header management instead.
 
 ### `analyze` - Dependency Analysis
 

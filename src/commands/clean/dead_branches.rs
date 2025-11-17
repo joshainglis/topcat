@@ -22,6 +22,7 @@ use super::common;
 /// * `graph` - The dependency graph
 /// * `external_checker` - Optional checker to filter out externally-used nodes
 /// * `root_matcher` - Optional matcher to identify protected nodes
+/// * `protect_implicit` - Whether to protect implicit nodes from cleanup
 /// * `actually_delete` - Whether to actually delete files (false = dry-run)
 /// * `force` - Skip confirmation prompt if true
 ///
@@ -33,13 +34,14 @@ pub fn clean(
     graph: &TCGraph,
     external_checker: Option<&ExternalUsageChecker>,
     root_matcher: Option<&RootNodeMatcher>,
+    protect_implicit: bool,
     actually_delete: bool,
     force: bool,
 ) -> Result<(), TopCatError> {
     logger.progress("\n🌳 Finding dead branches...\n");
 
     // Find dead branches
-    let dead_branches = graph.find_dead_branches(root_matcher);
+    let dead_branches = graph.find_dead_branches(root_matcher, protect_implicit);
 
     // Filter out externally used files
     let dead_branches = common::apply_external_filter(dead_branches, external_checker);

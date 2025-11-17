@@ -106,7 +106,7 @@ pub enum HeaderUpdateMode {
 }
 
 /// Configuration for analysis features (root node protection, etc.)
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisConfig {
     /// Specific nodes to always treat as root/entry points
     #[serde(default)]
@@ -131,6 +131,28 @@ pub struct AnalysisConfig {
     /// File patterns to check for external usage (e.g., "*.py", "*.ts")
     #[serde(default)]
     pub external_check_patterns: Vec<String>,
+
+    /// Protect implicit nodes (CAST, OPERATOR) from dead-branch cleanup
+    #[serde(default = "default_true")]
+    pub protect_implicit: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for AnalysisConfig {
+    fn default() -> Self {
+        Self {
+            root_nodes: Vec::new(),
+            root_patterns: Vec::new(),
+            root_regex: Vec::new(),
+            root_dirs: Vec::new(),
+            external_check_dirs: Vec::new(),
+            external_check_patterns: Vec::new(),
+            protect_implicit: true,
+        }
+    }
 }
 
 /// Configuration for file filtering

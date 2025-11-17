@@ -281,6 +281,13 @@ impl TCGraph {
         self.name_map.values()
     }
 
+    /// Get a node by its name.
+    ///
+    /// Returns an option containing a reference to the FileNode if found.
+    pub fn get_node(&self, node_name: &str) -> Option<&FileNode> {
+        self.name_map.get(node_name).map(|rc| rc.as_ref())
+    }
+
     /// Apply subdirectory filter to find nodes within subdirectory and their dependencies.
     ///
     /// Returns None if no subdirectory filter is set, or Some(HashSet) of required node names.
