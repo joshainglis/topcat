@@ -51,8 +51,6 @@ mod orphans;
 mod targets;
 mod unrequired;
 
-use std::path::PathBuf;
-
 use clap::{Args, Subcommand};
 use env_logger::Builder;
 use log::LevelFilter;
@@ -205,104 +203,28 @@ impl CleanArgs {
 
     /// Build the dependency graph from Settings.
     ///
-    /// Constructs a `TCGraph` using the unified Settings configuration.
+    /// Delegates to the common implementation for graph building from Settings.
     fn build_graph(&self, settings: &Settings) -> Result<topcat::file_dag::TCGraph, TopCatError> {
-        // Extract schema filter for node prefixes
-        let schema_filter: Vec<String> = self
-            .common
-            .schemas
-            .clone()
-            .unwrap_or_else(|| settings.schema_filtering.schemas.clone());
-
-        let include_node_prefixes = if schema_filter.is_empty() {
-            None
-        } else {
-            cmd_common::build_schema_filter(&schema_filter).to_option()
-        };
-
-        // Get fallback layer (required)
-        let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
-            TopCatError::ConfigError("Fallback layer must be specified".to_string())
-        })?;
-
-        cmd_common::build_graph(
-            settings.input_dirs.clone(),
-            if settings.filters.include_extensions.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.include_extensions)
-            },
-            if settings.filters.exclude_extensions.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.exclude_extensions)
-            },
-            if settings.filters.include_globs.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.include_globs)
-            },
-            if settings.filters.exclude_globs.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.exclude_globs)
-            },
-            settings.filters.include_hidden,
-            settings.behavior.verbose,
-            settings.formatting.comment_str.clone(),
-            settings.layers.names.clone(),
-            fallback_layer,
-            settings.sql_discovery.clone(),
-            include_node_prefixes,
-        )
+        cmd_common::build_graph_from_settings(&self.common.schemas, settings)
     }
 
     /// Build a root node matcher from Settings.
     ///
-    /// Root matchers identify which nodes should be protected from deletion.
+    /// Delegates to the common implementation for root matcher building from Settings.
     fn build_root_matcher(
         &self,
         settings: &Settings,
     ) -> Result<Option<RootNodeMatcher>, TopCatError> {
-        let root_nodes = settings.analysis.root_nodes.clone();
-        let root_patterns = settings.analysis.root_patterns.clone();
-        let root_regex = settings.analysis.root_regex.clone();
-        let root_dirs: Vec<PathBuf> = settings
-            .analysis
-            .root_dirs
-            .iter()
-            .map(PathBuf::from)
-            .collect();
-
-        // Create matcher only if we have any root configuration
-        if root_nodes.is_empty()
-            && root_patterns.is_empty()
-            && root_regex.is_empty()
-            && root_dirs.is_empty()
-        {
-            Ok(None)
-        } else {
-            RootNodeMatcher::new(root_nodes, root_patterns, root_regex, root_dirs)
-                .map(Some)
-                .map_err(TopCatError::ConfigError)
-        }
+        cmd_common::build_root_matcher_from_settings(settings)
     }
 
     /// Build an external usage checker from Settings.
     ///
-    /// Sets up external usage checking if configured in settings.
+    /// Delegates to the common implementation for external checker building from Settings.
     fn build_external_checker(
         &self,
         settings: &Settings,
     ) -> Result<Option<topcat::analysis::external_usage::ExternalUsageChecker>, TopCatError> {
-        let dirs: Vec<PathBuf> = settings
-            .analysis
-            .external_check_dirs
-            .iter()
-            .map(PathBuf::from)
-            .collect();
-        let patterns = settings.analysis.external_check_patterns.clone();
-
-        cmd_common::build_external_checker(&dirs, &patterns, settings.behavior.verbose)
+        cmd_common::build_external_checker_from_settings(settings)
     }
 }

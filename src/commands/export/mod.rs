@@ -134,43 +134,11 @@ impl ExportArgs {
 
     /// Builds the dependency graph from Settings.
     ///
-    /// Creates a `TCGraph` using the unified Settings configuration.
+    /// Delegates to the common implementation for graph building from Settings.
+    /// Export command does not use schema filtering at the node level (filtering
+    /// is done after the graph is built via filter_by_schemas method).
     fn build_graph(&self, settings: &Settings) -> Result<TCGraph, TopCatError> {
-        // Get fallback layer (required)
-        let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
-            TopCatError::ConfigError("Fallback layer must be specified".to_string())
-        })?;
-
-        cmd_common::build_graph(
-            settings.input_dirs.clone(),
-            if settings.filters.include_extensions.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.include_extensions)
-            },
-            if settings.filters.exclude_extensions.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.exclude_extensions)
-            },
-            if settings.filters.include_globs.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.include_globs)
-            },
-            if settings.filters.exclude_globs.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.exclude_globs)
-            },
-            settings.filters.include_hidden,
-            settings.behavior.verbose,
-            settings.formatting.comment_str.clone(),
-            settings.layers.names.clone(),
-            fallback_layer,
-            settings.sql_discovery.clone(),
-            None, // schema_filter_prefixes (not used for export command)
-        )
+        cmd_common::build_graph_from_settings(&None, settings)
     }
 
     /// Filters the graph to include only nodes from the specified schemas.

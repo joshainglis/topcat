@@ -595,6 +595,150 @@ pub fn build_node_map(
     topcat::graph_utils::build_name_to_node_map(nodes)
 }
 
+/// Build a dependency graph from Settings configuration.
+///
+/// Constructs a `TCGraph` using the unified Settings configuration,
+/// extracting schema filters from CLI arguments and applying all
+/// necessary file filters, layers, and SQL discovery settings.
+///
+/// # Arguments
+///
+/// * `schemas` - Optional schema filter from CLI (overrides settings)
+/// * `settings` - Configuration settings
+///
+/// # Returns
+///
+/// `Ok(TCGraph)` with the built graph, or `Err(TopCatError)` if:
+/// - Configuration is invalid
+/// - Files cannot be read
+/// - Cycles are detected
+/// - Required dependencies are missing
+pub fn build_graph_from_settings(
+    schemas: &Option<Vec<String>>,
+    settings: &topcat::settings::Settings,
+) -> Result<topcat::file_dag::TCGraph, TopCatError> {
+    // Extract schema filter for node prefixes
+    let schema_filter: Vec<String> = schemas
+        .clone()
+        .unwrap_or_else(|| settings.schema_filtering.schemas.clone());
+
+    let include_node_prefixes = if schema_filter.is_empty() {
+        None
+    } else {
+        build_schema_filter(&schema_filter).to_option()
+    };
+
+    // Get fallback layer (required)
+    let fallback_layer =
+        settings.layers.fallback.clone().ok_or_else(|| {
+            TopCatError::ConfigError("Fallback layer must be specified".to_string())
+        })?;
+
+    build_graph(
+        settings.input_dirs.clone(),
+        if settings.filters.include_extensions.is_empty() {
+            None
+        } else {
+            Some(&settings.filters.include_extensions)
+        },
+        if settings.filters.exclude_extensions.is_empty() {
+            None
+        } else {
+            Some(&settings.filters.exclude_extensions)
+        },
+        if settings.filters.include_globs.is_empty() {
+            None
+        } else {
+            Some(&settings.filters.include_globs)
+        },
+        if settings.filters.exclude_globs.is_empty() {
+            None
+        } else {
+            Some(&settings.filters.exclude_globs)
+        },
+        settings.filters.include_hidden,
+        settings.behavior.verbose,
+        settings.formatting.comment_str.clone(),
+        settings.layers.names.clone(),
+        fallback_layer,
+        settings.sql_discovery.clone(),
+        include_node_prefixes,
+    )
+}
+
+/// Build a root node matcher from Settings configuration.
+///
+/// Root matchers identify which nodes should be treated as entry points
+/// (roots) in the dependency graph. This is used for protecting nodes
+/// from deletion and determining dead branches.
+///
+/// # Arguments
+///
+/// * `settings` - Configuration settings containing root node patterns
+///
+/// # Returns
+///
+/// - `Ok(Some(RootNodeMatcher))` if any patterns are specified
+/// - `Ok(None)` if no root patterns are configured
+/// - `Err(TopCatError)` if configuration is invalid or patterns cannot be compiled
+pub fn build_root_matcher_from_settings(
+    settings: &topcat::settings::Settings,
+) -> Result<Option<topcat::analysis::root_matcher::RootNodeMatcher>, TopCatError> {
+    use topcat::analysis::root_matcher::RootNodeMatcher;
+
+    let root_nodes = settings.analysis.root_nodes.clone();
+    let root_patterns = settings.analysis.root_patterns.clone();
+    let root_regex = settings.analysis.root_regex.clone();
+    let root_dirs: Vec<PathBuf> = settings
+        .analysis
+        .root_dirs
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+
+    // Create matcher only if we have any root configuration
+    if root_nodes.is_empty()
+        && root_patterns.is_empty()
+        && root_regex.is_empty()
+        && root_dirs.is_empty()
+    {
+        Ok(None)
+    } else {
+        RootNodeMatcher::new(root_nodes, root_patterns, root_regex, root_dirs)
+            .map(Some)
+            .map_err(TopCatError::ConfigError)
+    }
+}
+
+/// Build an external usage checker from Settings configuration.
+///
+/// Sets up external usage checking if configured in settings. This checks
+/// for references to file nodes in external codebases (e.g., Python files
+/// referencing SQL functions).
+///
+/// # Arguments
+///
+/// * `settings` - Configuration settings containing external check directories and patterns
+///
+/// # Returns
+///
+/// `Ok(Some(ExternalUsageChecker))` if configured,
+/// `Ok(None)` if not configured,
+/// `Err(TopCatError)` if checker initialization fails
+pub fn build_external_checker_from_settings(
+    settings: &topcat::settings::Settings,
+) -> Result<Option<topcat::analysis::external_usage::ExternalUsageChecker>, TopCatError> {
+    let dirs: Vec<PathBuf> = settings
+        .analysis
+        .external_check_dirs
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+    let patterns = settings.analysis.external_check_patterns.clone();
+
+    build_external_checker(&dirs, &patterns, settings.behavior.verbose)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
