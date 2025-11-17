@@ -61,7 +61,9 @@ use env_logger::Builder;
 use log::LevelFilter;
 
 use topcat::analysis::root_matcher::RootNodeMatcher;
+use topcat::cli::CommonArgs;
 use topcat::exceptions::TopCatError;
+use topcat::settings::Settings;
 
 use super::common as cmd_common;
 
@@ -71,161 +73,8 @@ use super::common as cmd_common;
 /// detect issues, and understand graph structure.
 #[derive(Debug, Args)]
 pub struct AnalyzeArgs {
-    #[arg(
-        short = 'i',
-        long = "input-dirs",
-        help = "Paths to directories containing files to analyze",
-        value_name = "DIRS"
-    )]
-    input_dirs: Vec<PathBuf>,
-
-    #[arg(
-        short = 'e',
-        long = "include-exts",
-        help = "Only include files with the given file extensions",
-        value_name = "EXTENSIONS"
-    )]
-    include_file_extensions: Option<Vec<String>>,
-
-    #[arg(
-        short = 'E',
-        long = "exclude-exts",
-        help = "Exclude files with the given file extensions",
-        value_name = "EXTENSIONS"
-    )]
-    exclude_file_extensions: Option<Vec<String>>,
-
-    #[arg(
-        short = 'g',
-        long = "include-glob",
-        help = "Only include files matching glob pattern",
-        value_name = "PATTERN"
-    )]
-    include_globs: Option<Vec<String>>,
-
-    #[arg(
-        short = 'G',
-        long = "exclude-glob",
-        help = "Exclude files matching given glob pattern",
-        value_name = "PATTERN"
-    )]
-    exclude_globs: Option<Vec<String>>,
-
-    #[arg(
-        short = 'c',
-        long = "comment-prefix",
-        help = "The string used to denote a comment",
-        default_value = "--"
-    )]
-    comment_str: String,
-
-    #[arg(long = "include-hidden", help = "Include hidden files and directories")]
-    include_hidden_files_and_directories: bool,
-
-    #[arg(short = 'v', long = "verbose", help = "Print debug information")]
-    verbose: bool,
-
-    #[arg(
-        short = 'q',
-        long = "quiet",
-        help = "Suppress output, only return exit code"
-    )]
-    quiet: bool,
-
-    #[arg(
-        long = "layers",
-        help = "Comma-separated list of layer names in order",
-        value_name = "LAYERS"
-    )]
-    layers: Option<String>,
-
-    #[arg(
-        long = "fallback-layer",
-        help = "Default layer for nodes without explicit layer declaration",
-        value_name = "LAYER"
-    )]
-    fallback_layer: Option<String>,
-
-    // SQL Discovery Options (for building the graph)
-    #[arg(
-        long = "enable-sql-discovery",
-        help = "Enable automatic dependency discovery from SQL content"
-    )]
-    enable_sql_discovery: bool,
-
-    #[arg(
-        long = "sql-config",
-        help = "Path to TOML configuration file for SQL discovery patterns",
-        value_name = "FILE"
-    )]
-    sql_config_file: Option<PathBuf>,
-
-    #[arg(
-        long = "schema-pattern",
-        help = "Regex pattern for matching schema names",
-        value_name = "PATTERN"
-    )]
-    schema_pattern: Option<String>,
-
-    #[arg(
-        long = "merge-strategy",
-        help = "How to merge discovered and manual dependencies",
-        value_name = "STRATEGY",
-        default_value = cmd_common::DEFAULT_MERGE_STRATEGY
-    )]
-    merge_strategy: String,
-
-    // External usage checking
-    #[arg(
-        long = "external-check-dir",
-        help = "Directory to check for external usage of SQL functions (can specify multiple times)",
-        value_name = "DIR"
-    )]
-    external_check_dirs: Vec<PathBuf>,
-
-    #[arg(
-        long = "external-check-pattern",
-        help = "File pattern to check for external usage (e.g., '*.py', can specify multiple times)",
-        value_name = "PATTERN"
-    )]
-    external_check_patterns: Vec<String>,
-
-    // Root Node Configuration
-    #[arg(
-        long = "root-nodes",
-        help = "Specific node names to always treat as roots (can specify multiple times)",
-        value_name = "NODE"
-    )]
-    root_nodes: Vec<String>,
-
-    #[arg(
-        long = "root-pattern",
-        help = "Glob patterns for root files (e.g., '**/api/*.sql', can specify multiple times)",
-        value_name = "PATTERN"
-    )]
-    root_patterns: Vec<String>,
-
-    #[arg(
-        long = "root-regex",
-        help = "Regex patterns for root node names (e.g., '^api_.*', can specify multiple times)",
-        value_name = "REGEX"
-    )]
-    root_regex: Vec<String>,
-
-    #[arg(
-        long = "root-dir",
-        help = "Directories whose files are all roots (can specify multiple times)",
-        value_name = "DIR"
-    )]
-    root_dirs: Vec<PathBuf>,
-
-    // Schema Filtering
-    #[arg(
-        long = "schema",
-        help = "Filter analysis to specific schema(s) (can specify multiple times)",
-        value_name = "SCHEMA"
-    )]
-    schema_filter: Vec<String>,
+    #[command(flatten)]
+    pub common: CommonArgs,
 
     #[command(subcommand)]
     command: AnalyzeCommand,
@@ -258,122 +107,182 @@ impl AnalyzeArgs {
     /// Execute the analysis command.
     ///
     /// Main entry point that:
-    /// 1. Initializes logging based on verbose/quiet flags
-    /// 2. Handles special cases (cycles, missing) that don't need full graph
-    /// 3. Builds the dependency graph for other commands
-    /// 4. Sets up external usage checker if requested
-    /// 5. Dispatches to the appropriate analysis method
+    /// 1. Loads configuration from all sources (files, env vars, CLI)
+    /// 2. Initializes logging based on verbose/quiet flags
+    /// 3. Handles special cases (cycles, missing) that don't need full graph
+    /// 4. Builds the dependency graph for other commands
+    /// 5. Sets up external usage checker if requested
+    /// 6. Dispatches to the appropriate analysis method
     ///
     /// # Returns
     ///
     /// `Ok(())` on success, `Err(TopCatError)` if:
+    /// - Configuration loading/validation fails
     /// - Graph building fails (cycles, missing deps, config errors)
     /// - Analysis execution fails
     /// - External checker setup fails
     pub fn execute(&self) -> Result<(), TopCatError> {
-        // Initialize logging (unless quiet mode)
-        if !self.quiet {
-            if self.verbose {
-                Builder::new()
-                    .filter(None, LevelFilter::Debug)
-                    .try_init()
-                    .ok();
-            } else {
-                Builder::new()
-                    .filter(None, LevelFilter::Info)
-                    .try_init()
-                    .ok();
-            }
+        // 1. Load settings from all sources (config files, env vars)
+        let config_path = self.common.config_path();
+        let mut settings = Settings::load(config_path).map_err(|e| {
+            TopCatError::ConfigError(format!("Failed to load configuration: {}", e))
+        })?;
+
+        // 2. Apply CLI overrides
+        self.common.apply_to_settings(&mut settings);
+
+        // 3. Validate settings
+        settings
+            .validate()
+            .map_err(|e| TopCatError::ConfigError(e))?;
+
+        // 4. Ensure required fields are set
+        if settings.input_dirs.is_empty() {
+            return Err(TopCatError::ConfigError(
+                "At least one input directory must be specified via -i/--input-dirs or config file"
+                    .to_string(),
+            ));
         }
 
-        // For cycles and missing commands, we handle graph building specially
+        // 5. Initialize logging (unless quiet mode)
+        let quiet = settings.behavior.quiet;
+        if !quiet {
+            let log_level = if settings.behavior.verbose {
+                LevelFilter::Debug
+            } else {
+                LevelFilter::Info
+            };
+            Builder::new().filter(None, log_level).try_init().ok();
+        }
+
+        // 6. Extract schema filter for special case analyses
+        let schema_filter: Vec<String> = self
+            .common
+            .schemas
+            .clone()
+            .unwrap_or_else(|| settings.schema_filtering.schemas.clone());
+
+        // 7. Convert merge strategy to string for legacy API
+        let merge_strategy_str =
+            Self::merge_strategy_to_string(&settings.sql_discovery.merge_strategy);
+
+        // 8. Convert config_path to Option<PathBuf> for legacy API
+        let config_path_buf = config_path.map(PathBuf::from);
+
+        // 9. For cycles and missing commands, we handle graph building specially
+        // (They bypass full graph construction to catch errors that would prevent it)
         match &self.command {
             AnalyzeCommand::Cycles => {
                 return cycles::analyze(
-                    self.quiet,
-                    &self.sql_config_file,
-                    self.enable_sql_discovery,
-                    &self.schema_pattern,
-                    &self.merge_strategy,
-                    self.input_dirs.clone(),
-                    self.include_file_extensions.as_deref(),
-                    self.exclude_file_extensions.as_deref(),
-                    self.include_globs.as_deref(),
-                    self.exclude_globs.as_deref(),
-                    self.include_hidden_files_and_directories,
-                    self.verbose,
-                    self.comment_str.clone(),
-                    &self.layers,
-                    &self.fallback_layer,
-                    &self.schema_filter,
+                    quiet,
+                    &config_path_buf,
+                    settings.sql_discovery.enabled,
+                    &settings.sql_discovery.schema_pattern,
+                    &merge_strategy_str,
+                    settings.input_dirs.clone(),
+                    if settings.filters.include_extensions.is_empty() {
+                        None
+                    } else {
+                        Some(&settings.filters.include_extensions)
+                    },
+                    if settings.filters.exclude_extensions.is_empty() {
+                        None
+                    } else {
+                        Some(&settings.filters.exclude_extensions)
+                    },
+                    if settings.filters.include_globs.is_empty() {
+                        None
+                    } else {
+                        Some(&settings.filters.include_globs)
+                    },
+                    if settings.filters.exclude_globs.is_empty() {
+                        None
+                    } else {
+                        Some(&settings.filters.exclude_globs)
+                    },
+                    settings.filters.include_hidden,
+                    settings.behavior.verbose,
+                    settings.formatting.comment_str.clone(),
+                    &Some(settings.layers.names.join(",")),
+                    &settings.layers.fallback,
+                    &schema_filter,
                 );
             }
             AnalyzeCommand::Missing => {
                 return missing::analyze(
-                    self.quiet,
-                    &self.sql_config_file,
-                    self.enable_sql_discovery,
-                    &self.schema_pattern,
-                    &self.merge_strategy,
-                    self.input_dirs.clone(),
-                    self.include_file_extensions.as_deref(),
-                    self.exclude_file_extensions.as_deref(),
-                    self.include_globs.as_deref(),
-                    self.exclude_globs.as_deref(),
-                    self.include_hidden_files_and_directories,
-                    self.verbose,
-                    self.comment_str.clone(),
-                    &self.layers,
-                    &self.fallback_layer,
-                    &self.schema_filter,
+                    quiet,
+                    &config_path_buf,
+                    settings.sql_discovery.enabled,
+                    &settings.sql_discovery.schema_pattern,
+                    &merge_strategy_str,
+                    settings.input_dirs.clone(),
+                    if settings.filters.include_extensions.is_empty() {
+                        None
+                    } else {
+                        Some(&settings.filters.include_extensions)
+                    },
+                    if settings.filters.exclude_extensions.is_empty() {
+                        None
+                    } else {
+                        Some(&settings.filters.exclude_extensions)
+                    },
+                    if settings.filters.include_globs.is_empty() {
+                        None
+                    } else {
+                        Some(&settings.filters.include_globs)
+                    },
+                    if settings.filters.exclude_globs.is_empty() {
+                        None
+                    } else {
+                        Some(&settings.filters.exclude_globs)
+                    },
+                    settings.filters.include_hidden,
+                    settings.behavior.verbose,
+                    settings.formatting.comment_str.clone(),
+                    &Some(settings.layers.names.join(",")),
+                    &settings.layers.fallback,
+                    &schema_filter,
                 );
             }
             _ => {}
         }
 
-        // Build the dependency graph (for all other commands)
-        let graph = self.build_graph()?;
+        // 8. Build the dependency graph (for all other commands)
+        let graph = self.build_graph(&settings)?;
 
-        // Check for external usage if requested (merge CLI args with config file)
-        let external_checker = cmd_common::build_external_checker_with_config(
-            &self.sql_config_file,
-            self.external_check_dirs.clone(),
-            self.external_check_patterns.clone(),
-            self.verbose,
-        )?;
+        // 9. Check for external usage if requested
+        let external_checker = self.build_external_checker(&settings)?;
 
-        // Build root matcher from CLI args and config
-        let root_matcher = self.build_root_matcher()?;
+        // 10. Build root matcher from settings
+        let root_matcher = self.build_root_matcher(&settings)?;
 
-        // Execute the requested analysis
+        // 11. Execute the requested analysis
         match &self.command {
             AnalyzeCommand::DeadBranches => dead_branches::analyze(
-                self.quiet,
+                quiet,
                 &graph,
                 external_checker.as_ref(),
                 root_matcher.as_ref(),
             ),
-            AnalyzeCommand::Orphans => {
-                orphans::analyze(self.quiet, &graph, external_checker.as_ref())
-            }
+            AnalyzeCommand::Orphans => orphans::analyze(quiet, &graph, external_checker.as_ref()),
             AnalyzeCommand::Unrequired => {
-                unrequired::analyze(self.quiet, &graph, external_checker.as_ref())
+                unrequired::analyze(quiet, &graph, external_checker.as_ref())
             }
             AnalyzeCommand::LeafNodes => {
-                leaf_nodes::analyze(self.quiet, &graph, external_checker.as_ref())
+                leaf_nodes::analyze(quiet, &graph, external_checker.as_ref())
             }
-            AnalyzeCommand::RootNodes => root_nodes::analyze(self.quiet, &graph),
+            AnalyzeCommand::RootNodes => root_nodes::analyze(quiet, &graph),
             AnalyzeCommand::File { path } => {
-                file::analyze(self.quiet, &graph, path, external_checker.as_ref())
+                file::analyze(quiet, &graph, path, external_checker.as_ref())
             }
             // Cycles and Missing are handled earlier
             AnalyzeCommand::Cycles | AnalyzeCommand::Missing => unreachable!(),
         }
     }
 
-    /// Build the dependency graph from configuration.
+    /// Build the dependency graph from Settings.
     ///
-    /// Constructs a `TCGraph` by loading configuration and building the graph.
+    /// Constructs a `TCGraph` using the unified Settings configuration.
     ///
     /// # Returns
     ///
@@ -382,69 +291,130 @@ impl AnalyzeArgs {
     /// - Files cannot be read
     /// - Cycles are detected
     /// - Required dependencies are missing
-    fn build_graph(&self) -> Result<topcat::file_dag::TCGraph, TopCatError> {
-        let sql_discovery = cmd_common::load_sql_discovery_config(
-            &self.sql_config_file,
-            self.enable_sql_discovery,
-            &self.schema_pattern,
-            &self.merge_strategy,
-        )?;
+    fn build_graph(&self, settings: &Settings) -> Result<topcat::file_dag::TCGraph, TopCatError> {
+        // Extract schema filter for node prefixes
+        let schema_filter: Vec<String> = self
+            .common
+            .schemas
+            .clone()
+            .unwrap_or_else(|| settings.schema_filtering.schemas.clone());
 
-        // Load layers from config file + CLI
-        let (layers, fallback_layer) = cmd_common::parse_and_validate_layers(
-            &self.sql_config_file,
-            &self.layers,
-            &self.fallback_layer,
-        )?;
+        let include_node_prefixes = if schema_filter.is_empty() {
+            None
+        } else {
+            cmd_common::build_schema_filter(&schema_filter).to_option()
+        };
 
-        // Merge file filters from config file + CLI
-        let (include_globs, exclude_globs, include_exts, exclude_exts, include_hidden) =
-            cmd_common::merge_file_filters(
-                &self.sql_config_file,
-                self.include_globs.clone(),
-                self.exclude_globs.clone(),
-                self.include_file_extensions.clone(),
-                self.exclude_file_extensions.clone(),
-                self.include_hidden_files_and_directories,
-            );
-
-        let include_node_prefixes =
-            cmd_common::build_schema_filter(&self.schema_filter).to_option();
+        // Get fallback layer (required)
+        let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
+            TopCatError::ConfigError("Fallback layer must be specified".to_string())
+        })?;
 
         cmd_common::build_graph(
-            self.input_dirs.clone(),
-            include_exts.as_deref(),
-            exclude_exts.as_deref(),
-            include_globs.as_deref(),
-            exclude_globs.as_deref(),
-            include_hidden,
-            self.verbose,
-            self.comment_str.clone(),
-            layers,
+            settings.input_dirs.clone(),
+            if settings.filters.include_extensions.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.include_extensions)
+            },
+            if settings.filters.exclude_extensions.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.exclude_extensions)
+            },
+            if settings.filters.include_globs.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.include_globs)
+            },
+            if settings.filters.exclude_globs.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.exclude_globs)
+            },
+            settings.filters.include_hidden,
+            settings.behavior.verbose,
+            settings.formatting.comment_str.clone(),
+            settings.layers.names.clone(),
             fallback_layer,
-            sql_discovery,
+            settings.sql_discovery.clone(),
             include_node_prefixes,
         )
     }
 
-    /// Build a root node matcher from config file and CLI args.
+    /// Build a root node matcher from Settings.
     ///
     /// Root matchers identify which nodes should be treated as entry points
-    /// (roots) in the dependency graph. Configuration from files is merged with
-    /// CLI arguments (CLI extends/overrides config).
+    /// (roots) in the dependency graph.
     ///
     /// # Returns
     ///
     /// - `Ok(Some(RootNodeMatcher))` if any patterns are specified
     /// - `Ok(None)` if no root patterns are configured
     /// - `Err(TopCatError)` if configuration is invalid or patterns cannot be compiled
-    fn build_root_matcher(&self) -> Result<Option<RootNodeMatcher>, TopCatError> {
-        cmd_common::build_root_matcher(
-            &self.sql_config_file,
-            self.root_nodes.clone(),
-            self.root_patterns.clone(),
-            self.root_regex.clone(),
-            self.root_dirs.clone(),
-        )
+    fn build_root_matcher(
+        &self,
+        settings: &Settings,
+    ) -> Result<Option<RootNodeMatcher>, TopCatError> {
+        let root_nodes = settings.analysis.root_nodes.clone();
+        let root_patterns = settings.analysis.root_patterns.clone();
+        let root_regex = settings.analysis.root_regex.clone();
+        let root_dirs: Vec<PathBuf> = settings
+            .analysis
+            .root_dirs
+            .iter()
+            .map(|s| PathBuf::from(s))
+            .collect();
+
+        // Create matcher only if we have any root configuration
+        if root_nodes.is_empty()
+            && root_patterns.is_empty()
+            && root_regex.is_empty()
+            && root_dirs.is_empty()
+        {
+            Ok(None)
+        } else {
+            RootNodeMatcher::new(root_nodes, root_patterns, root_regex, root_dirs)
+                .map(Some)
+                .map_err(TopCatError::ConfigError)
+        }
+    }
+
+    /// Build an external usage checker from Settings.
+    ///
+    /// Sets up external usage checking if configured in settings.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Some(ExternalUsageChecker))` if configured,
+    /// `Ok(None)` if not configured,
+    /// `Err(TopCatError)` if checker initialization fails
+    fn build_external_checker(
+        &self,
+        settings: &Settings,
+    ) -> Result<Option<topcat::analysis::external_usage::ExternalUsageChecker>, TopCatError> {
+        let dirs: Vec<PathBuf> = settings
+            .analysis
+            .external_check_dirs
+            .iter()
+            .map(|s| PathBuf::from(s))
+            .collect();
+        let patterns = settings.analysis.external_check_patterns.clone();
+
+        cmd_common::build_external_checker(&dirs, &patterns, settings.behavior.verbose)
+    }
+
+    /// Convert MergeStrategy to string for legacy APIs.
+    ///
+    /// This is a workaround until all code uses Settings directly.
+    fn merge_strategy_to_string(strategy: &topcat::sql_config::MergeStrategy) -> String {
+        use topcat::sql_config::MergeStrategy;
+        match strategy {
+            MergeStrategy::HeaderOnly => "header-only".to_string(),
+            MergeStrategy::DiscoveryOnly => "discovery-only".to_string(),
+            MergeStrategy::Union => "union".to_string(),
+            MergeStrategy::HeaderWithFallback => "header-with-fallback".to_string(),
+            MergeStrategy::Validate => "validate".to_string(),
+        }
     }
 }
