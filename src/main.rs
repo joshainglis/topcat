@@ -25,6 +25,8 @@ enum Commands {
     Schema(commands::schema::SchemaArgs),
     /// Export dependency graph in various formats
     Export(commands::export::ExportArgs),
+    /// Manage configuration files and settings
+    Config(commands::config::ConfigArgs),
 }
 
 fn main() -> Result<(), TopCatError> {
@@ -36,5 +38,6 @@ fn main() -> Result<(), TopCatError> {
         Commands::Clean(args) => args.execute(),
         Commands::Schema(args) => args.execute(),
         Commands::Export(args) => args.execute(),
+        Commands::Config(args) => args.execute(),
     }
 }
