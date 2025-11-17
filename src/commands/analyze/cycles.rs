@@ -2,11 +2,10 @@
 //!
 //! Detects and displays circular dependencies in the dependency graph.
 
-use std::path::PathBuf;
-
 use comfy_table::Cell;
 
 use topcat::exceptions::TopCatError;
+use topcat::settings::Settings;
 
 use super::common::AnalysisLogger;
 use crate::commands::common as cmd_common;
@@ -20,74 +19,24 @@ use crate::commands::common as cmd_common;
 /// # Arguments
 ///
 /// * `quiet` - Whether to suppress output
-/// * `sql_config_file` - Optional path to SQL config file
-/// * `enable_sql_discovery` - Whether SQL discovery is enabled
-/// * `schema_pattern` - Optional schema pattern for SQL discovery
-/// * `merge_strategy` - Merge strategy for SQL discovery
-/// * `input_dirs` - Input directories to scan
-/// * `include_file_extensions` - Extensions to include
-/// * `exclude_file_extensions` - Extensions to exclude
-/// * `include_globs` - Glob patterns to include
-/// * `exclude_globs` - Glob patterns to exclude
-/// * `include_hidden` - Whether to include hidden files
-/// * `verbose` - Whether to enable verbose logging
-/// * `comment_str` - Comment prefix string
-/// * `layers` - Optional layer configuration
-/// * `fallback_layer` - Optional fallback layer
-/// * `schema_filter` - Optional schema filter
+/// * `schemas` - Optional schema filter from CLI (overrides settings)
+/// * `settings` - Configuration settings
 ///
 /// # Returns
 ///
 /// - `Ok(())` if no cycles are detected (valid DAG)
 /// - `Err(TopCatError::CyclicDependency)` if cycles exist
 /// - `Err(TopCatError)` for other errors during graph building
-#[allow(clippy::too_many_arguments)]
 pub fn analyze(
     quiet: bool,
-    sql_config_file: &Option<PathBuf>,
-    enable_sql_discovery: bool,
-    schema_pattern: &Option<String>,
-    merge_strategy: &str,
-    input_dirs: Vec<PathBuf>,
-    include_file_extensions: Option<&[String]>,
-    exclude_file_extensions: Option<&[String]>,
-    include_globs: Option<&[String]>,
-    exclude_globs: Option<&[String]>,
-    include_hidden: bool,
-    verbose: bool,
-    comment_str: String,
-    layers: &Option<String>,
-    fallback_layer: &Option<String>,
-    schema_filter: &[String],
+    schemas: &Option<Vec<String>>,
+    settings: &Settings,
 ) -> Result<(), TopCatError> {
     let logger = AnalysisLogger::new(quiet);
     logger.section("🔄 Cycle Detection Analysis");
 
     // Try to build the graph - if it has cycles, it will return a CyclicDependency error
-    let sql_discovery = cmd_common::load_sql_discovery_config(
-        sql_config_file,
-        enable_sql_discovery,
-        schema_pattern,
-        merge_strategy,
-    )?;
-    let (layers_parsed, fallback_layer_parsed) =
-        cmd_common::parse_and_validate_layers(sql_config_file, layers, fallback_layer)?;
-    let include_node_prefixes = cmd_common::build_schema_filter(schema_filter).to_option();
-
-    let result = cmd_common::build_graph(
-        input_dirs,
-        include_file_extensions,
-        exclude_file_extensions,
-        include_globs,
-        exclude_globs,
-        include_hidden,
-        verbose,
-        comment_str,
-        layers_parsed,
-        fallback_layer_parsed,
-        sql_discovery,
-        include_node_prefixes,
-    );
+    let result = cmd_common::build_graph_from_settings(schemas, settings);
 
     match result {
         Ok(_) => {

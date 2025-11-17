@@ -108,6 +108,7 @@ impl ConcatArgs {
     }
 
     /// Convert Settings to ConfigBuilder (temporary bridge until TCGraph is refactored)
+    #[allow(deprecated)]
     fn settings_to_config_builder(
         settings: &Settings,
     ) -> Result<config::ConfigBuilder, TopCatError> {

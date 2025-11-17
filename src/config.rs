@@ -246,6 +246,7 @@ impl<'a> Config<'a> {
     ///     .build()
     ///     .expect("valid config");
     /// ```
+    #[allow(deprecated)]
     pub fn builder() -> ConfigBuilder {
         ConfigBuilder::default()
     }
@@ -253,9 +254,31 @@ impl<'a> Config<'a> {
 
 /// Builder for constructing Config instances with validation and sensible defaults.
 ///
-/// This builder owns all configuration data and provides a fluent API for
-/// setting values. The `build()` method validates the configuration and
-/// returns a `Config` with borrowed references to the builder's owned data.
+/// **DEPRECATED**: This builder is deprecated in favor of the new `Settings` struct
+/// from `topcat::settings`. The Settings struct provides:
+/// - Unified configuration loading from multiple sources (CLI, env vars, config files)
+/// - Automatic precedence handling
+/// - Environment variable support (`TOPCAT_*`)
+/// - Standard config file discovery (`./topcat.toml`, `~/.config/topcat/config.toml`, etc.)
+/// - No lifetime parameters
+///
+/// # Migration Guide
+///
+/// Instead of:
+/// ```ignore
+/// let config = Config::builder()
+///     .input_dir(PathBuf::from("sql/"))
+///     .build()?;
+/// ```
+///
+/// Use:
+/// ```ignore
+/// use topcat::settings::Settings;
+///
+/// let mut settings = Settings::load(None)?;  // Load from config files
+/// settings.input_dirs.push(PathBuf::from("sql/"));
+/// settings.validate()?;
+/// ```
 ///
 /// # Examples
 ///
@@ -309,6 +332,10 @@ impl<'a> Config<'a> {
 ///     .build()
 ///     .expect("valid configuration");
 /// ```
+#[deprecated(
+    since = "0.1.0",
+    note = "Use `Settings` from `topcat::settings` instead for unified configuration management"
+)]
 #[derive(Debug, Clone)]
 pub struct ConfigBuilder {
     input_dirs: Vec<PathBuf>,
@@ -333,6 +360,7 @@ pub struct ConfigBuilder {
     header_output_dir: Option<PathBuf>,
 }
 
+#[allow(deprecated)]
 impl Default for ConfigBuilder {
     fn default() -> Self {
         Self {
@@ -364,6 +392,7 @@ impl Default for ConfigBuilder {
     }
 }
 
+#[allow(deprecated)]
 impl ConfigBuilder {
     /// Add an input directory to search for files.
     pub fn input_dir(mut self, dir: PathBuf) -> Self {

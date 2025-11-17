@@ -1,0 +1,307 @@
+# Topcat Configuration File Example
+#
+# This file demonstrates all available configuration options for Topcat.
+# Copy this file to `topcat.toml` in your project root and customize as needed.
+#
+# Configuration Precedence (highest to lowest):
+# 1. CLI arguments
+# 2. Environment variables (TOPCAT_*)
+# 3. Project config (./topcat.toml)
+# 4. User config (~/.config/topcat/config.toml)
+# 5. System config (/etc/topcat/config.toml)
+# 6. Default values
+
+# ============================================================================
+# Input/Output Configuration
+# ============================================================================
+
+# Directories to search for input files
+# Can be overridden via CLI: -i/--input-dirs
+# Environment: TOPCAT_INPUT_DIRS="/path/one,/path/two"
+input_dirs = ["sql/", "migrations/"]
+
+# Output file path for concatenation
+# Can be overridden via CLI: -o/--output
+# Environment: TOPCAT_OUTPUT="/path/to/output.sql"
+# output = "output.sql"
+
+# ============================================================================
+# File Filtering
+# ============================================================================
+
+[filters]
+# Glob patterns for files to include (e.g., "**/*.sql")
+# Environment: TOPCAT_FILTERS__INCLUDE_GLOBS="**/*.sql,**/*.ddl"
+include_globs = []
+
+# Glob patterns for files to exclude (e.g., "**/test_*.sql")
+# Environment: TOPCAT_FILTERS__EXCLUDE_GLOBS="**/test_*,**/temp_*"
+exclude_globs = ["**/test_*.sql", "**/*_backup.sql"]
+
+# File extensions to include (without leading dot)
+# Environment: TOPCAT_FILTERS__INCLUDE_EXTENSIONS="sql,ddl"
+include_extensions = ["sql"]
+
+# File extensions to exclude
+# Environment: TOPCAT_FILTERS__EXCLUDE_EXTENSIONS="tmp,bak"
+exclude_extensions = []
+
+# Include hidden files and directories (files/dirs starting with .)
+# Environment: TOPCAT_FILTERS__INCLUDE_HIDDEN=true
+include_hidden = false
+
+# ============================================================================
+# Layer Configuration
+# ============================================================================
+
+[layers]
+# Layer names in execution order
+# Files in earlier layers always execute before files in later layers
+# Environment: TOPCAT_LAYERS__NAMES="prepend,normal,append"
+names = ["prepend", "normal", "append"]
+
+# Default layer for files without explicit layer declaration
+# Must be one of the layers in the 'names' list above
+# Environment: TOPCAT_LAYERS__FALLBACK="normal"
+fallback = "normal"
+
+# ============================================================================
+# SQL Dependency Discovery
+# ============================================================================
+
+[sql_discovery]
+# Enable automatic SQL dependency discovery
+# When enabled, Topcat scans SQL file contents to discover dependencies
+# based on schema.object references, eliminating manual header maintenance
+# Environment: TOPCAT_SQL_DISCOVERY__ENABLED=true
+enabled = false
+
+# Regex pattern for matching schema names in SQL
+# Example: "(?:myapp|test)_\\w+" matches "myapp_users" and "test_data"
+# Environment: TOPCAT_SQL_DISCOVERY__SCHEMA_PATTERN="myapp_\\w+"
+# schema_pattern = "(?:myapp|test|staging)_\\w+"
+
+# Regex pattern for matching object names
+# Default matches standard SQL identifiers: [a-zA-Z_][a-zA-Z0-9_]*
+# Environment: TOPCAT_SQL_DISCOVERY__OBJECT_PATTERN="[a-zA-Z_]\\w*"
+# object_pattern = "[a-zA-Z_][a-zA-Z0-9_]*"
+
+# Strategy for merging discovered and manual dependencies
+# Options:
+#   - "header-only": Use only manual headers, ignore discovered deps
+#   - "discovery-only": Use only discovered deps, ignore headers
+#   - "union": Combine both manual and discovered deps
+#   - "header-with-fallback": Use headers if present, else discovered
+#   - "validate": Check that manual headers match discovered deps
+# Environment: TOPCAT_SQL_DISCOVERY__MERGE_STRATEGY="union"
+merge_strategy = "union"
+
+# Normalize schema and object names to lowercase
+# Environment: TOPCAT_SQL_DISCOVERY__NORMALIZE_NAMES=true
+normalize_names = true
+
+# ============================================================================
+# Analysis Configuration
+# ============================================================================
+
+[analysis]
+# Root node protection: Specific node names to always treat as entry points
+# These nodes won't be flagged as dead code even if unrequired
+# Environment: TOPCAT_ANALYSIS__ROOT_NODES="init_schema,seed_data"
+root_nodes = []
+
+# Glob patterns for identifying root/entry point files
+# Example: "**/api/*.sql" marks all files in api/ dirs as roots
+# Environment: TOPCAT_ANALYSIS__ROOT_PATTERNS="**/migrations/*_init.sql,**/api/*.sql"
+root_patterns = []
+
+# Regex patterns for identifying root node names
+# Example: "^api_.*" marks all nodes starting with "api_" as roots
+# Environment: TOPCAT_ANALYSIS__ROOT_REGEX="^(api|migration)_.*"
+root_regex = []
+
+# Directories where all files are considered roots
+# Useful for API endpoints, migration entry points, etc.
+# Environment: TOPCAT_ANALYSIS__ROOT_DIRS="sql/api,sql/seeds"
+root_dirs = []
+
+# Directories to check for external usage of SQL objects
+# When specified, Topcat scans these directories for references to SQL objects
+# to determine if they're used externally (e.g., in application code)
+# Environment: TOPCAT_ANALYSIS__EXTERNAL_CHECK_DIRS="/app/src,/app/lib"
+external_check_dirs = []
+
+# File patterns to check for external usage (e.g., "*.py", "*.ts", "*.go")
+# Only files matching these patterns in external_check_dirs are scanned
+# Environment: TOPCAT_ANALYSIS__EXTERNAL_CHECK_PATTERNS="*.py,*.ts,*.js"
+external_check_patterns = []
+
+# ============================================================================
+# Formatting Configuration
+# ============================================================================
+
+[formatting]
+# Comment string for the target language
+# Used in generated output and separators
+# Environment: TOPCAT_FORMATTING__COMMENT_STR="--"
+comment_str = "--"
+
+# Separator string inserted between files in concatenated output
+# Can include a placeholder {} which will be replaced with the file path
+# Environment: TOPCAT_FORMATTING__FILE_SEPARATOR_STR="----- {file} -----"
+file_separator_str = "------------------------------------------------------------------------------------------------------------------------"
+
+# String appended at the end of each file in concatenated output
+# Useful for ensuring proper statement termination (e.g., ";" for SQL)
+# Environment: TOPCAT_FORMATTING__FILE_END_STR=";"
+file_end_str = ";"
+
+# ============================================================================
+# Behavior Configuration
+# ============================================================================
+
+[behavior]
+# Enable verbose output with detailed logging
+# Shows debug information, dependency resolution details, etc.
+# Environment: TOPCAT_BEHAVIOR__VERBOSE=true
+verbose = false
+
+# Enable quiet mode (suppress non-essential output)
+# Useful for CI/CD pipelines where only errors should be shown
+# Environment: TOPCAT_BEHAVIOR__QUIET=true
+quiet = false
+
+# Enable dry-run mode (preview operations without making changes)
+# Shows what would be done without actually modifying files
+# Note: Clean commands default to dry-run=true for safety
+# Environment: TOPCAT_BEHAVIOR__DRY_RUN=true
+dry_run = false
+
+# Force operations without confirmation prompts
+# Dangerous! Skips confirmation dialogs for destructive operations
+# Environment: TOPCAT_BEHAVIOR__FORCE=true
+force = false
+
+# ============================================================================
+# Node Filtering
+# ============================================================================
+
+[node_filtering]
+# Node name prefixes to include (e.g., ["auth::", "billing::"])
+# Only nodes with these prefixes will be processed
+# Environment: TOPCAT_NODE_FILTERING__INCLUDE_PREFIXES="auth::,billing::"
+include_prefixes = []
+
+# Node name prefixes to exclude (e.g., ["test::", "deprecated::"])
+# Nodes with these prefixes will be ignored
+# Environment: TOPCAT_NODE_FILTERING__EXCLUDE_PREFIXES="test::,temp::"
+exclude_prefixes = []
+
+# Filter to only include files within a specific subdirectory
+# Environment: TOPCAT_NODE_FILTERING__SUBDIR_FILTER="sql/auth"
+# subdir_filter = "sql/auth"
+
+# ============================================================================
+# Schema Filtering
+# ============================================================================
+
+[schema_filtering]
+# Schemas to include in operations
+# When specified, only nodes from these schemas are processed
+# Example: schemas = ["auth", "billing"] processes only auth.* and billing.*
+# Environment: TOPCAT_SCHEMA_FILTERING__SCHEMAS="auth,billing,api"
+schemas = []
+
+# ============================================================================
+# Export Configuration
+# ============================================================================
+
+[export]
+# Export mode (full, dependencies, dependents, direct)
+# - full: Export the entire dependency graph
+# - dependencies: Export all dependencies of a specific node
+# - dependents: Export all dependents of a specific node
+# - direct: Export only direct dependencies/dependents
+# Environment: TOPCAT_EXPORT__MODE="full"
+# mode = "full"
+
+# Node name for dependency/dependents export
+# Required when mode is "dependencies", "dependents", or "direct"
+# Environment: TOPCAT_EXPORT__NODE="my_schema.my_table"
+# node = "my_schema.my_table"
+
+# ============================================================================
+# Logging Configuration
+# ============================================================================
+
+[logging]
+# Log level (error, warn, info, debug, trace)
+# Controls the verbosity of log output
+# Environment: TOPCAT_LOGGING__LEVEL="info"
+level = "info"
+
+# Log to file instead of stderr
+# If specified, all log output is written to this file
+# Environment: TOPCAT_LOGGING__FILE="/var/log/topcat.log"
+# file = "/var/log/topcat.log"
+
+# Include timestamps in log output
+# Useful for debugging and auditing
+# Environment: TOPCAT_LOGGING__TIMESTAMPS=true
+timestamps = false
+
+# ============================================================================
+# Header Update Configuration
+# ============================================================================
+
+# Header update mode
+# - "never": Never modify source files (default)
+# - "in-place": Update files in-place with discovered dependencies
+# - "generate": Generate new files with updated headers
+# Environment: TOPCAT_HEADER_UPDATE_MODE="never"
+# header_update_mode = "never"
+
+# Output directory for updated headers (when header_update_mode = "generate")
+# If not specified, defaults to input directory
+# Environment: TOPCAT_HEADER_OUTPUT_DIR="/tmp/updated"
+# header_output_dir = "/tmp/updated"
+
+# ============================================================================
+# Example Configurations for Common Use Cases
+# ============================================================================
+
+# Example 1: SQL project with automatic discovery
+# -----------
+# [sql_discovery]
+# enabled = true
+# schema_pattern = "myapp_\\w+"
+# merge_strategy = "union"
+#
+# [filters]
+# include_extensions = ["sql"]
+# exclude_globs = ["**/test_*.sql", "**/migrations_old/**"]
+#
+# [layers]
+# names = ["schema", "tables", "views", "functions", "seeds"]
+# fallback = "tables"
+
+# Example 2: Multi-schema project with protection
+# -----------
+# [analysis]
+# root_patterns = ["**/api/*.sql", "**/migrations/*_init.sql"]
+# external_check_dirs = ["/app/src/database"]
+# external_check_patterns = ["*.ts", "*.js"]
+#
+# [schema_filtering]
+# schemas = ["auth", "billing", "api"]
+
+# Example 3: CI/CD pipeline configuration
+# -----------
+# [behavior]
+# quiet = true
+# force = true
+#
+# [logging]
+# level = "warn"
+# file = "/var/log/topcat/pipeline.log"
+# timestamps = true

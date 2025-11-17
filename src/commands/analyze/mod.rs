@@ -152,108 +152,28 @@ impl AnalyzeArgs {
             Builder::new().filter(None, log_level).try_init().ok();
         }
 
-        // 6. Extract schema filter for special case analyses
-        let schema_filter: Vec<String> = self
-            .common
-            .schemas
-            .clone()
-            .unwrap_or_else(|| settings.schema_filtering.schemas.clone());
-
-        // 7. Convert merge strategy to string for legacy API
-        let merge_strategy_str =
-            Self::merge_strategy_to_string(&settings.sql_discovery.merge_strategy);
-
-        // 8. Convert config_path to Option<PathBuf> for legacy API
-        let config_path_buf = config_path.map(PathBuf::from);
-
-        // 9. For cycles and missing commands, we handle graph building specially
+        // 6. For cycles and missing commands, we handle graph building specially
         // (They bypass full graph construction to catch errors that would prevent it)
         match &self.command {
             AnalyzeCommand::Cycles => {
-                return cycles::analyze(
-                    quiet,
-                    &config_path_buf,
-                    settings.sql_discovery.enabled,
-                    &settings.sql_discovery.schema_pattern,
-                    &merge_strategy_str,
-                    settings.input_dirs.clone(),
-                    if settings.filters.include_extensions.is_empty() {
-                        None
-                    } else {
-                        Some(&settings.filters.include_extensions)
-                    },
-                    if settings.filters.exclude_extensions.is_empty() {
-                        None
-                    } else {
-                        Some(&settings.filters.exclude_extensions)
-                    },
-                    if settings.filters.include_globs.is_empty() {
-                        None
-                    } else {
-                        Some(&settings.filters.include_globs)
-                    },
-                    if settings.filters.exclude_globs.is_empty() {
-                        None
-                    } else {
-                        Some(&settings.filters.exclude_globs)
-                    },
-                    settings.filters.include_hidden,
-                    settings.behavior.verbose,
-                    settings.formatting.comment_str.clone(),
-                    &Some(settings.layers.names.join(",")),
-                    &settings.layers.fallback,
-                    &schema_filter,
-                );
+                return cycles::analyze(quiet, &self.common.schemas, &settings);
             }
             AnalyzeCommand::Missing => {
-                return missing::analyze(
-                    quiet,
-                    &config_path_buf,
-                    settings.sql_discovery.enabled,
-                    &settings.sql_discovery.schema_pattern,
-                    &merge_strategy_str,
-                    settings.input_dirs.clone(),
-                    if settings.filters.include_extensions.is_empty() {
-                        None
-                    } else {
-                        Some(&settings.filters.include_extensions)
-                    },
-                    if settings.filters.exclude_extensions.is_empty() {
-                        None
-                    } else {
-                        Some(&settings.filters.exclude_extensions)
-                    },
-                    if settings.filters.include_globs.is_empty() {
-                        None
-                    } else {
-                        Some(&settings.filters.include_globs)
-                    },
-                    if settings.filters.exclude_globs.is_empty() {
-                        None
-                    } else {
-                        Some(&settings.filters.exclude_globs)
-                    },
-                    settings.filters.include_hidden,
-                    settings.behavior.verbose,
-                    settings.formatting.comment_str.clone(),
-                    &Some(settings.layers.names.join(",")),
-                    &settings.layers.fallback,
-                    &schema_filter,
-                );
+                return missing::analyze(quiet, &self.common.schemas, &settings);
             }
             _ => {}
         }
 
-        // 8. Build the dependency graph (for all other commands)
+        // 7. Build the dependency graph (for all other commands)
         let graph = self.build_graph(&settings)?;
 
-        // 9. Check for external usage if requested
+        // 8. Check for external usage if requested
         let external_checker = self.build_external_checker(&settings)?;
 
-        // 10. Build root matcher from settings
+        // 9. Build root matcher from settings
         let root_matcher = self.build_root_matcher(&settings)?;
 
-        // 11. Execute the requested analysis
+        // 10. Execute the requested analysis
         match &self.command {
             AnalyzeCommand::DeadBranches => dead_branches::analyze(
                 quiet,
@@ -302,19 +222,5 @@ impl AnalyzeArgs {
         settings: &Settings,
     ) -> Result<Option<topcat::analysis::external_usage::ExternalUsageChecker>, TopCatError> {
         cmd_common::build_external_checker_from_settings(settings)
-    }
-
-    /// Convert MergeStrategy to string for legacy APIs.
-    ///
-    /// This is a workaround until all code uses Settings directly.
-    fn merge_strategy_to_string(strategy: &topcat::sql_config::MergeStrategy) -> String {
-        use topcat::sql_config::MergeStrategy;
-        match strategy {
-            MergeStrategy::HeaderOnly => "header-only".to_string(),
-            MergeStrategy::DiscoveryOnly => "discovery-only".to_string(),
-            MergeStrategy::Union => "union".to_string(),
-            MergeStrategy::HeaderWithFallback => "header-with-fallback".to_string(),
-            MergeStrategy::Validate => "validate".to_string(),
-        }
     }
 }

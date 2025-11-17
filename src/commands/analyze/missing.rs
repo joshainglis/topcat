@@ -9,6 +9,7 @@ use comfy_table::{Cell, Color};
 use topcat::config;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::settings::Settings;
 use topcat::sql_config;
 
 use super::common::AnalysisLogger;
@@ -22,79 +23,70 @@ use crate::commands::common as cmd_common;
 /// # Arguments
 ///
 /// * `quiet` - Whether to suppress output
-/// * `sql_config_file` - Optional path to SQL config file
-/// * `enable_sql_discovery` - Whether SQL discovery is enabled
-/// * `schema_pattern` - Optional schema pattern for SQL discovery
-/// * `merge_strategy` - Merge strategy for SQL discovery
-/// * `input_dirs` - Input directories to scan
-/// * `include_file_extensions` - Extensions to include
-/// * `exclude_file_extensions` - Extensions to exclude
-/// * `include_globs` - Glob patterns to include
-/// * `exclude_globs` - Glob patterns to exclude
-/// * `include_hidden` - Whether to include hidden files
-/// * `verbose` - Whether to enable verbose logging
-/// * `comment_str` - Comment prefix string
-/// * `layers` - Optional layer configuration
-/// * `fallback_layer` - Optional fallback layer
-/// * `schema_filter` - Optional schema filter
+/// * `schemas` - Optional schema filter from CLI (overrides settings)
+/// * `settings` - Configuration settings
 ///
 /// # Returns
 ///
 /// - `Ok(())` if no missing dependencies are found
 /// - `Err(TopCatError::MissingDependency)` if any are found (with full list)
 /// - `Err(TopCatError)` for other errors during scanning
-#[allow(clippy::too_many_arguments)]
 pub fn analyze(
     quiet: bool,
-    sql_config_file: &Option<PathBuf>,
-    enable_sql_discovery: bool,
-    schema_pattern: &Option<String>,
-    merge_strategy: &str,
-    input_dirs: Vec<PathBuf>,
-    include_file_extensions: Option<&[String]>,
-    exclude_file_extensions: Option<&[String]>,
-    include_globs: Option<&[String]>,
-    exclude_globs: Option<&[String]>,
-    include_hidden: bool,
-    verbose: bool,
-    comment_str: String,
-    layers: &Option<String>,
-    fallback_layer: &Option<String>,
-    schema_filter: &[String],
+    schemas: &Option<Vec<String>>,
+    settings: &Settings,
 ) -> Result<(), TopCatError> {
     let logger = AnalysisLogger::new(quiet);
     logger.section("🔍 Missing Dependencies Analysis");
 
-    // Build a minimal config for validation (same as build_graph but for validation only)
-    let sql_discovery = cmd_common::load_sql_discovery_config(
-        sql_config_file,
-        enable_sql_discovery,
-        schema_pattern,
-        merge_strategy,
-    )?;
-    let (layers_parsed, fallback_layer_parsed) =
-        cmd_common::parse_and_validate_layers(sql_config_file, layers, fallback_layer)?;
-    let include_node_prefixes = cmd_common::build_schema_filter(schema_filter).to_option();
+    // Build config for validation - we need the old Config struct for TCGraph::new()
+    // Extract schema filter for node prefixes
+    let schema_filter: Vec<String> = schemas
+        .clone()
+        .unwrap_or_else(|| settings.schema_filtering.schemas.clone());
 
+    let include_node_prefixes = cmd_common::build_schema_filter(&schema_filter).to_option();
+
+    // Convert Settings to Config for TCGraph::new()
     let config = config::Config {
-        input_dirs,
-        include_extensions: include_file_extensions,
-        exclude_extensions: exclude_file_extensions,
-        include_globs,
-        exclude_globs,
+        input_dirs: settings.input_dirs.clone(),
+        include_extensions: if settings.filters.include_extensions.is_empty() {
+            None
+        } else {
+            Some(&settings.filters.include_extensions)
+        },
+        exclude_extensions: if settings.filters.exclude_extensions.is_empty() {
+            None
+        } else {
+            Some(&settings.filters.exclude_extensions)
+        },
+        include_globs: if settings.filters.include_globs.is_empty() {
+            None
+        } else {
+            Some(&settings.filters.include_globs)
+        },
+        exclude_globs: if settings.filters.exclude_globs.is_empty() {
+            None
+        } else {
+            Some(&settings.filters.exclude_globs)
+        },
         output: PathBuf::from(cmd_common::null_device()),
-        comment_str,
+        comment_str: settings.formatting.comment_str.clone(),
         file_separator_str: String::new(),
         file_end_str: String::new(),
-        include_hidden,
-        verbose,
+        include_hidden: settings.filters.include_hidden,
+        verbose: settings.behavior.verbose,
         include_node_prefixes: include_node_prefixes.as_deref(),
         exclude_node_prefixes: None,
         dry_run: false,
         subdir_filter: None,
-        layers: layers_parsed,
-        fallback_layer: fallback_layer_parsed,
-        sql_discovery,
+        layers: settings.layers.names.clone(),
+        fallback_layer: settings
+            .layers
+            .fallback
+            .clone()
+            .unwrap_or_else(|| "normal".to_string()),
+        sql_discovery: settings.sql_discovery.clone(),
         header_update_mode: sql_config::HeaderUpdateMode::Never,
         header_output_dir: None,
     };
