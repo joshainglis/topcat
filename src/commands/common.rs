@@ -21,6 +21,10 @@ use topcat::sql_config;
 
 /// Result type for file filter merging operations.
 /// Tuple of (include_globs, exclude_globs, include_exts, exclude_exts, include_hidden).
+///
+/// **Note**: This type is deprecated and kept for backward compatibility.
+/// New code should use Settings directly.
+#[allow(dead_code)]
 type FileFiltersResult = (
     Option<Vec<String>>,
     Option<Vec<String>>,
@@ -44,9 +48,6 @@ pub const DEFAULT_LAYER_NORMAL: &str = "normal";
 
 /// Default append layer (executed after normal layer)
 pub const DEFAULT_LAYER_APPEND: &str = "append";
-
-/// Default merge strategy for SQL discovery
-pub const DEFAULT_MERGE_STRATEGY: &str = "discovery-only";
 
 // ============================================================================
 // Platform Utilities
@@ -152,6 +153,10 @@ pub fn parse_and_validate_layers(
 
 /// Merge file filter configuration from config file and CLI arguments.
 ///
+/// **Deprecated**: This function is no longer used by the main commands.
+/// New code should use Settings directly. Kept for backward compatibility
+/// with cycles/missing analyses.
+///
 /// File filters control which files are included in dependency graph construction.
 /// This function merges settings from both config file and CLI, with CLI taking precedence.
 ///
@@ -168,6 +173,7 @@ pub fn parse_and_validate_layers(
 ///
 /// Tuple of `(include_globs, exclude_globs, include_exts, exclude_exts, include_hidden)`
 /// with merged configuration. CLI arguments extend (not replace) config file settings.
+#[allow(dead_code)]
 pub fn merge_file_filters(
     config_file: &Option<PathBuf>,
     cli_include_globs: Option<Vec<String>>,
@@ -311,6 +317,10 @@ pub fn load_sql_discovery_config(
 
 /// Build a root node matcher from CLI arguments and config file.
 ///
+/// **Deprecated**: This function is no longer used by the main commands.
+/// New code should use Settings and build the matcher inline. Kept for
+/// backward compatibility with cycles/missing analyses.
+///
 /// Root node matchers protect important nodes (e.g., API endpoints, migration entry points)
 /// from being flagged as dead code during analysis. This function merges root node
 /// specifications from both CLI arguments and config files.
@@ -328,6 +338,7 @@ pub fn load_sql_discovery_config(
 /// `Ok(Some(RootNodeMatcher))` if any root configuration is specified,
 /// `Ok(None)` if no root protection is configured,
 /// `Err(TopCatError)` if configuration is invalid (e.g., invalid regex)
+#[allow(dead_code)]
 pub fn build_root_matcher(
     config_file: &Option<PathBuf>,
     root_nodes: Vec<String>,
@@ -405,6 +416,10 @@ pub fn build_schema_filter(schema_filter: &[String]) -> SchemaFilter {
 
 /// Build an external usage checker from CLI arguments and config file.
 ///
+/// **Deprecated**: This function is no longer used by the main commands.
+/// New code should use Settings and call build_external_checker directly.
+/// Kept for backward compatibility with cycles/missing analyses.
+///
 /// Merges external usage checking configuration from both CLI arguments and
 /// config file, with CLI arguments taking precedence.
 ///
@@ -420,6 +435,7 @@ pub fn build_schema_filter(schema_filter: &[String]) -> SchemaFilter {
 /// `Ok(Some(ExternalUsageChecker))` if configured,
 /// `Ok(None)` if not configured,
 /// `Err(TopCatError)` if checker initialization fails
+#[allow(dead_code)]
 pub fn build_external_checker_with_config(
     config_file: &Option<PathBuf>,
     cli_external_check_dirs: Vec<PathBuf>,

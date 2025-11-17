@@ -1,9 +1,10 @@
 use clap::{Args, Subcommand, ValueEnum};
 use std::collections::HashSet;
-use std::path::PathBuf;
 
+use topcat::cli::CommonArgs;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::settings::Settings;
 
 use super::common as cmd_common;
 
@@ -39,29 +40,8 @@ pub enum ExportCommand {
 
 #[derive(Debug, Args)]
 pub struct ExportArgs {
-    /// Input directories containing files to analyze
-    #[arg(short = 'i', long = "input-dirs", required = true)]
-    input_dirs: Vec<PathBuf>,
-
-    /// Output file path
-    #[arg(short = 'o', long = "output", required = true)]
-    output: PathBuf,
-
-    /// File extensions to include (e.g., "sql")
-    #[arg(short = 'e', long = "include-exts")]
-    include_extensions: Vec<String>,
-
-    /// Comment string used in file headers
-    #[arg(short = 'c', long = "comment-str", default_value = "--")]
-    comment_str: String,
-
-    /// Custom layer ordering (comma-separated)
-    #[arg(short = 'l', long = "layers")]
-    layers: Option<String>,
-
-    /// Fallback layer for files without explicit layer declaration
-    #[arg(short = 'f', long = "fallback-layer", default_value = "normal")]
-    fallback_layer: String,
+    #[command(flatten)]
+    pub common: CommonArgs,
 
     /// Export mode: full, deps, dependents, or direct
     #[arg(long = "mode", default_value = "full")]
@@ -71,10 +51,6 @@ pub struct ExportArgs {
     #[arg(long = "node")]
     node: Option<String>,
 
-    /// Filter by schema names (can be specified multiple times)
-    #[arg(long = "schema")]
-    schema: Vec<String>,
-
     #[command(subcommand)]
     command: ExportCommand,
 }
@@ -83,75 +59,118 @@ impl ExportArgs {
     /// Executes the export command with the configured parameters.
     ///
     /// This method orchestrates the entire export process:
-    /// 1. Builds the dependency graph from input files
-    /// 2. Applies schema filtering if schemas are specified
-    /// 3. Applies export mode filtering (full, deps, dependents, direct)
-    /// 4. Exports to the requested format (JSON, DOT, GraphML, Mermaid)
+    /// 1. Loads configuration from all sources
+    /// 2. Builds the dependency graph from input files
+    /// 3. Applies schema filtering if schemas are specified
+    /// 4. Applies export mode filtering (full, deps, dependents, direct)
+    /// 5. Exports to the requested format (JSON, DOT, GraphML, Mermaid)
     ///
     /// # Errors
     ///
     /// Returns an error if:
+    /// - Configuration loading/validation fails
     /// - Graph construction fails (invalid files, missing dependencies, etc.)
     /// - Schema filtering finds no matching nodes
     /// - Export mode requires a node but none is provided
     /// - File writing fails (I/O errors, permission issues, etc.)
     /// - Serialization fails (JSON or XML generation errors)
     pub fn execute(&self) -> Result<(), TopCatError> {
-        // Build the graph
-        let mut graph = self.build_graph()?;
+        // 1. Load settings from all sources (config files, env vars)
+        let config_path = self.common.config_path();
+        let mut settings = Settings::load(config_path).map_err(|e| {
+            TopCatError::ConfigError(format!("Failed to load configuration: {}", e))
+        })?;
 
-        // Apply schema filtering if requested
-        if !self.schema.is_empty() {
-            graph = self.filter_by_schemas(&graph)?;
+        // 2. Apply CLI overrides
+        self.common.apply_to_settings(&mut settings);
+
+        // 3. Validate settings
+        settings.validate().map_err(TopCatError::ConfigError)?;
+
+        // 4. Ensure required fields are set
+        if settings.input_dirs.is_empty() {
+            return Err(TopCatError::ConfigError(
+                "At least one input directory must be specified via -i/--input-dirs or config file"
+                    .to_string(),
+            ));
         }
 
-        // Apply export mode filtering
+        if settings.output.is_none() {
+            return Err(TopCatError::ConfigError(
+                "Output file must be specified via -o/--output or config file".to_string(),
+            ));
+        }
+
+        // 5. Extract schema filter
+        let schema_filter: Vec<String> = self
+            .common
+            .schemas
+            .clone()
+            .unwrap_or_else(|| settings.schema_filtering.schemas.clone());
+
+        // 6. Build the graph
+        let mut graph = self.build_graph(&settings)?;
+
+        // 7. Apply schema filtering if requested
+        if !schema_filter.is_empty() {
+            graph = self.filter_by_schemas(&graph, &schema_filter)?;
+        }
+
+        // 8. Apply export mode filtering
         let graph = self.apply_export_mode(&graph)?;
 
-        // Execute the export command
+        // 9. Get output path from settings
+        let output = settings
+            .output
+            .ok_or_else(|| TopCatError::ConfigError("Output path required".to_string()))?;
+
+        // 10. Execute the export command
         match &self.command {
-            ExportCommand::Json => json::export_json(&graph, &self.output),
-            ExportCommand::Dot => dot::export_dot(&graph, &self.output),
-            ExportCommand::Graphml => graphml::export_graphml(&graph, &self.output),
-            ExportCommand::Mermaid => mermaid::export_mermaid(&graph, &self.output),
+            ExportCommand::Json => json::export_json(&graph, &output),
+            ExportCommand::Dot => dot::export_dot(&graph, &output),
+            ExportCommand::Graphml => graphml::export_graphml(&graph, &output),
+            ExportCommand::Mermaid => mermaid::export_mermaid(&graph, &output),
         }
     }
 
-    /// Builds the dependency graph from the configured input directories.
+    /// Builds the dependency graph from Settings.
     ///
-    /// Creates a `TCGraph` by scanning the input directories for files matching
-    /// the specified extensions, parsing their dependency metadata, and constructing
-    /// the DAG with layer-based ordering.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The fallback layer is not in the layers list
-    /// - Graph construction fails (file reading, parsing, cycle detection)
-    fn build_graph(&self) -> Result<TCGraph, TopCatError> {
-        let (layers, fallback_layer) = cmd_common::parse_and_validate_layers(
-            &None, // export doesn't have sql_config support yet
-            &self.layers,
-            &Some(self.fallback_layer.clone()),
-        )?;
+    /// Creates a `TCGraph` using the unified Settings configuration.
+    fn build_graph(&self, settings: &Settings) -> Result<TCGraph, TopCatError> {
+        // Get fallback layer (required)
+        let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
+            TopCatError::ConfigError("Fallback layer must be specified".to_string())
+        })?;
 
         cmd_common::build_graph(
-            self.input_dirs.clone(),
-            if self.include_extensions.is_empty() {
+            settings.input_dirs.clone(),
+            if settings.filters.include_extensions.is_empty() {
                 None
             } else {
-                Some(&self.include_extensions)
+                Some(&settings.filters.include_extensions)
             },
-            None,  // exclude_extensions
-            None,  // include_globs
-            None,  // exclude_globs
-            false, // include_hidden
-            false, // verbose
-            self.comment_str.clone(),
-            layers,
+            if settings.filters.exclude_extensions.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.exclude_extensions)
+            },
+            if settings.filters.include_globs.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.include_globs)
+            },
+            if settings.filters.exclude_globs.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.exclude_globs)
+            },
+            settings.filters.include_hidden,
+            settings.behavior.verbose,
+            settings.formatting.comment_str.clone(),
+            settings.layers.names.clone(),
             fallback_layer,
-            Default::default(), // sql_discovery
-            None,               // schema_filter_prefixes
+            settings.sql_discovery.clone(),
+            None, // schema_filter_prefixes (not used for export command)
         )
     }
 
@@ -160,11 +179,15 @@ impl ExportArgs {
     /// # Errors
     ///
     /// Returns an error if no nodes are found for the specified schemas.
-    fn filter_by_schemas(&self, graph: &TCGraph) -> Result<TCGraph, TopCatError> {
+    fn filter_by_schemas(
+        &self,
+        graph: &TCGraph,
+        schema_filter: &[String],
+    ) -> Result<TCGraph, TopCatError> {
         let mut filtered_nodes = HashSet::new();
         let schemas = graph.get_schemas();
 
-        for schema_name in &self.schema {
+        for schema_name in schema_filter {
             if let Some(nodes) = schemas.get(schema_name) {
                 filtered_nodes.extend(nodes.iter().map(|n| n.name.clone()));
             }
@@ -172,8 +195,7 @@ impl ExportArgs {
 
         if filtered_nodes.is_empty() {
             return Err(TopCatError::ConfigError(format!(
-                "No nodes found for schemas: {:?}",
-                self.schema
+                "No nodes found for schemas: {schema_filter:?}"
             )));
         }
 

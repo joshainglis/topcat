@@ -1,10 +1,11 @@
 use clap::{Args, Subcommand};
 use comfy_table::{Cell, Color, Table, modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL};
 use std::collections::HashMap;
-use std::path::PathBuf;
 
+use topcat::cli::CommonArgs;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::settings::Settings;
 
 use super::common;
 
@@ -23,25 +24,8 @@ pub enum SchemaCommand {
 
 #[derive(Debug, Args)]
 pub struct SchemaArgs {
-    /// Input directories containing files to analyze
-    #[arg(short = 'i', long = "input-dirs", required = true)]
-    input_dirs: Vec<PathBuf>,
-
-    /// File extensions to include (e.g., "sql")
-    #[arg(short = 'e', long = "include-exts")]
-    include_extensions: Vec<String>,
-
-    /// Comment string used in file headers
-    #[arg(short = 'c', long = "comment-str", default_value = "--")]
-    comment_str: String,
-
-    /// Custom layer ordering (comma-separated)
-    #[arg(short = 'l', long = "layers")]
-    layers: Option<String>,
-
-    /// Fallback layer for files without explicit layer declaration
-    #[arg(short = 'f', long = "fallback-layer", default_value = "normal")]
-    fallback_layer: String,
+    #[command(flatten)]
+    pub common: CommonArgs,
 
     #[command(subcommand)]
     command: SchemaCommand,
@@ -49,9 +33,30 @@ pub struct SchemaArgs {
 
 impl SchemaArgs {
     pub fn execute(&self) -> Result<(), TopCatError> {
-        // Build the graph
-        let graph = self.build_graph()?;
+        // 1. Load settings from all sources (config files, env vars)
+        let config_path = self.common.config_path();
+        let mut settings = Settings::load(config_path).map_err(|e| {
+            TopCatError::ConfigError(format!("Failed to load configuration: {}", e))
+        })?;
 
+        // 2. Apply CLI overrides
+        self.common.apply_to_settings(&mut settings);
+
+        // 3. Validate settings
+        settings.validate().map_err(TopCatError::ConfigError)?;
+
+        // 4. Ensure required fields are set
+        if settings.input_dirs.is_empty() {
+            return Err(TopCatError::ConfigError(
+                "At least one input directory must be specified via -i/--input-dirs or config file"
+                    .to_string(),
+            ));
+        }
+
+        // 5. Build the graph
+        let graph = self.build_graph(&settings)?;
+
+        // 6. Execute the requested schema operation
         match &self.command {
             SchemaCommand::List => self.list_schemas(&graph),
             SchemaCommand::Analyze { schema } => self.analyze_schema(&graph, schema),
@@ -59,30 +64,41 @@ impl SchemaArgs {
         }
     }
 
-    fn build_graph(&self) -> Result<TCGraph, TopCatError> {
-        let (layers, fallback_layer) = common::parse_and_validate_layers(
-            &None, // schema doesn't have sql_config support yet
-            &self.layers,
-            &Some(self.fallback_layer.clone()),
-        )?;
+    fn build_graph(&self, settings: &Settings) -> Result<TCGraph, TopCatError> {
+        // Get fallback layer (required)
+        let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
+            TopCatError::ConfigError("Fallback layer must be specified".to_string())
+        })?;
 
         common::build_graph(
-            self.input_dirs.clone(),
-            if self.include_extensions.is_empty() {
+            settings.input_dirs.clone(),
+            if settings.filters.include_extensions.is_empty() {
                 None
             } else {
-                Some(&self.include_extensions)
+                Some(&settings.filters.include_extensions)
             },
-            None,  // exclude_extensions
-            None,  // include_globs
-            None,  // exclude_globs
-            false, // include_hidden
-            false, // verbose
-            self.comment_str.clone(),
-            layers,
+            if settings.filters.exclude_extensions.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.exclude_extensions)
+            },
+            if settings.filters.include_globs.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.include_globs)
+            },
+            if settings.filters.exclude_globs.is_empty() {
+                None
+            } else {
+                Some(&settings.filters.exclude_globs)
+            },
+            settings.filters.include_hidden,
+            settings.behavior.verbose,
+            settings.formatting.comment_str.clone(),
+            settings.layers.names.clone(),
             fallback_layer,
-            Default::default(), // sql_discovery
-            None,               // schema_filter_prefixes
+            settings.sql_discovery.clone(),
+            None, // schema_filter_prefixes (not used for schema command)
         )
     }
 

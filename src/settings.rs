@@ -79,7 +79,14 @@ impl Default for Settings {
             input_dirs: Vec::new(),
             output: None,
             filters: FiltersConfig::default(),
-            layers: LayersConfig::default(),
+            layers: LayersConfig {
+                names: vec![
+                    "prepend".to_string(),
+                    "normal".to_string(),
+                    "append".to_string(),
+                ],
+                fallback: Some("normal".to_string()),
+            },
             sql_discovery: SqlDiscoveryConfig::default(),
             header_update_mode: HeaderUpdateMode::Never,
             header_output_dir: None,

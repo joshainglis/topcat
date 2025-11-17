@@ -28,7 +28,7 @@ fn test_clean_dead_branches_dry_run() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("dry").or(predicate::str::contains("Would")));
+        .stdout(predicate::str::contains("DRY").or(predicate::str::contains("Would")));
 }
 
 #[test]

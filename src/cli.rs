@@ -141,16 +141,18 @@ pub struct CommonArgs {
     #[arg(
         short = 'v',
         long = "verbose",
-        help = "Enable verbose output with detailed logging"
+        help = "Enable verbose output with detailed logging",
+        action = clap::ArgAction::SetTrue
     )]
-    pub verbose: Option<bool>,
+    pub verbose: bool,
 
     #[arg(
         short = 'q',
         long = "quiet",
-        help = "Suppress non-essential output (for CI/CD)"
+        help = "Suppress non-essential output (for CI/CD)",
+        action = clap::ArgAction::SetTrue
     )]
-    pub quiet: Option<bool>,
+    pub quiet: bool,
 
     #[arg(
         short = 'd',
@@ -169,9 +171,10 @@ pub struct CommonArgs {
     #[arg(
         short = 'f',
         long = "force",
-        help = "Force operations without confirmation prompts"
+        help = "Force operations without confirmation prompts",
+        action = clap::ArgAction::SetTrue
     )]
-    pub force: Option<bool>,
+    pub force: bool,
 
     // Node Filtering
     #[arg(
@@ -342,12 +345,12 @@ impl CommonArgs {
         }
 
         // Behavior
-        if let Some(verbose) = self.verbose {
-            settings.behavior.verbose = verbose;
+        if self.verbose {
+            settings.behavior.verbose = true;
         }
 
-        if let Some(quiet) = self.quiet {
-            settings.behavior.quiet = quiet;
+        if self.quiet {
+            settings.behavior.quiet = true;
         }
 
         if let Some(dry_run) = self.dry_run {
@@ -358,8 +361,8 @@ impl CommonArgs {
             settings.behavior.dry_run = false;
         }
 
-        if let Some(force) = self.force {
-            settings.behavior.force = force;
+        if self.force {
+            settings.behavior.force = true;
         }
 
         // Node Filtering
@@ -448,7 +451,7 @@ mod tests {
         let mut settings = Settings::default();
         let args = CommonArgs {
             input_dirs: Some(vec![PathBuf::from("/test")]),
-            verbose: Some(true),
+            verbose: true,
             layers: Some("a,b,c".to_string()),
             ..Default::default()
         };
