@@ -215,6 +215,6 @@ pub mod settings;
 pub mod soft_deps_matcher;
 pub mod sql_config;
 
-mod io_utils;
-mod sql_parser;
+pub mod io_utils;
+pub mod sql_parser;
 mod stable_topo;

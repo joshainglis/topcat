@@ -222,14 +222,24 @@ impl SqlAnalyzer {
                     result.subobjects.insert(subobject_name);
                 }
 
-                // Extract dependencies from the line
-                if let Some(deps) = self.extract_dependencies(clean_line) {
-                    result.dependencies.extend(deps);
-                }
+                // Skip dependency extraction from COMMENT ON statements and string literals
+                // COMMENT ON statements often contain documentation that mentions tables/schemas
+                // but these are not actual execution dependencies
+                let is_comment_statement = clean_line
+                    .trim_start()
+                    .to_uppercase()
+                    .starts_with("COMMENT ON");
 
-                // Check for type cast dependencies
-                if let Some(type_deps) = self.extract_type_dependencies(clean_line) {
-                    result.dependencies.extend(type_deps);
+                if !is_comment_statement {
+                    // Extract dependencies from the line
+                    if let Some(deps) = self.extract_dependencies(clean_line) {
+                        result.dependencies.extend(deps);
+                    }
+
+                    // Check for type cast dependencies
+                    if let Some(type_deps) = self.extract_type_dependencies(clean_line) {
+                        result.dependencies.extend(type_deps);
+                    }
                 }
 
                 // Check for implicit objects (CREATE CAST, CREATE OPERATOR)
@@ -638,6 +648,42 @@ CREATE OPERATOR === (
         assert!(
             !result.has_implicit,
             "Regular CREATE TABLE should not be marked as implicit"
+        );
+    }
+
+    #[test]
+    fn test_ignore_dependencies_in_comment_statements() {
+        let config = make_simple_config();
+        let analyzer = SqlAnalyzer::new(config).unwrap();
+
+        // COMMENT ON statements should not have their string content parsed for dependencies
+        let sql = r#"
+CREATE TABLE c_test.my_table (
+    id INT,
+    data TEXT
+);
+
+COMMENT ON TABLE c_test.my_table IS 'This table references data from do_tmf.entity_index';
+COMMENT ON COLUMN c_test.my_table.data IS 'Stores ((do_tmf).entity_index).entity_json column data';
+"#;
+        let result = analyzer.analyze(sql);
+
+        // Should have the table itself
+        assert_eq!(result.node_name, Some("c_test.my_table".to_string()));
+
+        // Should have implicit schema dependency
+        assert!(result.dependencies.contains("c_test"));
+
+        // Should NOT have dependencies found in COMMENT statements
+        assert!(
+            !result.dependencies.contains("do_tmf.entity_index"),
+            "Should not extract dependencies from COMMENT ON statements, got {:?}",
+            result.dependencies
+        );
+        assert!(
+            !result.dependencies.contains("do_tmf"),
+            "Should not extract schema dependencies from COMMENT ON statements, got {:?}",
+            result.dependencies
         );
     }
 }

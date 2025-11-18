@@ -1,14 +1,18 @@
 use clap::Args;
+use std::collections::HashSet;
+use std::path::PathBuf;
 
 use topcat::{
     cli::CommonArgs,
     config,
-    exceptions::TopCatError,
-    file_dag::TCGraph,
-    header_generator,
+    exceptions::{FileNodeError, TopCatError},
+    file_node::{FileNode, NameSource},
+    header_generator, io_utils,
+    layer_mapper::LayerMapper,
     logging::{Logger, init_logging},
     settings::Settings,
     sql_config,
+    sql_parser::SqlAnalyzer,
 };
 
 /// Update file headers with discovered dependencies and optionally rename files
@@ -134,28 +138,14 @@ impl UpdateArgs {
             header_output_dir: settings.header_output_dir.clone(),
         };
 
-        // Build the dependency graph (this triggers SQL discovery if enabled)
-        logger.info("Building dependency graph...");
-        let mut filedag = TCGraph::new(&config);
-        let res = filedag.build_graph();
-        match res {
-            Ok(_) => {
-                logger.info("Graph built successfully!");
-            }
-            Err(e) => {
-                logger.error(&format!("Error Encountered:\n{e}\n\nExiting."));
-                std::process::exit(1);
-            }
-        }
+        // For update command, we don't build a graph - just discover dependencies per file
+        // This matches the behavior of the Python lint_nodes.py script
+        logger.info("Discovering dependencies from SQL files...");
+
+        let file_nodes = discover_files_without_graph(&config)?;
 
         if settings.behavior.verbose {
-            for layer in &settings.layers.names {
-                logger.debug(&format!(
-                    "{} Graph: {:#?}",
-                    layer,
-                    filedag.graph_as_dot(layer)?
-                ));
-            }
+            logger.debug(&format!("Discovered {} files", file_nodes.len()));
         }
 
         // Update headers
@@ -164,8 +154,6 @@ impl UpdateArgs {
         } else {
             logger.info("Updating file headers...");
         }
-
-        let file_nodes: Vec<_> = filedag.get_all_nodes();
 
         // Count how many files will be updated
         let update_count = file_nodes
@@ -230,6 +218,185 @@ impl UpdateArgs {
 
         Ok(())
     }
+}
+
+/// Collect and filter files from input directories
+fn collect_and_filter_files(config: &config::Config) -> Result<HashSet<PathBuf>, TopCatError> {
+    // Collect all files from input directories
+    let mut all_files = HashSet::new();
+    for dir in &config.input_dirs {
+        let dir_files = io_utils::walk_dir(dir, config.include_hidden).map_err(|e| {
+            TopCatError::config_error(format!("Failed to walk directory {}: {}", dir.display(), e))
+        })?;
+        all_files.extend(dir_files);
+    }
+
+    // Apply include/exclude glob filters
+    let include_globs: Option<HashSet<PathBuf>> = config
+        .include_globs
+        .map(|patterns| io_utils::glob_files(patterns))
+        .transpose()
+        .map_err(|e| TopCatError::config_error(format!("Failed to apply include globs: {e}")))?;
+
+    let exclude_globs: Option<HashSet<PathBuf>> = config
+        .exclude_globs
+        .map(|patterns| io_utils::glob_files(patterns))
+        .transpose()
+        .map_err(|e| TopCatError::config_error(format!("Failed to apply exclude globs: {e}")))?;
+
+    // Filter files
+    let include_extensions: Option<HashSet<String>> = config
+        .include_extensions
+        .map(|ext| ext.iter().cloned().collect());
+    let exclude_extensions: Option<HashSet<String>> = config
+        .exclude_extensions
+        .map(|ext| ext.iter().cloned().collect());
+
+    let filtered: HashSet<PathBuf> = all_files
+        .into_iter()
+        .filter(|file| {
+            // Include glob filter
+            if let Some(ref include) = include_globs {
+                if !include.contains(file) {
+                    return false;
+                }
+            }
+
+            // Exclude glob filter
+            if let Some(ref exclude) = exclude_globs {
+                if exclude.contains(file) {
+                    return false;
+                }
+            }
+
+            // Extension filters
+            if let Some(extension) = file.extension().and_then(|e| e.to_str()) {
+                // Include extensions
+                if let Some(ref include_ext) = include_extensions {
+                    if !include_ext.contains(extension) {
+                        return false;
+                    }
+                }
+
+                // Exclude extensions
+                if let Some(ref exclude_ext) = exclude_extensions {
+                    if exclude_ext.contains(extension) {
+                        return false;
+                    }
+                }
+            } else if include_extensions.is_some() {
+                // No extension but we have include filter - exclude this file
+                return false;
+            }
+
+            true
+        })
+        .collect();
+
+    Ok(filtered)
+}
+
+/// Discover files and perform SQL analysis without building a dependency graph
+///
+/// This function walks through input directories, performs SQL discovery on each file,
+/// and returns FileNode objects with discovered dependencies. Unlike building a full
+/// graph, this does not validate dependencies, check for cycles, or enforce layer
+/// constraints - it simply discovers and returns what's in each file.
+fn discover_files_without_graph(config: &config::Config) -> Result<Vec<FileNode>, TopCatError> {
+    let mut file_nodes = Vec::new();
+
+    // Create SQL analyzer if discovery is enabled
+    let analyzer = if config.sql_discovery.enabled {
+        Some(SqlAnalyzer::new(config.sql_discovery.clone()).map_err(|e| {
+            TopCatError::config_error(format!("Failed to create SQL analyzer: {e}"))
+        })?)
+    } else {
+        None
+    };
+
+    // Create layer mapper if configured
+    let layer_mapper = if !config.auto_mapping.is_empty() {
+        Some(LayerMapper::new(config.auto_mapping).map_err(|e| {
+            TopCatError::config_error(format!("Failed to create layer mapper: {e}"))
+        })?)
+    } else {
+        None
+    };
+
+    // Collect and filter files
+    let files = collect_and_filter_files(config)?;
+
+    for file_path in files {
+        // Parse file headers using FileNode::from_file
+        let mut file_node = FileNode::from_file(
+            &config.comment_str,
+            &file_path,
+            &config.layers,
+            &config.fallback_layer,
+            layer_mapper.as_ref(),
+        )
+        .map_err(|e| {
+            // Convert FileNodeError to TopCatError
+            match e {
+                FileNodeError::FileOpen(p, err) => TopCatError::config_error(format!(
+                    "Failed to open file {}: {}",
+                    p.display(),
+                    err
+                )),
+                FileNodeError::NoNameDefined(p) => {
+                    TopCatError::config_error(format!("No name defined in file {}", p.display()))
+                }
+                FileNodeError::TooManyNames(p, names) => TopCatError::config_error(format!(
+                    "File {} has multiple names: {:?}",
+                    p.display(),
+                    names
+                )),
+                FileNodeError::InvalidLayer(p, layer) => TopCatError::config_error(format!(
+                    "Invalid layer '{}' in file {}",
+                    layer,
+                    p.display()
+                )),
+            }
+        })?;
+
+        // Perform SQL discovery if enabled
+        if let Some(ref analyzer) = analyzer {
+            let content = std::fs::read_to_string(&file_path).map_err(|e| {
+                TopCatError::config_error(format!(
+                    "Failed to read file {}: {}",
+                    file_path.display(),
+                    e
+                ))
+            })?;
+
+            let analysis_result = analyzer.analyze(&content);
+
+            // Store discovered dependencies
+            if !analysis_result.dependencies.is_empty() {
+                file_node.discovered_deps = Some(analysis_result.dependencies);
+            }
+
+            // Update node name if discovered (and not manual)
+            if let Some(discovered_name) = analysis_result.node_name {
+                if !file_node.manual {
+                    file_node.name = discovered_name.clone();
+                    file_node.name_source = NameSource::Discovered;
+                    // Update schema from discovered name
+                    file_node.schema = FileNode::extract_schema(&discovered_name);
+                }
+            }
+
+            // Set implicit flag
+            file_node.implicit = analysis_result.has_implicit;
+
+            // Merge discovered dependencies with header dependencies based on strategy
+            file_node.merge_dependencies(config.sql_discovery.merge_strategy);
+        }
+
+        file_nodes.push(file_node);
+    }
+
+    Ok(file_nodes)
 }
 
 /// Preview what would be updated without actually modifying files
