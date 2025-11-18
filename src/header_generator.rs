@@ -38,7 +38,7 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
     }
 
     // Add layer if not the default
-    if !file_node.layer.is_empty() {
+    if (!file_node.layer.is_empty()) && (!file_node.layer_is_fallback) {
         header.push_str(&format!("{comment_str} layer: {}\n", file_node.layer));
     }
 
@@ -343,6 +343,7 @@ mod tests {
                 "test_schema.dep2".to_string(),
             ]),
             "normal".to_string(),
+            true,
             HashSet::new(),
         );
 
@@ -363,6 +364,7 @@ mod tests {
             PathBuf::from("/tmp/test.sql"),
             HashSet::from(["test_schema.dep1".to_string()]),
             "normal".to_string(),
+            true,
             HashSet::new(),
         );
         file_node.override_deps = HashSet::from(["test_schema.override_dep".to_string()]);
@@ -398,6 +400,7 @@ mod tests {
             test_file.clone(),
             HashSet::from(["new_dep".to_string()]),
             "normal".to_string(),
+            true,
             HashSet::new(),
         );
         file_node.discovered_deps = Some(HashSet::from(["new_dep".to_string()]));
@@ -428,6 +431,7 @@ mod tests {
             test_file.clone(),
             HashSet::from(["test_schema".to_string()]),
             "normal".to_string(),
+            true,
             HashSet::new(),
         );
         file_node.discovered_deps = Some(HashSet::from(["test_schema".to_string()]));
@@ -469,6 +473,7 @@ mod tests {
             test_file1.clone(),
             HashSet::new(),
             "normal".to_string(),
+            true,
             HashSet::new(),
         );
         file_node1.discovered_deps = Some(HashSet::new());
@@ -478,6 +483,7 @@ mod tests {
             test_file2.clone(),
             HashSet::new(),
             "normal".to_string(),
+            true,
             HashSet::new(),
         );
         file_node2.discovered_deps = Some(HashSet::new());

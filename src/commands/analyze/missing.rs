@@ -80,11 +80,7 @@ pub fn analyze(
         dry_run: false,
         subdir_filter: None,
         layers: settings.layers.names.clone(),
-        fallback_layer: settings
-            .layers
-            .fallback
-            .clone()
-            .unwrap_or_else(|| "normal".to_string()),
+        fallback_layer: settings.layers.fallback.clone(),
         sql_discovery: settings.sql_discovery.clone(),
         header_update_mode: sql_config::HeaderUpdateMode::Never,
         header_output_dir: None,

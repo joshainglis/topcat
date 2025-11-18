@@ -228,10 +228,7 @@ pub fn build_graph_from_settings(
     };
 
     // Get fallback layer (required)
-    let fallback_layer =
-        settings.layers.fallback.clone().ok_or_else(|| {
-            TopCatError::ConfigError("Fallback layer must be specified".to_string())
-        })?;
+    let fallback_layer = settings.layers.fallback.clone();
 
     build_graph(
         settings.input_dirs.clone(),

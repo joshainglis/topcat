@@ -80,9 +80,7 @@ impl UpdateArgs {
         }
 
         // Create Config directly from Settings
-        let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
-            TopCatError::ConfigError("Fallback layer must be specified".to_string())
-        })?;
+        let fallback_layer = settings.layers.fallback.clone();
 
         // For update command, we don't need an output file, so use a dummy path
         let dummy_output = std::path::PathBuf::from("/dev/null");
@@ -252,10 +250,11 @@ fn preview_header_updates(
         logger.info(&format!("\n{}", "=".repeat(60)));
         logger.info(&format!("File: {}", file_node.path.display()));
 
-        if rename_files && file_node.needs_rename(default_extension) {
-            if let Some(new_name) = file_node.suggested_filename(default_extension) {
-                logger.info(&format!("  → Would rename to: {new_name}"));
-            }
+        if rename_files
+            && file_node.needs_rename(default_extension)
+            && let Some(new_name) = file_node.suggested_filename(default_extension)
+        {
+            logger.info(&format!("  → Would rename to: {new_name}"));
         }
 
         logger.info(&format!("\nProposed header:\n{header}"));

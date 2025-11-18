@@ -313,7 +313,7 @@ impl CommonArgs {
         }
 
         if let Some(ref fallback) = self.fallback_layer {
-            settings.layers.fallback = Some(fallback.clone());
+            settings.layers.fallback = fallback.clone();
         }
 
         // SQL Discovery

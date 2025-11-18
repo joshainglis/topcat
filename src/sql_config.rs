@@ -188,7 +188,7 @@ pub struct LayersConfig {
 
     /// Default layer for files without explicit layer declaration
     #[serde(default)]
-    pub fallback: Option<String>,
+    pub fallback: String,
 }
 
 /// Full TOML configuration file structure

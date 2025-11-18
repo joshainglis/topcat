@@ -85,7 +85,7 @@ impl Default for Settings {
                     "normal".to_string(),
                     "append".to_string(),
                 ],
-                fallback: Some("normal".to_string()),
+                fallback: "normal".to_string(),
             },
             sql_discovery: SqlDiscoveryConfig::default(),
             header_update_mode: HeaderUpdateMode::Never,
@@ -182,10 +182,11 @@ impl Settings {
             return Err("At least one layer must be specified".to_string());
         }
 
-        if let Some(ref fallback) = self.layers.fallback
-            && !self.layers.names.contains(fallback)
-        {
-            return Err(format!("Fallback layer '{fallback}' is not in layers list"));
+        if !self.layers.names.contains(&self.layers.fallback) {
+            return Err(format!(
+                "Fallback layer '{}' is not in layers list",
+                self.layers.fallback
+            ));
         }
 
         Ok(())
@@ -355,7 +356,7 @@ mod tests {
     fn test_default_settings() {
         let settings = Settings::default();
         assert_eq!(settings.layers.names, vec!["prepend", "normal", "append"]);
-        assert_eq!(settings.layers.fallback, Some("normal".to_string()));
+        assert_eq!(settings.layers.fallback, "normal".to_string());
         assert!(!settings.sql_discovery.enabled);
         assert!(!settings.behavior.verbose);
     }
@@ -366,7 +367,7 @@ mod tests {
         assert!(settings.validate().is_ok());
 
         // Invalid fallback layer
-        settings.layers.fallback = Some("invalid".to_string());
+        settings.layers.fallback = "invalid".to_string();
         assert!(settings.validate().is_err());
 
         // Empty layers
@@ -457,7 +458,7 @@ quiet = false
             .expect("Failed to load settings");
 
         assert_eq!(settings.layers.names, vec!["first", "second", "third"]);
-        assert_eq!(settings.layers.fallback, Some("second".to_string()));
+        assert_eq!(settings.layers.fallback, "second".to_string());
         assert!(settings.behavior.verbose);
         assert!(!settings.behavior.quiet);
     }

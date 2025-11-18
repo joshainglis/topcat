@@ -56,9 +56,7 @@ impl ConcatArgs {
         let logger = Logger::new(quiet, verbose);
 
         // Create Config directly from Settings
-        let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
-            TopCatError::ConfigError("Fallback layer must be specified".to_string())
-        })?;
+        let fallback_layer = settings.layers.fallback.clone();
 
         let output = settings
             .output

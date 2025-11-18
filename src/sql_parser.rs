@@ -206,11 +206,11 @@ impl SqlAnalyzer {
         // Add implicit schema dependency when node name contains a schema component
         // E.g., if node_name is "md_tmf.util_to_snake_case", add "md_tmf" as a dependency
         // because you can't create objects in a schema that doesn't exist yet
-        if let Some(ref node_name) = result.node_name {
-            if let Some(dot_pos) = node_name.find('.') {
-                let schema = &node_name[..dot_pos];
-                result.dependencies.insert(schema.to_string());
-            }
+        if let Some(ref node_name) = result.node_name
+            && let Some(dot_pos) = node_name.find('.')
+        {
+            let schema = &node_name[..dot_pos];
+            result.dependencies.insert(schema.to_string());
         }
 
         debug!(

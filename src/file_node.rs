@@ -39,6 +39,7 @@ pub struct FileNode {
     pub path: PathBuf,
     pub deps: HashSet<String>,
     pub layer: String,
+    pub layer_is_fallback: bool,
     pub ensure_exists: HashSet<String>,
     /// Dependencies discovered from SQL content analysis
     pub discovered_deps: Option<HashSet<String>>,
@@ -101,6 +102,7 @@ impl FileNode {
         path: PathBuf,
         deps: HashSet<String>,
         layer: String,
+        layer_is_fallback: bool,
         ensure_exists: HashSet<String>,
     ) -> FileNode {
         // Extract schema from name if present (e.g., "schema.table" -> Some("schema"))
@@ -111,6 +113,7 @@ impl FileNode {
             path,
             deps,
             layer,
+            layer_is_fallback,
             ensure_exists,
             discovered_deps: None,
             override_deps: HashSet::new(),
@@ -223,6 +226,7 @@ impl FileNode {
         let mut name = String::new();
         let mut deps = HashSet::new();
         let mut layer = fallback_layer.to_string();
+        let mut layer_is_fallback = true;
         let mut ensure_exists = HashSet::new();
         let mut override_deps = HashSet::new();
         let mut implicit = false;
@@ -257,13 +261,16 @@ impl FileNode {
                 let declared_layer = line[layer_str.len()..].trim();
                 if !declared_layer.is_empty() {
                     layer = declared_layer.to_string();
+                    layer_is_fallback = layer.eq(fallback_layer);
                 }
             } else if line.starts_with(&prepend_str) {
                 // -- is_initial -> "prepend" (backward compatibility)
                 layer = "prepend".to_string();
+                layer_is_fallback = false;
             } else if line.starts_with(&append_str) {
                 // -- is_final -> "append" (backward compatibility)
                 layer = "append".to_string();
+                layer_is_fallback = false;
             } else if line.starts_with(&ensure_exists_str) {
                 // --exists: tomato, potato -> ["tomato", "potato"]
                 for item in Self::split_dependencies(&line[ensure_exists_str.len()..]) {
@@ -283,7 +290,14 @@ impl FileNode {
             return Err(FileNodeError::InvalidLayer(path.clone(), layer));
         }
 
-        let mut file_node = FileNode::new(name, path.clone(), deps, layer, ensure_exists);
+        let mut file_node = FileNode::new(
+            name,
+            path.clone(),
+            deps,
+            layer,
+            layer_is_fallback,
+            ensure_exists,
+        );
         file_node.override_deps = override_deps;
         file_node.implicit = implicit;
         Ok(file_node)

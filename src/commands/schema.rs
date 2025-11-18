@@ -72,9 +72,7 @@ impl SchemaArgs {
 
     fn build_graph(&self, settings: &Settings) -> Result<TCGraph, TopCatError> {
         // Get fallback layer (required)
-        let fallback_layer = settings.layers.fallback.clone().ok_or_else(|| {
-            TopCatError::ConfigError("Fallback layer must be specified".to_string())
-        })?;
+        let fallback_layer = settings.layers.fallback.clone();
 
         common::build_graph(
             settings.input_dirs.clone(),
