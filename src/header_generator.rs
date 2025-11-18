@@ -56,7 +56,7 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
     for dep in deps {
         // Skip schema dependency as we already wrote it
         if let Some(schema) = schema_name {
-            if dep == &schema {
+            if dep == schema {
                 continue;
             }
         }
@@ -453,8 +453,7 @@ mod tests {
         let count = header.matches("-- requires: c_kv\n").count();
         assert_eq!(
             count, 1,
-            "Schema dependency should appear exactly once, found {} occurrences",
-            count
+            "Schema dependency should appear exactly once, found {count} occurrences"
         );
 
         assert!(header.contains("-- name: c_kv.key_value"));

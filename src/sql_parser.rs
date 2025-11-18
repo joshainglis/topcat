@@ -1,6 +1,6 @@
 use log::{debug, warn};
 use regex::{Regex, RegexBuilder};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::sql_config::SqlDiscoveryConfig;
 
@@ -70,6 +70,10 @@ pub struct SqlAnalyzer {
     model_gen_patterns: Vec<Regex>,
     /// Regex for detecting implicit objects (CAST, OPERATOR)
     implicit_pattern: Regex,
+    /// Regex for matching type casts (::TYPE)
+    cast_pattern: Option<Regex>,
+    /// Pre-compiled patterns for model generation parameter extraction
+    model_gen_param_patterns: HashMap<String, Regex>,
     /// Config for transformations and mappings
     config: SqlDiscoveryConfig,
 }
@@ -136,11 +140,27 @@ impl SqlAnalyzer {
             .case_insensitive(true)
             .build()?;
 
+        // Pre-compile cast pattern if type mappings are configured
+        let cast_pattern = if !config.type_mappings.is_empty() {
+            Some(Regex::new(r"::(\w+)")?)
+        } else {
+            None
+        };
+
+        // Pre-compile model generation parameter patterns
+        let mut model_gen_param_patterns = HashMap::new();
+        for param_name in &["p_schema", "p_name"] {
+            let pattern = format!(r#"{param_name}\s*(?::=|=>)\s*['"]([^'"]+)['"]"#);
+            model_gen_param_patterns.insert(param_name.to_string(), Regex::new(&pattern)?);
+        }
+
         Ok(Self {
             dependency_pattern,
             create_pattern,
             model_gen_patterns,
             implicit_pattern,
+            cast_pattern,
+            model_gen_param_patterns,
             config,
         })
     }
@@ -254,12 +274,15 @@ impl SqlAnalyzer {
 
     /// Extract type cast dependencies (e.g., ::TSTZRANGE)
     fn extract_type_dependencies(&self, line: &str) -> Option<HashSet<String>> {
-        if self.config.type_mappings.is_empty() {
+        // Early return if no type mappings configured
+        let cast_pattern = self.cast_pattern.as_ref()?;
+
+        // Early return if line doesn't contain any casts
+        if !line.contains("::") {
             return None;
         }
 
         let mut deps = HashSet::new();
-        let cast_pattern = Regex::new(r"::(\w+)").ok()?;
 
         for captures in cast_pattern.captures_iter(line) {
             if let Some(type_name) = captures.get(1) {
@@ -276,8 +299,7 @@ impl SqlAnalyzer {
     /// Extract a parameter value from a model generation call
     /// Example: p_schema := 'c_tmf' -> returns "c_tmf"
     fn extract_model_gen_param(&self, line: &str, param_name: &str) -> Option<String> {
-        let pattern = format!(r#"{param_name}\s*(?::=|=>)\s*['"]([^'"]+)['"]"#);
-        let re = Regex::new(&pattern).ok()?;
+        let re = self.model_gen_param_patterns.get(param_name)?;
         re.captures(line)
             .and_then(|cap| cap.get(1))
             .map(|m| m.as_str().to_string())
