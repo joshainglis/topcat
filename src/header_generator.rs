@@ -28,6 +28,11 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
     // Add node name
     header.push_str(&format!("{cmt} name: {}\n", file_node.name));
 
+    // Add layer immediately after name (if not the default)
+    if (!file_node.layer.is_empty()) && (!file_node.layer_is_fallback) {
+        header.push_str(&format!("{cmt} layer: {}\n", file_node.layer));
+    }
+
     // Extract schema name for prioritized output (schema dependency always comes first)
     let schema_name = if file_node.name.contains('.') {
         file_node.name.split('.').next()
@@ -89,11 +94,6 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
     // Add implicit marker if set
     if file_node.implicit {
         header.push_str(&format!("{cmt} implicit\n"));
-    }
-
-    // Add layer if not the default
-    if (!file_node.layer.is_empty()) && (!file_node.layer_is_fallback) {
-        header.push_str(&format!("{cmt} layer: {}\n", file_node.layer));
     }
 
     // Add exists dependencies (only if not using soft_deps)

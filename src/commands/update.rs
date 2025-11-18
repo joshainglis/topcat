@@ -1,6 +1,7 @@
 use clap::Args;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use topcat::{
     cli::CommonArgs,
@@ -11,7 +12,8 @@ use topcat::{
     layer_mapper::LayerMapper,
     logging::{Logger, init_logging},
     settings::Settings,
-    sql_config,
+    soft_deps_matcher::SoftDepsMapper,
+    sql_config::{self, MergeStrategy},
     sql_parser::SqlAnalyzer,
 };
 
@@ -323,6 +325,17 @@ fn discover_files_without_graph(config: &config::Config) -> Result<Vec<FileNode>
         None
     };
 
+    // Create soft dependency mapper if patterns are configured
+    let soft_deps_mapper = if !config.sql_discovery.soft_deps_mappings.is_empty() {
+        let mapper =
+            SoftDepsMapper::new(&config.sql_discovery.soft_deps_mappings).map_err(|e| {
+                TopCatError::config_error(format!("Failed to create soft dependency mapper: {e}"))
+            })?;
+        Some(Rc::new(mapper))
+    } else {
+        None
+    };
+
     // Collect and filter files
     let files = collect_and_filter_files(config)?;
 
@@ -371,11 +384,6 @@ fn discover_files_without_graph(config: &config::Config) -> Result<Vec<FileNode>
 
             let analysis_result = analyzer.analyze(&content);
 
-            // Store discovered dependencies
-            if !analysis_result.dependencies.is_empty() {
-                file_node.discovered_deps = Some(analysis_result.dependencies);
-            }
-
             // Update node name if discovered (and not manual)
             if let Some(discovered_name) = analysis_result.node_name {
                 if !file_node.manual {
@@ -386,11 +394,44 @@ fn discover_files_without_graph(config: &config::Config) -> Result<Vec<FileNode>
                 }
             }
 
+            // Re-apply auto-mapping when using discovery-only strategy
+            // This ensures layers are updated based on discovered/current name, not stale headers
+            // We do this outside the node name update block so it always runs, even if the
+            // node name didn't change (e.g., header name matches discovered name)
+            if config.sql_discovery.merge_strategy == MergeStrategy::DiscoveryOnly
+                && !file_node.manual
+            {
+                if let Some(ref mapper) = layer_mapper {
+                    if let Some(mapped_layer) = mapper.map_node_to_layer(&file_node.name) {
+                        file_node.layer = mapped_layer;
+                        file_node.layer_is_fallback = false;
+                    }
+                }
+            }
+
+            // Clean up discovered dependencies: remove self-references and subobjects
+            let mut discovered_deps = analysis_result.dependencies;
+            discovered_deps.remove(&file_node.name);
+            for subobj in &analysis_result.subobjects {
+                discovered_deps.remove(subobj);
+            }
+
+            // Store discovered dependencies (after cleanup)
+            // IMPORTANT: Always set this, even if empty, so merge_dependencies can replace old deps
+            file_node.discovered_deps = Some(discovered_deps);
+
             // Set implicit flag
             file_node.implicit = analysis_result.has_implicit;
 
             // Merge discovered dependencies with header dependencies based on strategy
             file_node.merge_dependencies(config.sql_discovery.merge_strategy);
+        }
+
+        // Assign soft dependency mapper if configured and apply the mappings
+        if let Some(ref mapper) = soft_deps_mapper {
+            file_node.soft_deps_mapper = Some(Rc::clone(mapper));
+            // Apply the mappings to move matching deps from requires to exists
+            file_node.apply_soft_deps_mappings();
         }
 
         file_nodes.push(file_node);
