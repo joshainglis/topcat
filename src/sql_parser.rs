@@ -39,6 +39,8 @@ pub struct SqlAnalysisResult {
     pub dependencies: HashSet<String>,
     /// Sub-objects created in this file (to exclude from dependencies)
     pub subobjects: HashSet<String>,
+    /// Whether the file creates implicitly referenced objects (CAST, OPERATOR)
+    pub has_implicit: bool,
 }
 
 impl SqlAnalysisResult {
@@ -47,6 +49,7 @@ impl SqlAnalysisResult {
             node_name: None,
             dependencies: HashSet::new(),
             subobjects: HashSet::new(),
+            has_implicit: false,
         }
     }
 }
@@ -65,6 +68,8 @@ pub struct SqlAnalyzer {
     create_pattern: Regex,
     /// Regex for model generation patterns
     model_gen_patterns: Vec<Regex>,
+    /// Regex for detecting implicit objects (CAST, OPERATOR)
+    implicit_pattern: Regex,
     /// Config for transformations and mappings
     config: SqlDiscoveryConfig,
 }
@@ -126,10 +131,16 @@ impl SqlAnalyzer {
             })
             .collect();
 
+        // Pattern for detecting implicit objects (CREATE CAST or CREATE OPERATOR)
+        let implicit_pattern = RegexBuilder::new(r"^CREATE\s+(CAST|OPERATOR)\b")
+            .case_insensitive(true)
+            .build()?;
+
         Ok(Self {
             dependency_pattern,
             create_pattern,
             model_gen_patterns,
+            implicit_pattern,
             config,
         })
     }
@@ -199,6 +210,11 @@ impl SqlAnalyzer {
                 // Check for type cast dependencies
                 if let Some(type_deps) = self.extract_type_dependencies(clean_line) {
                     result.dependencies.extend(type_deps);
+                }
+
+                // Check for implicit objects (CREATE CAST, CREATE OPERATOR)
+                if self.implicit_pattern.is_match(clean_line.trim()) {
+                    result.has_implicit = true;
                 }
             }
         }
@@ -526,6 +542,80 @@ $$ LANGUAGE plpgsql;
             result.dependencies.contains("c_test"),
             "Should have implicit dependency on c_test schema, got {:?}",
             result.dependencies
+        );
+    }
+
+    #[test]
+    fn test_create_cast_detection() {
+        let config = make_simple_config();
+        let analyzer = SqlAnalyzer::new(config).unwrap();
+
+        let sql = r#"
+CREATE CAST (text AS c_test.my_type)
+WITH FUNCTION c_test.text_to_my_type(text);
+"#;
+        let result = analyzer.analyze(sql);
+
+        assert!(
+            result.has_implicit,
+            "Should detect CREATE CAST as implicit object"
+        );
+    }
+
+    #[test]
+    fn test_create_operator_detection() {
+        let config = make_simple_config();
+        let analyzer = SqlAnalyzer::new(config).unwrap();
+
+        let sql = r#"
+CREATE OPERATOR === (
+    LEFTARG = text,
+    RIGHTARG = text,
+    FUNCTION = texteq
+);
+"#;
+        let result = analyzer.analyze(sql);
+
+        assert!(
+            result.has_implicit,
+            "Should detect CREATE OPERATOR as implicit object"
+        );
+    }
+
+    #[test]
+    fn test_create_cast_case_insensitive() {
+        let config = make_simple_config();
+        let analyzer = SqlAnalyzer::new(config).unwrap();
+
+        // Test with lowercase
+        let sql_lower = "create cast (text as c_test.my_type) with function c_test.converter;";
+        let result_lower = analyzer.analyze(sql_lower);
+        assert!(
+            result_lower.has_implicit,
+            "Should detect lowercase CREATE CAST"
+        );
+
+        // Test with mixed case
+        let sql_mixed = "Create Cast (text as c_test.my_type) With Function c_test.converter;";
+        let result_mixed = analyzer.analyze(sql_mixed);
+        assert!(
+            result_mixed.has_implicit,
+            "Should detect mixed case CREATE CAST"
+        );
+    }
+
+    #[test]
+    fn test_no_implicit_for_regular_create() {
+        let config = make_simple_config();
+        let analyzer = SqlAnalyzer::new(config).unwrap();
+
+        // Regular CREATE TABLE should not be marked as implicit
+        let sql = "CREATE TABLE c_test.my_table (id INT);";
+        let result = analyzer.analyze(sql);
+
+        assert!(
+            !result.has_implicit,
+            "Regular CREATE TABLE should not be marked as implicit"
         );
     }
 }

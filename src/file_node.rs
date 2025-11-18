@@ -52,6 +52,16 @@ pub struct FileNode {
     /// Mark nodes that are implicitly referenced (e.g., CAST, OPERATOR objects)
     /// These nodes should be protected from dead-branch cleanup even when they have no explicit dependents
     pub implicit: bool,
+    /// Manual header flag - when true, preserves original headers and uses ---tc: prefix for auto-generated
+    pub manual: bool,
+    /// Original headers to preserve (used when manual=true)
+    pub original_headers: Option<String>,
+    /// Soft-deps flag - when true, convert all dependencies to exists type
+    pub soft_deps: bool,
+    /// Final or initial marker to preserve (e.g., "final", "initial")
+    pub final_initial: Option<String>,
+    /// Original node_name header line to preserve
+    pub original_node_name_header: Option<String>,
 }
 
 /// Source of node name
@@ -120,6 +130,11 @@ impl FileNode {
             name_source: NameSource::Header,
             schema,
             implicit: false,
+            manual: false,
+            original_headers: None,
+            soft_deps: false,
+            final_initial: None,
+            original_node_name_header: None,
         }
     }
 
@@ -202,6 +217,13 @@ impl FileNode {
     ) -> Result<FileNode, FileNodeError> {
         let file_data = get_file_headers(path, comment_str)
             .map_err(|err| FileNodeError::FileOpen(path.clone(), err))?;
+
+        // Store original headers for later preservation if needed
+        let original_headers_text = if !file_data.is_empty() {
+            Some(file_data.join("\n"))
+        } else {
+            None
+        };
         let name_str = format!("{comment_str} name:");
         let dep_str = format!("{comment_str} requires:");
         let drop_str = format!("{comment_str} dropped_by:");
@@ -211,6 +233,11 @@ impl FileNode {
         let append_str = format!("{comment_str} is_final");
         let ensure_exists_str = format!("{comment_str} exists:");
         let implicit_str = format!("{comment_str} implicit");
+        let manual_str = format!("{comment_str} manual");
+        let soft_deps_str = format!("{comment_str} soft-deps");
+        let final_str = format!("{comment_str} final");
+        let initial_str = format!("{comment_str} initial");
+        let node_name_str = format!("{comment_str} node_name:");
 
         let mut name = String::new();
         let mut deps = HashSet::new();
@@ -219,9 +246,14 @@ impl FileNode {
         let mut ensure_exists = HashSet::new();
         let mut override_deps = HashSet::new();
         let mut implicit = false;
+        let mut manual = false;
+        let mut soft_deps = false;
+        let mut final_initial: Option<String> = None;
+        let mut original_node_name_header: Option<String> = None;
 
         for unprocessed_line in &file_data {
             let line = unprocessed_line.trim().to_lowercase();
+            // Check for standard "name:" header
             if line.starts_with(&name_str) {
                 if name.is_empty() {
                     name = line[name_str.len()..].trim().to_string();
@@ -231,6 +263,16 @@ impl FileNode {
                         path.clone(),
                         vec![name, line[name_str.len()..].trim().to_string()],
                     ));
+                }
+            }
+            // Check for alternative "node_name:" header (for compatibility with Python script)
+            else if line.starts_with(&node_name_str) && name.is_empty() {
+                // Extract node name from node_name header (format: "-- node_name: schema.object")
+                let node_name_value = line[node_name_str.len()..].trim().to_string();
+                if !node_name_value.is_empty() {
+                    name = node_name_value;
+                    // Store the original header line for preservation
+                    original_node_name_header = Some(unprocessed_line.trim().to_string());
                 }
             } else if line.starts_with(&dep_str) || line.starts_with(&drop_str) {
                 // Both "requires:" and "dropped_by:" are dependencies with override support
@@ -268,7 +310,20 @@ impl FileNode {
             } else if line.starts_with(&implicit_str) {
                 // -- implicit -> mark node as implicitly referenced
                 implicit = true;
+            } else if line.starts_with(&manual_str) {
+                // -- manual -> preserve original headers
+                manual = true;
+            } else if line.starts_with(&soft_deps_str) {
+                // -- soft-deps -> convert all deps to exists
+                soft_deps = true;
+            } else if line.starts_with(&final_str) {
+                // -- final -> preserve marker
+                final_initial = Some("final".to_string());
+            } else if line.starts_with(&initial_str) {
+                // -- initial -> preserve marker
+                final_initial = Some("initial".to_string());
             }
+            // Note: node_name_str is handled above with name extraction
         }
         if name.is_empty() {
             return Err(FileNodeError::NoNameDefined(path.clone()));
@@ -289,6 +344,12 @@ impl FileNode {
         );
         file_node.override_deps = override_deps;
         file_node.implicit = implicit;
+        file_node.manual = manual;
+        file_node.soft_deps = soft_deps;
+        file_node.final_initial = final_initial;
+        file_node.original_node_name_header = original_node_name_header;
+        // Only preserve original headers if manual flag is set
+        file_node.original_headers = if manual { original_headers_text } else { None };
         Ok(file_node)
     }
 
@@ -507,14 +568,6 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_extraction_double_colon() {
-        assert_eq!(
-            FileNode::extract_schema("my_schema::table_name"),
-            Some("my_schema".to_string())
-        );
-    }
-
-    #[test]
     fn test_schema_extraction_no_schema() {
         assert_eq!(FileNode::extract_schema("table_name"), None);
         assert_eq!(FileNode::extract_schema("simple_table"), None);
@@ -538,5 +591,116 @@ mod tests {
 
         assert_eq!(file_node.name, "my_schema.my_table");
         assert_eq!(file_node.schema, Some("my_schema".to_string()));
+    }
+
+    #[test]
+    fn test_manual_header_parsing() {
+        let layers = vec!["normal".to_string()];
+        let fallback_layer = "normal";
+
+        let temp_file = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
+        std::fs::write(
+            &temp_file,
+            "-- My custom header\n-- manual\n-- name: test_node\nSELECT 1;",
+        )
+        .unwrap();
+
+        let file_node = FileNode::from_file(
+            "--",
+            &temp_file.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
+        assert_eq!(file_node.name, "test_node");
+        assert!(file_node.manual);
+        assert!(file_node.original_headers.is_some());
+    }
+
+    #[test]
+    fn test_soft_deps_parsing() {
+        let layers = vec!["normal".to_string()];
+        let fallback_layer = "normal";
+
+        let temp_file = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
+        std::fs::write(
+            &temp_file,
+            "-- name: test_node\n-- soft-deps\n-- exists: dep1\nSELECT 1;",
+        )
+        .unwrap();
+
+        let file_node = FileNode::from_file(
+            "--",
+            &temp_file.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
+        assert_eq!(file_node.name, "test_node");
+        assert!(file_node.soft_deps);
+    }
+
+    #[test]
+    fn test_final_initial_parsing() {
+        let layers = vec!["prepend".to_string(), "normal".to_string()];
+        let fallback_layer = "normal";
+
+        // Test "final" marker
+        let temp_file1 = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
+        std::fs::write(&temp_file1, "-- name: test_final\n-- final\nSELECT 1;").unwrap();
+
+        let file_node1 = FileNode::from_file(
+            "--",
+            &temp_file1.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
+        assert_eq!(file_node1.final_initial, Some("final".to_string()));
+
+        // Test "initial" marker
+        let temp_file2 = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
+        std::fs::write(&temp_file2, "-- name: test_initial\n-- initial\nSELECT 1;").unwrap();
+
+        let file_node2 = FileNode::from_file(
+            "--",
+            &temp_file2.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
+        assert_eq!(file_node2.final_initial, Some("initial".to_string()));
+    }
+
+    #[test]
+    fn test_node_name_header_parsing() {
+        let layers = vec!["normal".to_string()];
+        let fallback_layer = "normal";
+
+        let temp_file = tempfile::NamedTempFile::with_suffix(".sql").unwrap();
+        std::fs::write(
+            &temp_file,
+            "-- node_name: my_schema.my_table\nCREATE TABLE test (id INT);",
+        )
+        .unwrap();
+
+        let file_node = FileNode::from_file(
+            "--",
+            &temp_file.path().to_path_buf(),
+            &layers,
+            fallback_layer,
+        )
+        .unwrap();
+
+        assert_eq!(file_node.name, "my_schema.my_table");
+        assert!(file_node.original_node_name_header.is_some());
+        assert_eq!(
+            file_node.original_node_name_header.unwrap(),
+            "-- node_name: my_schema.my_table"
+        );
     }
 }

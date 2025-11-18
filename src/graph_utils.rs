@@ -248,6 +248,11 @@ mod tests {
                 override_deps: HashSet::new(),
                 name_source: NameSource::Header,
                 implicit: false,
+                manual: false,
+                original_headers: None,
+                soft_deps: false,
+                final_initial: None,
+                original_node_name_header: None,
             },
             FileNode {
                 name: "node2".to_string(),
@@ -261,6 +266,11 @@ mod tests {
                 override_deps: HashSet::new(),
                 name_source: NameSource::Header,
                 implicit: false,
+                manual: false,
+                original_headers: None,
+                soft_deps: false,
+                final_initial: None,
+                original_node_name_header: None,
             },
             FileNode {
                 name: "node3".to_string(),
@@ -274,6 +284,11 @@ mod tests {
                 override_deps: HashSet::new(),
                 name_source: NameSource::Header,
                 implicit: false,
+                manual: false,
+                original_headers: None,
+                soft_deps: false,
+                final_initial: None,
+                original_node_name_header: None,
             },
         ]
     }

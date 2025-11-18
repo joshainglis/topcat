@@ -151,14 +151,24 @@ pub(super) fn perform_sql_discovery(
     // Store the discovered dependencies
     file_node.discovered_deps = Some(discovered_deps);
 
+    // Set implicit flag if CREATE CAST/OPERATOR was detected
+    if analysis.has_implicit {
+        file_node.implicit = true;
+    }
+
     debug!(
-        "SQL discovery for {:?}: discovered {} dependencies",
+        "SQL discovery for {:?}: discovered {} dependencies{}",
         file_node.path,
         file_node
             .discovered_deps
             .as_ref()
             .map(|d| d.len())
-            .unwrap_or(0)
+            .unwrap_or(0),
+        if file_node.implicit {
+            " (implicit)"
+        } else {
+            ""
+        }
     );
 
     Ok(())

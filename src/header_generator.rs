@@ -10,43 +10,81 @@ use crate::sql_config::HeaderUpdateMode;
 pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
     let mut header = String::new();
 
-    // Add node name
-    header.push_str(&format!("{comment_str} name: {}\n", file_node.name));
+    // Preserve original manual headers if manual flag is set
+    if file_node.manual {
+        if let Some(ref original_headers) = file_node.original_headers {
+            header.push_str(original_headers);
+            header.push_str("\n\n");
+        }
+    }
 
-    // // Add schema requirement for object nodes (not schema nodes)
-    // if file_node.name.contains('.') {
-    //     let schema_name = file_node
-    //         .name
-    //         .split('.')
-    //         .next()
-    //         .expect("split() always returns at least one element");
-    //     header.push_str(&format!("{comment_str} requires: {schema_name}\n"));
-    // }
+    // Determine comment prefix based on manual flag
+    let cmt = if file_node.manual {
+        "---tc:"
+    } else {
+        comment_str
+    };
+
+    // Add node name
+    header.push_str(&format!("{cmt} name: {}\n", file_node.name));
+
+    // Note: Schema dependency is already included in deps via sql_parser.rs implicit schema dependency
+    // No need to add it explicitly here to avoid duplicates
+
+    // Determine dependency type based on soft_deps flag
+    let dep_type = if file_node.soft_deps {
+        "exists"
+    } else {
+        "requires"
+    };
 
     // Add dependencies (sorted for consistency)
     let mut deps: Vec<_> = file_node.deps.iter().collect();
     deps.sort();
     for dep in deps {
-        header.push_str(&format!("{comment_str} requires: {dep}\n"));
+        header.push_str(&format!("{cmt} {dep_type}: {dep}\n"));
     }
 
     // Add override dependencies (with ! prefix)
+    // Override deps always use "requires" even with soft_deps
     let mut override_deps: Vec<_> = file_node.override_deps.iter().collect();
     override_deps.sort();
     for dep in override_deps {
-        header.push_str(&format!("{comment_str} requires: !{dep}\n"));
+        header.push_str(&format!("{cmt} requires: !{dep}\n"));
+    }
+
+    // Add soft-deps marker if set
+    if file_node.soft_deps {
+        header.push_str(&format!("{cmt} soft-deps\n"));
+    }
+
+    // Add final/initial marker if present
+    if let Some(ref final_initial) = file_node.final_initial {
+        header.push_str(&format!("{cmt} {final_initial}\n"));
+    }
+
+    // Add implicit marker if set
+    if file_node.implicit {
+        header.push_str(&format!("{cmt} implicit\n"));
     }
 
     // Add layer if not the default
     if (!file_node.layer.is_empty()) && (!file_node.layer_is_fallback) {
-        header.push_str(&format!("{comment_str} layer: {}\n", file_node.layer));
+        header.push_str(&format!("{cmt} layer: {}\n", file_node.layer));
     }
 
-    // Add exists dependencies
-    let mut exists: Vec<_> = file_node.ensure_exists.iter().collect();
-    exists.sort();
-    for exist in exists {
-        header.push_str(&format!("{comment_str} exists: {exist}\n"));
+    // Add exists dependencies (only if not using soft_deps)
+    if !file_node.soft_deps {
+        let mut exists: Vec<_> = file_node.ensure_exists.iter().collect();
+        exists.sort();
+        for exist in exists {
+            header.push_str(&format!("{cmt} exists: {exist}\n"));
+        }
+    }
+
+    // Preserve original node_name header if present
+    if let Some(ref node_name_header) = file_node.original_node_name_header {
+        header.push_str(&format!("{}\n", node_name_header.trim()));
     }
 
     header
@@ -314,8 +352,8 @@ fn find_content_start(content: &str, comment_str: &str) -> usize {
     for line in content.lines() {
         let trimmed = line.trim();
 
-        // Skip header comment lines and empty lines
-        if trimmed.starts_with(comment_str) || trimmed.is_empty() {
+        // Skip header comment lines (including ---tc: prefix), and empty lines
+        if trimmed.starts_with(comment_str) || trimmed.starts_with("---tc:") || trimmed.is_empty() {
             offset += line.len() + 1; // +1 for newline
         } else {
             // Found first non-header line
@@ -339,6 +377,7 @@ mod tests {
             "test_schema.test_table".to_string(),
             PathBuf::from("/tmp/test.sql"),
             HashSet::from([
+                "test_schema".to_string(), // Schema dependency (added by sql_parser.rs in real usage)
                 "test_schema.dep1".to_string(),
                 "test_schema.dep2".to_string(),
             ]),
@@ -374,6 +413,34 @@ mod tests {
         assert!(header.contains("-- name: test_schema.test_table"));
         assert!(header.contains("-- requires: test_schema.dep1"));
         assert!(header.contains("-- requires: !test_schema.override_dep"));
+    }
+
+    #[test]
+    fn test_no_duplicate_schema_dependency() {
+        // Test that schema dependency is only listed once (not duplicated)
+        let file_node = FileNode::new(
+            "c_kv.key_value".to_string(),
+            PathBuf::from("/tmp/test.sql"),
+            HashSet::from([
+                "c_kv".to_string(), // Schema dependency (added by sql_parser.rs)
+            ]),
+            "normal".to_string(),
+            true,
+            HashSet::new(),
+        );
+
+        let header = generate_header(&file_node, "--");
+
+        // Count occurrences of "-- requires: c_kv"
+        let count = header.matches("-- requires: c_kv\n").count();
+        assert_eq!(
+            count, 1,
+            "Schema dependency should appear exactly once, found {} occurrences",
+            count
+        );
+
+        assert!(header.contains("-- name: c_kv.key_value"));
+        assert!(header.contains("-- requires: c_kv\n"));
     }
 
     #[test]
