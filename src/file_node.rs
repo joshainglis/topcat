@@ -127,20 +127,9 @@ impl FileNode {
     /// Supports patterns like "schema.table", "schema_table", "schema::table"
     /// Returns None if no schema pattern is detected
     pub fn extract_schema(name: &str) -> Option<String> {
-        // Try common separators: ".", "_", "::"
-        // Priority: dot (.) is most common in SQL
         if let Some(idx) = name.find('.') {
             return Some(name[..idx].to_string());
         }
-
-        // PostgreSQL-style :: separator
-        if let Some(idx) = name.find("::") {
-            return Some(name[..idx].to_string());
-        }
-
-        // Underscore separator - only if it looks like schema_table pattern
-        // We'll be conservative here and not assume all underscores are schema separators
-        // This would require more context or configuration
 
         None
     }
