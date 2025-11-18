@@ -44,6 +44,14 @@ pub struct SqlDiscoveryConfig {
     /// How to merge discovered dependencies with manual ones
     #[serde(default)]
     pub merge_strategy: MergeStrategy,
+
+    /// Soft dependency mappings for automatic conversion from `requires` to `exists`
+    /// Maps node name regex patterns to dependency name regex patterns.
+    /// Both patterns must match (AND logic) for conversion to occur.
+    /// Example: {"^codegen_tmf\\b": "^c_tmf\\b"} converts c_tmf.* dependencies
+    /// to `exists` for nodes in codegen_tmf schema
+    #[serde(default)]
+    pub soft_deps_mappings: IndexMap<String, String>,
 }
 
 impl Default for SqlDiscoveryConfig {
@@ -57,6 +65,7 @@ impl Default for SqlDiscoveryConfig {
             strip_suffixes: Vec::new(),
             model_gen_patterns: Vec::new(),
             merge_strategy: MergeStrategy::DiscoveryOnly,
+            soft_deps_mappings: IndexMap::new(),
         }
     }
 }
@@ -257,6 +266,11 @@ impl TopcatConfig {
         }
         if overrides.merge_strategy != MergeStrategy::default() {
             self.sql_discovery.merge_strategy = overrides.merge_strategy;
+        }
+        if !overrides.soft_deps_mappings.is_empty() {
+            self.sql_discovery
+                .soft_deps_mappings
+                .extend(overrides.soft_deps_mappings.clone());
         }
         self
     }

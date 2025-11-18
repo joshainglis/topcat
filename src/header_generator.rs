@@ -35,15 +35,9 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
         None
     };
 
-    // Determine dependency type based on soft_deps flag
-    let dep_type = if file_node.soft_deps {
-        "exists"
-    } else {
-        "requires"
-    };
-
     // Add schema dependency first (if it exists in deps)
     // This matches Python behavior: schema always comes before other deps
+    // Schema dependency is always "requires" (never converted to exists)
     if let Some(schema) = schema_name {
         if file_node.deps.contains(schema) {
             header.push_str(&format!("{cmt} requires: {schema}\n"));
@@ -51,6 +45,7 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
     }
 
     // Add remaining dependencies (sorted, excluding schema which we already added)
+    // Determine type individually based on soft_deps flag and pattern matching
     let mut deps: Vec<_> = file_node.deps.iter().collect();
     deps.sort();
     for dep in deps {
@@ -60,6 +55,16 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
                 continue;
             }
         }
+
+        // Determine dependency type:
+        // 1. If soft_deps is true, ALL dependencies use "exists"
+        // 2. Otherwise, check if this specific dependency should be converted
+        let dep_type = if file_node.soft_deps || file_node.should_convert_dep_to_exists(dep) {
+            "exists"
+        } else {
+            "requires"
+        };
+
         header.push_str(&format!("{cmt} {dep_type}: {dep}\n"));
     }
 

@@ -212,6 +212,7 @@ pub mod output;
 pub mod platform;
 pub mod schema_utils;
 pub mod settings;
+pub mod soft_deps_matcher;
 pub mod sql_config;
 
 mod io_utils;

@@ -11,6 +11,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use crate::exceptions::TopCatError;
 use crate::file_node::FileNode;
 use crate::layer_mapper::LayerMapper;
+use crate::soft_deps_matcher::SoftDepsMapper;
 use crate::sql_parser::SqlAnalyzer;
 use crate::stable_topo::StableTopo;
 use crate::{config, io_utils};
@@ -135,6 +136,19 @@ impl TCGraph {
             None
         };
 
+        // Create soft dependency mapper if patterns are configured
+        let soft_deps_mapper = if !self.sql_discovery.soft_deps_mappings.is_empty() {
+            let mapper =
+                SoftDepsMapper::new(&self.sql_discovery.soft_deps_mappings).map_err(|e| {
+                    TopCatError::ConfigError(format!(
+                        "Failed to create soft dependency mapper: {e}"
+                    ))
+                })?;
+            Some(Rc::new(mapper))
+        } else {
+            None
+        };
+
         for file in filtered_files {
             let mut file_node = match FileNode::from_file(
                 &self.comment_str,
@@ -161,6 +175,13 @@ impl TCGraph {
                         info!("SQL discovery failed for {:?}: {}", file_node.path, e);
                     }
                 }
+            }
+
+            // Assign soft dependency mapper if configured and apply the mappings
+            if let Some(ref mapper) = soft_deps_mapper {
+                file_node.soft_deps_mapper = Some(Rc::clone(mapper));
+                // Apply the mappings to move matching deps from requires to exists
+                file_node.apply_soft_deps_mappings();
             }
 
             if let Some(other_path) = self.name_map.get(&file_node.name) {

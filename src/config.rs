@@ -66,6 +66,7 @@ use std::path::PathBuf;
 ///     strip_suffixes: Vec::new(),
 ///     model_gen_patterns: Vec::new(),
 ///     merge_strategy: Default::default(),
+///     soft_deps_mappings: indexmap::IndexMap::new(),
 /// };
 ///
 /// let config = Config {

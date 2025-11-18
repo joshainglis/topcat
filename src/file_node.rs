@@ -6,8 +6,10 @@ use std::hash::{Hash, Hasher};
 use std::io;
 use std::io::BufRead;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use crate::exceptions::FileNodeError;
+use crate::soft_deps_matcher::SoftDepsMapper;
 
 fn get_file_headers(path: &PathBuf, comment_str: &str) -> io::Result<Vec<String>> {
     let file = File::open(path)?;
@@ -58,6 +60,9 @@ pub struct FileNode {
     pub original_headers: Option<String>,
     /// Soft-deps flag - when true, convert all dependencies to exists type
     pub soft_deps: bool,
+    /// Soft dependency mapper for selective conversion of dependencies to exists type
+    /// based on node name and dependency name patterns
+    pub soft_deps_mapper: Option<Rc<SoftDepsMapper>>,
     /// Final or initial marker to preserve (e.g., "final", "initial")
     pub final_initial: Option<String>,
     /// Original node_name header line to preserve
@@ -133,6 +138,7 @@ impl FileNode {
             manual: false,
             original_headers: None,
             soft_deps: false,
+            soft_deps_mapper: None,
             final_initial: None,
             original_node_name_header: None,
         }
@@ -147,6 +153,98 @@ impl FileNode {
         }
 
         None
+    }
+
+    /// Check if a dependency should be converted from `requires` to `exists`
+    /// based on the configured soft dependency mapper patterns.
+    ///
+    /// # Arguments
+    /// * `dep` - The name of the dependency to check
+    ///
+    /// # Returns
+    /// `true` if the dependency should be converted to `exists`, `false` otherwise
+    ///
+    /// # Example
+    /// ```
+    /// use topcat::file_node::FileNode;
+    /// use topcat::soft_deps_matcher::SoftDepsMapper;
+    /// use indexmap::IndexMap;
+    /// use std::path::PathBuf;
+    /// use std::collections::HashSet;
+    /// use std::rc::Rc;
+    ///
+    /// let mut node = FileNode::new(
+    ///     "codegen_tmf.util_func".to_string(),
+    ///     PathBuf::from("test.sql"),
+    ///     HashSet::new(),
+    ///     "normal".to_string(),
+    ///     false,
+    ///     HashSet::new(),
+    /// );
+    ///
+    /// let mut mappings = IndexMap::new();
+    /// mappings.insert(r"^codegen_tmf\b".to_string(), r"^c_tmf\b".to_string());
+    /// let mapper = SoftDepsMapper::new(&mappings).unwrap();
+    /// node.soft_deps_mapper = Some(Rc::new(mapper));
+    ///
+    /// // This dependency should be converted
+    /// assert!(node.should_convert_dep_to_exists("c_tmf.ta_headers"));
+    /// // This dependency should not be converted
+    /// assert!(!node.should_convert_dep_to_exists("md_tmf.table"));
+    /// ```
+    pub fn should_convert_dep_to_exists(&self, dep: &str) -> bool {
+        if let Some(ref mapper) = self.soft_deps_mapper {
+            mapper.should_convert(&self.name, dep)
+        } else {
+            false
+        }
+    }
+
+    /// Apply soft dependency mappings to convert matching dependencies from `requires` to `exists`.
+    /// This moves dependencies from `deps` to `ensure_exists` based on the configured patterns.
+    ///
+    /// This should be called after dependency discovery and merging, but before graph validation.
+    ///
+    /// **Note**: By default, this will convert ALL dependencies that match the pattern, including
+    /// schema dependencies. The node's own schema dependency is skipped to prevent self-dependency
+    /// conversion.
+    pub fn apply_soft_deps_mappings(&mut self) {
+        if let Some(ref mapper) = self.soft_deps_mapper {
+            // Extract this node's schema name if present (to skip self-schema dependency)
+            let own_schema = if self.name.contains('.') {
+                self.name.split('.').next()
+            } else {
+                None
+            };
+
+            // Find all dependencies that should be converted
+            let deps_to_convert: Vec<String> = self
+                .deps
+                .iter()
+                .filter(|dep| {
+                    // Skip this node's own schema dependency (e.g., codegen_tmf.func depending on codegen_tmf)
+                    if let Some(schema) = own_schema {
+                        if dep.as_str() == schema {
+                            log::trace!("Skipping own schema dependency: {} -> {}", self.name, dep);
+                            return false;
+                        }
+                    }
+                    // Check if pattern matches
+                    let should_convert = mapper.should_convert(&self.name, dep);
+                    if should_convert {
+                        log::debug!("Converting dependency to exists: {} -> {}", self.name, dep);
+                    }
+                    should_convert
+                })
+                .cloned()
+                .collect();
+
+            // Move them from deps to ensure_exists
+            for dep in deps_to_convert {
+                self.deps.remove(&dep);
+                self.ensure_exists.insert(dep);
+            }
+        }
     }
 
     /// Calculate suggested filename from node name

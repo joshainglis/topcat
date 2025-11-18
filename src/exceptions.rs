@@ -40,13 +40,14 @@ impl fmt::Display for TopCatError {
                 "MissingExist: {x} expects {s} to exist but it is not found"
             ),
             Self::MissingDependency(x, s) => {
-                write!(f, "MissingDependency: {x} depends on {s} but it is missing")
+                write!(f, "MissingDependency: {s} depends on {x} but it is missing")
             }
             Self::InvalidDependency(x, s) => write!(f, "InvalidDependency: {x}: {s}"),
             Self::CyclicDependency(x) => {
                 let mut error_message = "Cyclic dependency detected:\n".to_string();
                 for (i, cycle) in x.iter().enumerate() {
                     error_message.push_str(&format!("  Cycle {}:\n", i + 1));
+                    #[allow(clippy::mutable_key_type)]
                     let cycle_participants: HashSet<FileNode> = cycle.iter().cloned().collect();
                     error_message.push_str("    Participants:\n");
                     for participant in cycle_participants {
