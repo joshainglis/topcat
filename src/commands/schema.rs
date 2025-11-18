@@ -101,6 +101,7 @@ impl SchemaArgs {
             settings.formatting.comment_str.clone(),
             settings.layers.names.clone(),
             fallback_layer,
+            &settings.layers.auto_mapping,
             settings.sql_discovery.clone(),
             None, // schema_filter_prefixes (not used for schema command)
         )

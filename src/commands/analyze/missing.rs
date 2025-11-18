@@ -81,6 +81,7 @@ pub fn analyze(
         subdir_filter: None,
         layers: settings.layers.names.clone(),
         fallback_layer: settings.layers.fallback.clone(),
+        auto_mapping: &settings.layers.auto_mapping,
         sql_discovery: settings.sql_discovery.clone(),
         header_update_mode: sql_config::HeaderUpdateMode::Never,
         header_output_dir: None,

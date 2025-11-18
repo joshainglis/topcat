@@ -137,6 +137,7 @@ pub fn build_graph(
     comment_str: String,
     layers: Vec<String>,
     fallback_layer: String,
+    auto_mapping: &indexmap::IndexMap<String, String>,
     sql_discovery: sql_config::SqlDiscoveryConfig,
     schema_filter_prefixes: Option<Vec<String>>,
 ) -> Result<TCGraph, TopCatError> {
@@ -158,6 +159,7 @@ pub fn build_graph(
         subdir_filter: None,
         layers,
         fallback_layer,
+        auto_mapping,
         sql_discovery,
         header_update_mode: sql_config::HeaderUpdateMode::Never,
         header_output_dir: None,
@@ -257,6 +259,7 @@ pub fn build_graph_from_settings(
         settings.formatting.comment_str.clone(),
         settings.layers.names.clone(),
         fallback_layer,
+        &settings.layers.auto_mapping,
         settings.sql_discovery.clone(),
         include_node_prefixes,
     )

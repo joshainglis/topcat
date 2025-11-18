@@ -214,6 +214,7 @@ impl FileNode {
         path: &PathBuf,
         layers: &[String],
         fallback_layer: &str,
+        layer_mapper: Option<&crate::layer_mapper::LayerMapper>,
     ) -> Result<FileNode, FileNodeError> {
         let file_data = get_file_headers(path, comment_str)
             .map_err(|err| FileNodeError::FileOpen(path.clone(), err))?;
@@ -329,6 +330,19 @@ impl FileNode {
             return Err(FileNodeError::NoNameDefined(path.clone()));
         }
 
+        // Apply automatic layer mapping if:
+        // 1. Layer is still at fallback (no explicit layer header)
+        // 2. Layer mapper is configured
+        // 3. Node name matches a pattern
+        if layer_is_fallback {
+            if let Some(mapper) = layer_mapper {
+                if let Some(mapped_layer) = mapper.map_node_to_layer(&name) {
+                    layer = mapped_layer;
+                    layer_is_fallback = false;
+                }
+            }
+        }
+
         // Validate that the declared layer exists in the configured layers
         if !layers.contains(&layer) {
             return Err(FileNodeError::InvalidLayer(path.clone(), layer));
@@ -426,6 +440,7 @@ mod tests {
             &temp_file.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 
@@ -450,6 +465,7 @@ mod tests {
             &temp_file.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 
@@ -474,6 +490,7 @@ mod tests {
             &temp_file.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 
@@ -498,6 +515,7 @@ mod tests {
             &temp_file.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 
@@ -522,6 +540,7 @@ mod tests {
             &temp_file.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         );
 
         assert!(result.is_err());
@@ -544,6 +563,7 @@ mod tests {
             &temp_file.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 
@@ -586,6 +606,7 @@ mod tests {
             &temp_file.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 
@@ -610,6 +631,7 @@ mod tests {
             &temp_file.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 
@@ -635,6 +657,7 @@ mod tests {
             &temp_file.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 
@@ -656,6 +679,7 @@ mod tests {
             &temp_file1.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 
@@ -670,6 +694,7 @@ mod tests {
             &temp_file2.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 
@@ -693,6 +718,7 @@ mod tests {
             &temp_file.path().to_path_buf(),
             &layers,
             fallback_layer,
+            None,
         )
         .unwrap();
 

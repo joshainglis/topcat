@@ -48,6 +48,7 @@ fn build_test_graph(dir: &TempDir) -> TCGraph {
         subdir_filter: None,
         layers: vec!["normal".to_string()],
         fallback_layer: "normal".to_string(),
+        auto_mapping: &indexmap::IndexMap::new(),
         sql_discovery: SqlDiscoveryConfig::default(),
         header_update_mode: topcat::sql_config::HeaderUpdateMode::Never,
         header_output_dir: None,

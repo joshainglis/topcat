@@ -46,6 +46,7 @@ rayon = { version = "1.10" }
 comfy-table = { version = "7.1" }
 chrono = { version = "0.4" }
 quick-xml = { version = "0.38", features = ["serialize"] }
+indexmap = { version = "2.12", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = { version = "3.23.0" }

@@ -1,4 +1,5 @@
 use crate::sql_config::{HeaderUpdateMode, SqlDiscoveryConfig};
+use indexmap::IndexMap;
 use std::path::PathBuf;
 
 /// Configuration for building and analyzing a dependency graph.
@@ -42,6 +43,7 @@ use std::path::PathBuf;
 ///     subdir_filter: None,
 ///     layers: vec!["prepend".to_string(), "normal".to_string(), "append".to_string()],
 ///     fallback_layer: "normal".to_string(),
+///     auto_mapping: &indexmap::IndexMap::new(),
 ///     sql_discovery: SqlDiscoveryConfig::default(),
 ///     header_update_mode: HeaderUpdateMode::Never,
 ///     header_output_dir: None,
@@ -86,6 +88,7 @@ use std::path::PathBuf;
 /// #   subdir_filter: None,
 /// #   layers: vec!["prepend".to_string(), "normal".to_string(), "append".to_string()],
 /// #   fallback_layer: "normal".to_string(),
+///     auto_mapping: &indexmap::IndexMap::new(),
 /// #   header_update_mode: HeaderUpdateMode::Never,
 /// #   header_output_dir: None,
 /// };
@@ -116,6 +119,7 @@ use std::path::PathBuf;
 /// #   exclude_node_prefixes: None,
 /// #   include_hidden: false,
 /// #   subdir_filter: None,
+/// #   auto_mapping: &indexmap::IndexMap::new(),
 /// #   sql_discovery: SqlDiscoveryConfig::default(),
 /// #   header_update_mode: HeaderUpdateMode::Never,
 /// #   header_output_dir: None,
@@ -208,6 +212,13 @@ pub struct Config<'a> {
     ///
     /// Must be one of the layers defined in the `layers` field.
     pub fallback_layer: String,
+
+    /// Automatic layer mapping based on node name regex patterns.
+    ///
+    /// Maps regex patterns to layer names. Patterns are evaluated in order,
+    /// first match wins. Example: `{"^\\w+\\.grants$": "grants"}`
+    /// Only applied when no explicit layer header is present.
+    pub auto_mapping: &'a IndexMap<String, String>,
 
     /// SQL dependency discovery configuration.
     ///

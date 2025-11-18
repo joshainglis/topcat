@@ -99,6 +99,7 @@ impl TCGraph {
             layer_index_maps: HashMap::new(),
             layers: self.layers.clone(),
             fallback_layer: self.fallback_layer.clone(),
+            layer_mapper: None, // Filtered graphs don't need layer mapping (already built)
             path_map: HashMap::new(),
             name_map: HashMap::new(),
             include_hidden: self.include_hidden,

@@ -106,6 +106,7 @@ impl ConcatArgs {
             subdir_filter: settings.node_filtering.subdir_filter.clone(),
             layers: settings.layers.names.clone(),
             fallback_layer,
+            auto_mapping: &settings.layers.auto_mapping,
             sql_discovery: settings.sql_discovery.clone(),
             header_update_mode: settings.header_update_mode,
             header_output_dir: settings.header_output_dir.clone(),

@@ -86,6 +86,7 @@ impl Default for Settings {
                     "append".to_string(),
                 ],
                 fallback: "normal".to_string(),
+                auto_mapping: Default::default(), // Empty IndexMap by default
             },
             sql_discovery: SqlDiscoveryConfig::default(),
             header_update_mode: HeaderUpdateMode::Never,
@@ -175,6 +176,7 @@ impl Settings {
     /// Checks:
     /// - Fallback layer exists in layers list
     /// - At least one layer is defined
+    /// - Auto-mapping patterns compile and reference valid layers
     /// - Input directories are specified (for concat/analyze/clean commands)
     pub fn validate(&self) -> Result<(), String> {
         // Validate layers
@@ -187,6 +189,22 @@ impl Settings {
                 "Fallback layer '{}' is not in layers list",
                 self.layers.fallback
             ));
+        }
+
+        // Validate auto_mapping
+        for (pattern, layer) in &self.layers.auto_mapping {
+            // Check that the pattern compiles
+            regex::Regex::new(pattern)
+                .map_err(|e| format!("Invalid regex pattern in auto_mapping '{pattern}': {e}"))?;
+
+            // Check that the target layer exists
+            if !self.layers.names.contains(layer) {
+                return Err(format!(
+                    "Auto-mapping pattern '{pattern}' references unknown layer '{layer}'. \
+                     Valid layers: {}",
+                    self.layers.names.join(", ")
+                ));
+            }
         }
 
         Ok(())

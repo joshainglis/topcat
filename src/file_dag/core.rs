@@ -10,6 +10,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 
 use crate::exceptions::TopCatError;
 use crate::file_node::FileNode;
+use crate::layer_mapper::LayerMapper;
 use crate::sql_parser::SqlAnalyzer;
 use crate::stable_topo::StableTopo;
 use crate::{config, io_utils};
@@ -34,6 +35,7 @@ pub struct TCGraph {
     pub(super) layer_index_maps: HashMap<String, HashMap<String, NodeIndex>>,
     pub(super) layers: Vec<String>,
     pub(super) fallback_layer: String,
+    pub(super) layer_mapper: Option<LayerMapper>,
     pub(super) path_map: HashMap<PathBuf, Rc<FileNode>>,
     pub(super) name_map: HashMap<String, Rc<FileNode>>,
     pub(super) include_hidden: bool,
@@ -68,6 +70,20 @@ impl TCGraph {
             layer_index_maps.insert(layer.clone(), HashMap::new());
         }
 
+        // Initialize layer mapper if auto_mapping is configured
+        let layer_mapper = if !config.auto_mapping.is_empty() {
+            match LayerMapper::new(config.auto_mapping) {
+                Ok(mapper) => Some(mapper),
+                Err(e) => {
+                    // Log error but don't fail - auto-mapping is optional
+                    eprintln!("Warning: Failed to initialize layer mapper: {e}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         TCGraph {
             comment_str: config.comment_str.clone(),
             file_dirs: config.input_dirs.clone(),
@@ -81,6 +97,7 @@ impl TCGraph {
             layer_index_maps,
             layers: config.layers.clone(),
             fallback_layer: config.fallback_layer.clone(),
+            layer_mapper,
             path_map: HashMap::new(),
             name_map: HashMap::new(),
             include_hidden: config.include_hidden,
@@ -124,6 +141,7 @@ impl TCGraph {
                 file,
                 &self.layers,
                 &self.fallback_layer,
+                self.layer_mapper.as_ref(),
             ) {
                 Ok(f) => f,
                 Err(e) => {

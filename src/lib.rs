@@ -81,6 +81,7 @@
 //!     subdir_filter: None,
 //!     layers: vec!["prepend".to_string(), "normal".to_string(), "append".to_string()],
 //!     fallback_layer: "normal".to_string(),
+//!     auto_mapping: &indexmap::IndexMap::new(),
 //!     sql_discovery: SqlDiscoveryConfig::default(),
 //!     header_update_mode: Default::default(),
 //!     header_output_dir: None,
@@ -205,6 +206,7 @@ pub mod file_node;
 pub mod fs;
 pub mod graph_utils;
 pub mod header_generator;
+pub mod layer_mapper;
 pub mod logging;
 pub mod output;
 pub mod platform;

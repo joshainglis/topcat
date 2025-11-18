@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -189,6 +190,12 @@ pub struct LayersConfig {
     /// Default layer for files without explicit layer declaration
     #[serde(default)]
     pub fallback: String,
+
+    /// Automatic layer mapping based on node name regex patterns
+    /// Maps regex patterns to layer names. Patterns are evaluated in order,
+    /// first match wins. Example: {"^\\w+\\.grants$": "grants"}
+    #[serde(default)]
+    pub auto_mapping: IndexMap<String, String>,
 }
 
 /// Full TOML configuration file structure

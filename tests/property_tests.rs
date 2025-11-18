@@ -46,6 +46,7 @@ fn build_graph_from_dir(dir: &TempDir, layers: &[&str]) -> TCGraph {
         subdir_filter: None,
         layers: layers.iter().map(|s| s.to_string()).collect(),
         fallback_layer: "normal".to_string(),
+        auto_mapping: &indexmap::IndexMap::new(),
         sql_discovery: SqlDiscoveryConfig::default(),
         header_update_mode: topcat::sql_config::HeaderUpdateMode::Never,
         header_output_dir: None,
