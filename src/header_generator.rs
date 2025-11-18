@@ -28,8 +28,12 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
     // Add node name
     header.push_str(&format!("{cmt} name: {}\n", file_node.name));
 
-    // Note: Schema dependency is already included in deps via sql_parser.rs implicit schema dependency
-    // No need to add it explicitly here to avoid duplicates
+    // Extract schema name for prioritized output (schema dependency always comes first)
+    let schema_name = if file_node.name.contains('.') {
+        file_node.name.split('.').next()
+    } else {
+        None
+    };
 
     // Determine dependency type based on soft_deps flag
     let dep_type = if file_node.soft_deps {
@@ -38,10 +42,24 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
         "requires"
     };
 
-    // Add dependencies (sorted for consistency)
+    // Add schema dependency first (if it exists in deps)
+    // This matches Python behavior: schema always comes before other deps
+    if let Some(schema) = schema_name {
+        if file_node.deps.contains(schema) {
+            header.push_str(&format!("{cmt} requires: {schema}\n"));
+        }
+    }
+
+    // Add remaining dependencies (sorted, excluding schema which we already added)
     let mut deps: Vec<_> = file_node.deps.iter().collect();
     deps.sort();
     for dep in deps {
+        // Skip schema dependency as we already wrote it
+        if let Some(schema) = schema_name {
+            if dep == &schema {
+                continue;
+            }
+        }
         header.push_str(&format!("{cmt} {dep_type}: {dep}\n"));
     }
 
@@ -441,6 +459,64 @@ mod tests {
 
         assert!(header.contains("-- name: c_kv.key_value"));
         assert!(header.contains("-- requires: c_kv\n"));
+    }
+
+    #[test]
+    fn test_schema_dependency_comes_first() {
+        // Test that schema dependency appears before other dependencies (matching Python behavior)
+        let file_node = FileNode::new(
+            "md_tmf.filter_key_to_accessor_mapping".to_string(),
+            PathBuf::from("/tmp/test.sql"),
+            HashSet::from([
+                "md_tmf".to_string(),
+                "do_tmf.entity_index".to_string(),
+                "e_extensions.ltree".to_string(),
+                "md_tmf.jsonpath_path".to_string(),
+            ]),
+            "normal".to_string(),
+            true,
+            HashSet::new(),
+        );
+
+        let header = generate_header(&file_node, "--");
+
+        // Find positions of dependencies
+        let md_tmf_pos = header
+            .find("-- requires: md_tmf\n")
+            .expect("md_tmf should be present");
+        let do_tmf_pos = header
+            .find("-- requires: do_tmf.entity_index\n")
+            .expect("do_tmf.entity_index should be present");
+        let e_ext_pos = header
+            .find("-- requires: e_extensions.ltree\n")
+            .expect("e_extensions.ltree should be present");
+        let md_tmf_json_pos = header
+            .find("-- requires: md_tmf.jsonpath_path\n")
+            .expect("md_tmf.jsonpath_path should be present");
+
+        // Schema dependency should come first
+        assert!(
+            md_tmf_pos < do_tmf_pos,
+            "md_tmf (schema) should come before do_tmf.entity_index"
+        );
+        assert!(
+            md_tmf_pos < e_ext_pos,
+            "md_tmf (schema) should come before e_extensions.ltree"
+        );
+        assert!(
+            md_tmf_pos < md_tmf_json_pos,
+            "md_tmf (schema) should come before md_tmf.jsonpath_path"
+        );
+
+        // Other dependencies should be sorted alphabetically after the schema
+        assert!(
+            do_tmf_pos < e_ext_pos,
+            "do_tmf.entity_index should come before e_extensions.ltree (alphabetical)"
+        );
+        assert!(
+            e_ext_pos < md_tmf_json_pos,
+            "e_extensions.ltree should come before md_tmf.jsonpath_path (alphabetical)"
+        );
     }
 
     #[test]
