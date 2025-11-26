@@ -1,8 +1,32 @@
+//! Schema management commands.
+//!
+//! This module provides commands for inspecting and analyzing schemas
+//! in the dependency graph.
+//!
+//! # Available Commands
+//!
+//! - **list**: List all schemas with statistics
+//! - **analyze**: Analyze a specific schema in detail
+//! - **dependencies**: Show cross-schema dependencies
+//!
+//! # Examples
+//!
+//! ```bash
+//! # List all schemas
+//! topcat schema -i sql/ -e sql list
+//!
+//! # Analyze a specific schema
+//! topcat schema -i sql/ -e sql analyze my_schema
+//!
+//! # Show cross-schema dependencies
+//! topcat schema -i sql/ -e sql dependencies
+//! ```
+
 use clap::{Args, Subcommand};
 use comfy_table::{Cell, Color, Table, modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL};
 use std::collections::HashMap;
 
-use topcat::cli::CommonArgs;
+use topcat::cli::{GlobalArgs, GraphInputArgs};
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
 use topcat::logging::{Logger, init_logging};
@@ -23,10 +47,17 @@ pub enum SchemaCommand {
     Dependencies,
 }
 
+/// Command-line arguments for the schema subcommand.
+///
+/// The schema command uses GlobalArgs + GraphInputArgs since it needs to
+/// build the dependency graph but doesn't need analysis or filtering options.
 #[derive(Debug, Args)]
 pub struct SchemaArgs {
     #[command(flatten)]
-    pub common: CommonArgs,
+    pub global: GlobalArgs,
+
+    #[command(flatten)]
+    pub input: GraphInputArgs,
 
     #[command(subcommand)]
     command: SchemaCommand,
@@ -35,12 +66,13 @@ pub struct SchemaArgs {
 impl SchemaArgs {
     pub fn execute(&self) -> Result<(), TopCatError> {
         // 1. Load settings from all sources (config files, env vars)
-        let config_path = self.common.config_path();
+        let config_path = self.global.config_path();
         let mut settings = Settings::load(config_path)
             .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
 
         // 2. Apply CLI overrides
-        self.common.apply_to_settings(&mut settings);
+        self.global.apply_to_settings(&mut settings);
+        self.input.apply_to_settings(&mut settings);
 
         // 3. Validate settings
         settings.validate().map_err(TopCatError::ConfigError)?;

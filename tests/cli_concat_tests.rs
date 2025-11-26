@@ -26,8 +26,7 @@ fn test_concat_basic_success() {
             "concat",
             "-i",
             test_input_dir().to_str().unwrap(),
-            "-o",
-            output_file.to_str().unwrap(),
+            output_file.to_str().unwrap(), // Positional output argument
         ])
         .assert()
         .success();
@@ -50,10 +49,9 @@ fn test_concat_with_extension_filter() {
             "concat",
             "-i",
             test_input_dir().to_str().unwrap(),
-            "-o",
-            output_file.to_str().unwrap(),
             "-e",
             "sql",
+            output_file.to_str().unwrap(), // Positional output argument
         ])
         .assert()
         .success();
@@ -73,8 +71,7 @@ fn test_concat_missing_input_directory() {
             "concat",
             "-i",
             "/tmp/topcat_nonexistent_test_12345",
-            "-o",
-            output_file.to_str().unwrap(),
+            output_file.to_str().unwrap(), // Positional output argument
         ])
         .assert()
         .get_output();
@@ -82,12 +79,12 @@ fn test_concat_missing_input_directory() {
 
 #[test]
 fn test_concat_missing_required_args() {
-    // Missing both -i and -o
+    // Missing output file (now required positional argument)
     topcat_cmd()
         .arg("concat")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("must be specified"));
+        .stderr(predicate::str::contains("<OUTPUT>"));
 }
 
 #[test]
@@ -95,21 +92,22 @@ fn test_concat_missing_input_arg() {
     let temp_dir = TempDir::new().unwrap();
     let output_file = temp_dir.path().join("output.sql");
 
-    // Missing -i uses default (current directory), so may succeed
-    let _ = topcat_cmd()
-        .args(["concat", "-o", output_file.to_str().unwrap()])
+    // Missing -i requires config file or will fail validation
+    topcat_cmd()
+        .args(["concat", output_file.to_str().unwrap()])
         .assert()
-        .get_output();
+        .failure()
+        .stderr(predicate::str::contains("input directory"));
 }
 
 #[test]
 fn test_concat_missing_output_arg() {
-    // Missing -o
+    // Missing output (positional argument)
     topcat_cmd()
         .args(["concat", "-i", test_input_dir().to_str().unwrap()])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("must be specified"));
+        .stderr(predicate::str::contains("<OUTPUT>"));
 }
 
 #[test]
@@ -122,10 +120,9 @@ fn test_concat_with_layers() {
             "concat",
             "-i",
             test_input_dir().to_str().unwrap(),
-            "-o",
-            output_file.to_str().unwrap(),
             "--layers",
             "prepend,normal,append",
+            output_file.to_str().unwrap(), // Positional output argument
         ])
         .assert()
         .success();
@@ -143,9 +140,8 @@ fn test_concat_verbose_output() {
             "concat",
             "-i",
             test_input_dir().to_str().unwrap(),
-            "-o",
-            output_file.to_str().unwrap(),
             "-v",
+            output_file.to_str().unwrap(), // Positional output argument
         ])
         .assert()
         .success();
@@ -171,10 +167,9 @@ fn test_concat_output_contains_all_files() {
             "concat",
             "-i",
             test_input_dir().to_str().unwrap(),
-            "-o",
-            output_file.to_str().unwrap(),
             "-e",
             "sql",
+            output_file.to_str().unwrap(), // Positional output argument
         ])
         .assert()
         .success();

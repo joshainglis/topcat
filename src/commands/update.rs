@@ -1,10 +1,32 @@
+//! Update command for discovering dependencies and updating file headers.
+//!
+//! This module implements the `update` subcommand which analyzes SQL files,
+//! discovers dependencies, and updates file headers accordingly. It can also
+//! rename files based on discovered node names.
+//!
+//! # Examples
+//!
+//! ```bash
+//! # Update headers in-place (dry-run by default)
+//! topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
+//!
+//! # Actually update headers
+//! topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --mode execute
+//!
+//! # Update headers and rename files
+//! topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
+//!
+//! # Generate updated files to a separate directory
+//! topcat update -i sql/ -e sql --enable-sql-discovery true --generate-headers ./updated/
+//! ```
+
 use clap::Args;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use topcat::{
-    cli::CommonArgs,
+    cli::{ExecutionArgs, GlobalArgs, GraphInputArgs, SqlDiscoveryArgs},
     config,
     exceptions::{FileNodeError, TopCatError},
     file_node::{FileNode, NameSource},
@@ -17,31 +39,40 @@ use topcat::{
     sql_parser::SqlAnalyzer,
 };
 
-/// Update file headers with discovered dependencies and optionally rename files
+/// Command-line arguments for the update subcommand.
 ///
-/// This command analyzes SQL files (when --enable-sql-discovery is set), discovers
-/// dependencies, and updates file headers accordingly. It can also rename files based
-/// on discovered node names.
-///
-/// By default, files are updated in-place. Use --dry-run to preview changes without
-/// modifying files, or --generate-headers to write updated files to a separate directory.
+/// The update command uses:
+/// - GlobalArgs: config, verbose, quiet
+/// - GraphInputArgs: input directories, file filtering, layers
+/// - SqlDiscoveryArgs: SQL discovery settings, header update mode
+/// - ExecutionArgs: mode (dry-run/execute)
 #[derive(Debug, Args, Clone)]
 pub struct UpdateArgs {
     #[command(flatten)]
-    pub common: CommonArgs,
-    // Command-specific arguments (not in CommonArgs)
-    // None for update - all args are shared
+    pub global: GlobalArgs,
+
+    #[command(flatten)]
+    pub input: GraphInputArgs,
+
+    #[command(flatten)]
+    pub sql_discovery: SqlDiscoveryArgs,
+
+    #[command(flatten)]
+    pub execution: ExecutionArgs,
 }
 
 impl UpdateArgs {
     pub fn execute(&self) -> Result<(), TopCatError> {
         // Load settings from config files and environment variables
-        let config_path = self.common.config_path();
+        let config_path = self.global.config_path();
         let mut settings = Settings::load(config_path)
             .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
 
         // Apply CLI overrides
-        self.common.apply_to_settings(&mut settings);
+        self.global.apply_to_settings(&mut settings);
+        self.input.apply_to_settings(&mut settings);
+        self.sql_discovery.apply_to_settings(&mut settings);
+        self.execution.apply_to_settings(&mut settings);
 
         // Validate settings
         settings.validate().map_err(TopCatError::ConfigError)?;
@@ -61,14 +92,7 @@ impl UpdateArgs {
             ));
         }
 
-        // If rename_files is true but header update is disabled, that's an error
-        if settings.rename_files
-            && settings.header_update_mode == sql_config::HeaderUpdateMode::Never
-        {
-            return Err(TopCatError::ConfigError(
-                "Cannot rename files without header updates. Use --update-headers or --generate-headers".to_string(),
-            ));
-        }
+        // Note: rename_files validation is now handled by Settings.validate()
 
         // Initialize logging
         let quiet = settings.behavior.quiet;
@@ -77,7 +101,8 @@ impl UpdateArgs {
         let logger = Logger::new(quiet, verbose);
 
         // Show what we're doing
-        if settings.behavior.dry_run {
+        let dry_run = self.execution.mode.is_dry_run();
+        if dry_run {
             logger.info("DRY RUN MODE: No files will be modified");
         }
 
@@ -119,7 +144,7 @@ impl UpdateArgs {
             file_separator_str: settings.formatting.file_separator_str.clone(),
             file_end_str: settings.formatting.file_end_str.clone(),
             verbose: settings.behavior.verbose,
-            dry_run: settings.behavior.dry_run,
+            dry_run,
             include_node_prefixes: if settings.node_filtering.include_prefixes.is_empty() {
                 None
             } else {
@@ -151,7 +176,7 @@ impl UpdateArgs {
         }
 
         // Update headers
-        if settings.behavior.dry_run {
+        if dry_run {
             logger.info("Previewing header updates (dry-run mode)...");
         } else {
             logger.info("Updating file headers...");
@@ -181,7 +206,7 @@ impl UpdateArgs {
             .unwrap_or("sql");
 
         // Preview or execute header updates
-        if settings.behavior.dry_run {
+        if dry_run {
             preview_header_updates(
                 &file_nodes,
                 &settings.formatting.comment_str,
@@ -236,13 +261,13 @@ fn collect_and_filter_files(config: &config::Config) -> Result<HashSet<PathBuf>,
     // Apply include/exclude glob filters
     let include_globs: Option<HashSet<PathBuf>> = config
         .include_globs
-        .map(|patterns| io_utils::glob_files(patterns))
+        .map(io_utils::glob_files)
         .transpose()
         .map_err(|e| TopCatError::config_error(format!("Failed to apply include globs: {e}")))?;
 
     let exclude_globs: Option<HashSet<PathBuf>> = config
         .exclude_globs
-        .map(|patterns| io_utils::glob_files(patterns))
+        .map(io_utils::glob_files)
         .transpose()
         .map_err(|e| TopCatError::config_error(format!("Failed to apply exclude globs: {e}")))?;
 
@@ -470,7 +495,7 @@ fn preview_header_updates(
     }
 
     logger.info(&format!("\n{}", "=".repeat(60)));
-    logger.info("To apply these changes, run without --dry-run");
+    logger.info("To apply these changes, run with --mode execute");
 
     Ok(())
 }

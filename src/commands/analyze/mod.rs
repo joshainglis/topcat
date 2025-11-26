@@ -59,7 +59,7 @@ use std::path::PathBuf;
 use clap::{Args, Subcommand};
 
 use topcat::analysis::root_matcher::RootNodeMatcher;
-use topcat::cli::CommonArgs;
+use topcat::cli::{AnalysisArgs as AnalysisCliArgs, FilterArgs, GlobalArgs, GraphInputArgs};
 use topcat::exceptions::TopCatError;
 use topcat::logging::{Logger, init_logging};
 use topcat::settings::Settings;
@@ -68,12 +68,24 @@ use super::common as cmd_common;
 
 /// Command-line arguments for the analyze subcommand.
 ///
-/// Provides various dependency graph analyses to identify cleanup candidates,
-/// detect issues, and understand graph structure.
+/// The analyze command uses:
+/// - GlobalArgs: config, verbose, quiet
+/// - GraphInputArgs: input directories, file filtering, layers
+/// - FilterArgs: schema filtering
+/// - AnalysisArgs: root patterns, external usage checking
 #[derive(Debug, Args)]
 pub struct AnalyzeArgs {
     #[command(flatten)]
-    pub common: CommonArgs,
+    pub global: GlobalArgs,
+
+    #[command(flatten)]
+    pub input: GraphInputArgs,
+
+    #[command(flatten)]
+    pub filter: FilterArgs,
+
+    #[command(flatten)]
+    pub analysis: AnalysisCliArgs,
 
     #[command(subcommand)]
     command: AnalyzeCommand,
@@ -122,12 +134,15 @@ impl AnalyzeArgs {
     /// - External checker setup fails
     pub fn execute(&self) -> Result<(), TopCatError> {
         // 1. Load settings from all sources (config files, env vars)
-        let config_path = self.common.config_path();
+        let config_path = self.global.config_path();
         let mut settings = Settings::load(config_path)
             .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
 
         // 2. Apply CLI overrides
-        self.common.apply_to_settings(&mut settings);
+        self.global.apply_to_settings(&mut settings);
+        self.input.apply_to_settings(&mut settings);
+        self.filter.apply_to_settings(&mut settings);
+        self.analysis.apply_to_settings(&mut settings);
 
         // 3. Validate settings
         settings.validate().map_err(TopCatError::ConfigError)?;
@@ -148,28 +163,36 @@ impl AnalyzeArgs {
         // 6. Create logger instance
         let logger = Logger::new(quiet, verbose);
 
-        // 7. For cycles and missing commands, we handle graph building specially
+        // 7. Get schema filter
+        let schema_filter = self.filter.get_schemas(&settings);
+        let schema_filter_opt = if schema_filter.is_empty() {
+            None
+        } else {
+            Some(schema_filter)
+        };
+
+        // 8. For cycles and missing commands, we handle graph building specially
         // (They bypass full graph construction to catch errors that would prevent it)
         match &self.command {
             AnalyzeCommand::Cycles => {
-                return cycles::analyze(&logger, &self.common.schemas, &settings);
+                return cycles::analyze(&logger, &schema_filter_opt, &settings);
             }
             AnalyzeCommand::Missing => {
-                return missing::analyze(&logger, &self.common.schemas, &settings);
+                return missing::analyze(&logger, &schema_filter_opt, &settings);
             }
             _ => {}
         }
 
-        // 8. Build the dependency graph (for all other commands)
+        // 9. Build the dependency graph (for all other commands)
         let graph = self.build_graph(&settings)?;
 
-        // 9. Check for external usage if requested
+        // 10. Check for external usage if requested
         let external_checker = self.build_external_checker(&settings)?;
 
-        // 10. Build root matcher from settings
+        // 11. Build root matcher from settings
         let root_matcher = self.build_root_matcher(&settings)?;
 
-        // 11. Execute the requested analysis
+        // 12. Execute the requested analysis
         match &self.command {
             AnalyzeCommand::DeadBranches => dead_branches::analyze(
                 &logger,
@@ -203,7 +226,13 @@ impl AnalyzeArgs {
     ///
     /// Delegates to the common implementation for graph building from Settings.
     fn build_graph(&self, settings: &Settings) -> Result<topcat::file_dag::TCGraph, TopCatError> {
-        cmd_common::build_graph_from_settings(&self.common.schemas, settings)
+        let schema_filter = self.filter.get_schemas(settings);
+        let schema_filter_opt = if schema_filter.is_empty() {
+            None
+        } else {
+            Some(schema_filter)
+        };
+        cmd_common::build_graph_from_settings(&schema_filter_opt, settings)
     }
 
     /// Build a root node matcher from Settings.

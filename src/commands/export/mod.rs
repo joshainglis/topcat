@@ -1,7 +1,40 @@
+//! Export commands for generating graph representations.
+//!
+//! This module provides commands for exporting the dependency graph
+//! in various formats for visualization and analysis.
+//!
+//! # Available Formats
+//!
+//! - **json**: Export as JSON with full metadata
+//! - **dot**: Export as DOT format for GraphViz
+//! - **graphml**: Export as GraphML for Gephi/yEd
+//! - **mermaid**: Export as Mermaid diagram
+//!
+//! # Export Modes
+//!
+//! - **full**: Export the entire graph (default)
+//! - **deps**: Export a node and all its transitive dependencies
+//! - **dependents**: Export a node and all its transitive dependents
+//! - **direct**: Export a node and its direct neighbors only
+//!
+//! # Examples
+//!
+//! ```bash
+//! # Export full graph as JSON
+//! topcat export -i sql/ -e sql graph.json json
+//!
+//! # Export dependencies of a specific node
+//! topcat export -i sql/ -e sql --mode deps --node my_schema.my_table deps.dot dot
+//!
+//! # Export with schema filtering
+//! topcat export -i sql/ -e sql --schema auth auth-graph.json json
+//! ```
+
 use clap::{Args, Subcommand, ValueEnum};
 use std::collections::HashSet;
+use std::path::PathBuf;
 
-use topcat::cli::CommonArgs;
+use topcat::cli::{FilterArgs, GlobalArgs, GraphInputArgs};
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
 use topcat::logging::{Logger, init_logging};
@@ -39,10 +72,26 @@ pub enum ExportCommand {
     Mermaid,
 }
 
+/// Command-line arguments for the export subcommand.
+///
+/// The export command uses:
+/// - GlobalArgs: config, verbose, quiet
+/// - GraphInputArgs: input directories, file filtering, layers
+/// - FilterArgs: schema filtering (node prefixes not typically used for export)
 #[derive(Debug, Args)]
 pub struct ExportArgs {
     #[command(flatten)]
-    pub common: CommonArgs,
+    pub global: GlobalArgs,
+
+    #[command(flatten)]
+    pub input: GraphInputArgs,
+
+    #[command(flatten)]
+    pub filter: FilterArgs,
+
+    /// Output file path (positional argument)
+    #[arg(value_name = "OUTPUT")]
+    output: PathBuf,
 
     /// Export mode: full, deps, dependents, or direct
     #[arg(long = "mode", default_value = "full")]
@@ -77,12 +126,14 @@ impl ExportArgs {
     /// - Serialization fails (JSON or XML generation errors)
     pub fn execute(&self) -> Result<(), TopCatError> {
         // 1. Load settings from all sources (config files, env vars)
-        let config_path = self.common.config_path();
+        let config_path = self.global.config_path();
         let mut settings = Settings::load(config_path)
             .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
 
         // 2. Apply CLI overrides
-        self.common.apply_to_settings(&mut settings);
+        self.global.apply_to_settings(&mut settings);
+        self.input.apply_to_settings(&mut settings);
+        self.filter.apply_to_settings(&mut settings);
 
         // 3. Validate settings
         settings.validate().map_err(TopCatError::ConfigError)?;
@@ -95,12 +146,6 @@ impl ExportArgs {
             ));
         }
 
-        if settings.output.is_none() {
-            return Err(TopCatError::ConfigError(
-                "Output file must be specified via -o/--output or config file".to_string(),
-            ));
-        }
-
         // 5. Initialize logging
         let quiet = settings.behavior.quiet;
         let verbose = settings.behavior.verbose;
@@ -108,11 +153,7 @@ impl ExportArgs {
         let logger = Logger::new(quiet, verbose);
 
         // 6. Extract schema filter
-        let schema_filter: Vec<String> = self
-            .common
-            .schemas
-            .clone()
-            .unwrap_or_else(|| settings.schema_filtering.schemas.clone());
+        let schema_filter = self.filter.get_schemas(&settings);
 
         // 7. Build the graph
         let mut graph = self.build_graph(&settings)?;
@@ -125,17 +166,12 @@ impl ExportArgs {
         // 9. Apply export mode filtering
         let graph = self.apply_export_mode(&graph)?;
 
-        // 10. Get output path from settings
-        let output = settings
-            .output
-            .ok_or_else(|| TopCatError::ConfigError("Output path required".to_string()))?;
-
-        // 11. Execute the export command
+        // 10. Execute the export command
         match &self.command {
-            ExportCommand::Json => json::export_json(&graph, &output, &logger),
-            ExportCommand::Dot => dot::export_dot(&graph, &output, &logger),
-            ExportCommand::Graphml => graphml::export_graphml(&graph, &output, &logger),
-            ExportCommand::Mermaid => mermaid::export_mermaid(&graph, &output, &logger),
+            ExportCommand::Json => json::export_json(&graph, &self.output, &logger),
+            ExportCommand::Dot => dot::export_dot(&graph, &self.output, &logger),
+            ExportCommand::Graphml => graphml::export_graphml(&graph, &self.output, &logger),
+            ExportCommand::Mermaid => mermaid::export_mermaid(&graph, &self.output, &logger),
         }
     }
 

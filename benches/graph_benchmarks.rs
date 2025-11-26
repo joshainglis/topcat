@@ -284,6 +284,10 @@ fn bench_dead_branches(c: &mut Criterion) {
     group.finish();
 }
 
+// Note: Cycle detection is performed during build_graph() and is covered by bench_graph_building.
+// The internal cycle detection uses petgraph's is_cyclic_directed() (fast check) followed by
+// Johnson's algorithm for enumeration when cycles are found.
+
 criterion_group!(
     benches,
     bench_graph_building,

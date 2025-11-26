@@ -1,4 +1,11 @@
-//! Graph building utilities and helper functions.
+//! Graph building utilities for the file DAG.
+//!
+//! This module provides the core building blocks for constructing the dependency graph:
+//!
+//! - **File collection**: Walk directories and gather files matching filters
+//! - **File filtering**: Apply include/exclude patterns by extension and glob
+//! - **SQL discovery**: Analyze SQL content to auto-detect dependencies
+//! - **Graph population**: Add nodes to per-layer graphs for validation
 
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -35,6 +42,16 @@ pub(super) fn collect_files(
 }
 
 /// Filter files based on include/exclude patterns and extensions.
+///
+/// Applies filters in order: include extensions → exclude extensions → include globs → exclude globs.
+/// A file must pass all applicable filters to be included.
+///
+/// # Filter Logic
+///
+/// - **Include extensions**: If set, file must have one of these extensions
+/// - **Exclude extensions**: If set, file must NOT have one of these extensions
+/// - **Include globs**: If set, file path must match the glob set
+/// - **Exclude globs**: If set, file path must NOT match the glob set
 pub(super) fn filter_files<'a>(
     files: &'a HashSet<PathBuf>,
     include_file_set: &'a Option<HashSet<PathBuf>>,
@@ -175,6 +192,15 @@ pub(super) fn perform_sql_discovery(
 }
 
 /// Add FileNode instances to their corresponding layer graphs.
+///
+/// Populates per-layer graphs with nodes from the name map. Each node is added
+/// to the graph matching its layer, and a mapping from node name to graph index
+/// is recorded for later edge creation during dependency validation.
+///
+/// # Panics
+///
+/// Panics if a node's layer doesn't have a corresponding graph or index map.
+/// This indicates a bug in graph initialization.
 pub(super) fn add_nodes_to_graphs(
     layer_graphs: &mut HashMap<String, DiGraph<Rc<FileNode>, ()>>,
     layer_index_maps: &mut HashMap<String, HashMap<String, NodeIndex>>,

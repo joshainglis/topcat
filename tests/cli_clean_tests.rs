@@ -161,8 +161,8 @@ fn test_clean_targets_dry_run() {
 }
 
 #[test]
-fn test_clean_no_dry_run_requires_confirmation() {
-    // With --no-dry-run, it should prompt for confirmation (or use --force)
+fn test_clean_execute_mode_requires_confirmation() {
+    // With --mode execute, it should prompt for confirmation (or use --force)
     // We use a non-existent directory to verify the flags are accepted without actually deleting files
     // The actual file deletion behavior is tested in clean_tests.rs with temporary directories
     topcat_cmd()
@@ -172,7 +172,8 @@ fn test_clean_no_dry_run_requires_confirmation() {
             "/tmp/topcat_test_nonexistent_12345",
             "-e",
             "sql",
-            "--no-dry-run",
+            "--mode",
+            "execute",
             "--force",
             "orphans",
         ])

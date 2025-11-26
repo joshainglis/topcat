@@ -24,16 +24,19 @@
 
 use clap::{Args, Subcommand};
 
-use topcat::cli::CommonArgs;
+use topcat::cli::GlobalArgs;
 use topcat::exceptions::TopCatError;
 use topcat::logging::{Logger, init_logging};
 use topcat::settings::Settings;
 
 /// Command-line arguments for the config subcommand.
+///
+/// The config command only needs global arguments (--config, --verbose, --quiet)
+/// since it operates on configuration itself, not on the dependency graph.
 #[derive(Debug, Args)]
 pub struct ConfigArgs {
     #[command(flatten)]
-    pub common: CommonArgs,
+    pub global: GlobalArgs,
 
     #[command(subcommand)]
     command: ConfigCommand,
@@ -75,12 +78,12 @@ impl ConfigArgs {
 
     /// Display the effective configuration.
     fn show(&self) -> Result<(), TopCatError> {
-        let config_path = self.common.config_path();
+        let config_path = self.global.config_path();
         let mut settings = Settings::load(config_path)
             .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
 
         // Apply CLI overrides
-        self.common.apply_to_settings(&mut settings);
+        self.global.apply_to_settings(&mut settings);
 
         // Validate
         settings.validate().map_err(TopCatError::ConfigError)?;
@@ -104,7 +107,7 @@ impl ConfigArgs {
 
     /// Validate a configuration file.
     fn validate(&self) -> Result<(), TopCatError> {
-        let config_path = self.common.config_path();
+        let config_path = self.global.config_path();
 
         // Initialize logging with defaults (no settings loaded yet for validate command)
         init_logging(false, false);

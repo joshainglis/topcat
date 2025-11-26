@@ -28,8 +28,7 @@ fn test_export_json() {
             test_input_dir().to_str().unwrap(),
             "-e",
             "sql",
-            "-o",
-            output_file.to_str().unwrap(),
+            output_file.to_str().unwrap(), // Positional output argument
             "json",
         ])
         .assert()
@@ -55,8 +54,7 @@ fn test_export_dot() {
             test_input_dir().to_str().unwrap(),
             "-e",
             "sql",
-            "-o",
-            output_file.to_str().unwrap(),
+            output_file.to_str().unwrap(), // Positional output argument
             "dot",
         ])
         .assert()
@@ -81,8 +79,7 @@ fn test_export_graphml() {
             test_input_dir().to_str().unwrap(),
             "-e",
             "sql",
-            "-o",
-            output_file.to_str().unwrap(),
+            output_file.to_str().unwrap(), // Positional output argument
             "graphml",
         ])
         .assert()
@@ -107,8 +104,7 @@ fn test_export_mermaid() {
             test_input_dir().to_str().unwrap(),
             "-e",
             "sql",
-            "-o",
-            output_file.to_str().unwrap(),
+            output_file.to_str().unwrap(), // Positional output argument
             "mermaid",
         ])
         .assert()
@@ -133,12 +129,11 @@ fn test_export_with_mode_deps() {
             test_input_dir().to_str().unwrap(),
             "-e",
             "sql",
-            "-o",
-            output_file.to_str().unwrap(),
             "--mode",
             "deps",
             "--node",
             "my_schema.c",
+            output_file.to_str().unwrap(), // Positional output argument
             "json",
         ])
         .assert()
@@ -159,12 +154,11 @@ fn test_export_with_mode_dependents() {
             test_input_dir().to_str().unwrap(),
             "-e",
             "sql",
-            "-o",
-            output_file.to_str().unwrap(),
             "--mode",
             "dependents",
             "--node",
             "my_schema.a",
+            output_file.to_str().unwrap(), // Positional output argument
             "json",
         ])
         .assert()
@@ -185,10 +179,9 @@ fn test_export_with_schema_filter() {
             test_input_dir().to_str().unwrap(),
             "-e",
             "sql",
-            "-o",
-            output_file.to_str().unwrap(),
             "--schema",
             "my_schema",
+            output_file.to_str().unwrap(), // Positional output argument
             "json",
         ])
         .assert()
@@ -210,8 +203,7 @@ fn test_export_missing_input() {
             "/tmp/topcat_nonexistent_test_12345",
             "-e",
             "sql",
-            "-o",
-            output_file.to_str().unwrap(),
+            output_file.to_str().unwrap(), // Positional output argument
             "json",
         ])
         .assert()
@@ -249,8 +241,7 @@ fn test_export_missing_format() {
             test_input_dir().to_str().unwrap(),
             "-e",
             "sql",
-            "-o",
-            output_file.to_str().unwrap(),
+            output_file.to_str().unwrap(), // Positional output argument
         ])
         .assert()
         .failure()
@@ -270,10 +261,9 @@ fn test_export_mode_requires_node() {
             test_input_dir().to_str().unwrap(),
             "-e",
             "sql",
-            "-o",
-            output_file.to_str().unwrap(),
             "--mode",
             "deps",
+            output_file.to_str().unwrap(), // Positional output argument
             "json",
         ])
         .assert()
