@@ -48,10 +48,10 @@ nix develop  # Enter development environment with all dependencies
 
 ```bash
 # Update file headers with discovered SQL dependencies
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --mode execute
 
 # Concatenate SQL files in dependency order
-topcat concat -i sql/ -o migrations.sql
+topcat concat -i sql/ -e sql migrations.sql
 
 # Find dead code that can be safely removed
 topcat analyze -i sql/ -e sql dead-branches
@@ -63,7 +63,7 @@ topcat clean -i sql/ -e sql orphans
 topcat schema -i sql/ -e sql list
 
 # Export dependency graph for visualization
-topcat export -i sql/ -e sql -o graph.json json
+topcat export -i sql/ -e sql graph.json json
 ```
 
 ## Commands
@@ -73,19 +73,19 @@ topcat export -i sql/ -e sql -o graph.json json
 Concatenate files in topological order respecting dependencies and layer constraints.
 
 ```bash
-topcat concat -i sql/ -o output.sql
-topcat concat -i sql/ -o output.sql --enable-sql-discovery
-topcat concat -i dir1/ -i dir2/ -o output.sql --layers prepend,normal,append
+topcat concat -i sql/ -e sql output.sql
+topcat concat -i dir1/ -i dir2/ -e sql output.sql --layers prepend,normal,append
 ```
+
+**Arguments:**
+- `<OUTPUT>` - Output file path (positional)
 
 **Basic Options:**
 - `-i, --input-dirs <DIR>...` - Input directories (multiple allowed)
-- `-o, --output-file <FILE>` - Output file path
 - `-e, --include-exts <EXT>...` - File extensions to include (e.g., `sql`)
 - `-E, --exclude-exts <EXT>...` - File extensions to exclude
 - `-g, --include-glob <PATTERN>...` - Include files matching glob
 - `-G, --exclude-glob <PATTERN>...` - Exclude files matching glob
-- `-d, --dry-run` - Preview output without writing
 - `-v, --verbose` - Show debug information
 
 **Layer Options:**
@@ -96,16 +96,7 @@ topcat concat -i dir1/ -i dir2/ -o output.sql --layers prepend,normal,append
 - `--include-prefix <PREFIX>...` - Only include nodes with these name prefixes
 - `--exclude-prefix <PREFIX>...` - Exclude nodes with these name prefixes
 - `--subdir-filter <PATH>` - Include only files from subdirectory and their dependencies
-
-**SQL Discovery Options:**
-- `--enable-sql-discovery` - Extract dependencies from SQL code
-- `--schema-pattern <REGEX>` - Pattern for schema names (e.g., `"myapp_\\w+"`)
-- `--merge-strategy <STRATEGY>` - How to merge manual vs discovered deps:
-  - `header-only` - Use only manual headers
-  - `discovery-only` - Use only discovered (default)
-  - `union` - Combine both
-  - `header-with-fallback` - Manual if present, else discovered
-  - `validate` - Check for discrepancies (fails on mismatch)
+- `--schema <SCHEMA>...` - Filter to specific schemas
 
 **Formatting Options:**
 - `-c, --comment-prefix <STR>` - Comment string (default: `--`)
@@ -117,41 +108,44 @@ topcat concat -i dir1/ -i dir2/ -o output.sql --layers prepend,normal,append
 Discover dependencies from SQL content and update file headers accordingly. Optionally rename files based on discovered node names.
 
 ```bash
-# Update headers in-place with SQL discovery
+# Preview changes (dry-run is default)
 topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
 
-# Preview changes without modifying files
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --dry-run true
+# Update headers in-place with SQL discovery
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --mode execute
 
 # Update headers and rename files
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
 
 # Generate updated files to a separate directory
 topcat update -i sql/ -e sql --enable-sql-discovery true --generate-headers ./updated/
 ```
 
 **Header Management Options:**
-- `--update-headers` - Update source files in-place with discovered dependencies
+- `--update-headers true` - Update source files in-place with discovered dependencies
 - `--generate-headers <DIR>` - Write files with updated headers to a separate directory
-- `--rename-files` - Rename files based on discovered node names (use with header options)
-- `--dry-run` - Preview changes without modifying files
+- `--rename-files true` - Rename files based on discovered node names (use with header options)
+- `--mode <MODE>` - `dry-run` (default) or `execute`
 
 **SQL Discovery Options:**
-- `--enable-sql-discovery` - Extract dependencies from SQL code (required)
+- `--enable-sql-discovery true` - Extract dependencies from SQL code (required)
 - `--schema-pattern <REGEX>` - Pattern for schema names (e.g., `"myapp_\\w+"`)
 - `--merge-strategy <STRATEGY>` - How to merge manual vs discovered dependencies
 
 **Typical Workflow:**
 
 ```bash
-# Step 1: Discover dependencies and update headers
+# Step 1: Preview changes
 topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
 
-# Step 2: Concatenate the properly annotated files
-topcat concat -i sql/ -o migrations.sql
+# Step 2: Apply changes
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
+
+# Step 3: Concatenate the properly annotated files
+topcat concat -i sql/ -e sql migrations.sql
 ```
 
-**Note:** The `concat` command no longer supports header updates. Use `topcat update` for header management instead.
+**Note:** The `concat` command no longer supports header updates or SQL discovery. Use `topcat update` for header management instead.
 
 ### `analyze` - Dependency Analysis
 
@@ -198,9 +192,9 @@ topcat analyze -i sql/ -e sql --quiet cycles  # CI/CD mode
 Remove files based on analysis with safety checks and dry-run default.
 
 ```bash
-topcat clean -i sql/ -e sql dead-branches              # Preview (dry-run)
-topcat clean -i sql/ -e sql orphans --no-dry-run       # Execute with confirmation
-topcat clean -i sql/ -e sql orphans --no-dry-run -f    # Force (no confirmation)
+topcat clean -i sql/ -e sql dead-branches              # Preview (dry-run default)
+topcat clean -i sql/ -e sql orphans --mode execute     # Execute with confirmation
+topcat clean -i sql/ -e sql orphans --mode execute -f  # Force (no confirmation)
 ```
 
 **Clean Types:**
@@ -210,8 +204,8 @@ topcat clean -i sql/ -e sql orphans --no-dry-run -f    # Force (no confirmation)
 - `targets <files>...` - Remove specific targets (with dependency check)
 
 **Safety Features:**
-- `--dry-run` - Preview deletion (**DEFAULT** - always safe by default)
-- `--no-dry-run` - Actually perform deletion
+- `--mode dry-run` - Preview deletion (**DEFAULT** - always safe by default)
+- `--mode execute` - Actually perform deletion
 - `-f, --force` - Skip interactive confirmation (for automation)
 - Protection checks prevent deleting files with dependents
 - All protection and filtering options from `analyze` available
@@ -240,10 +234,14 @@ topcat schema -i sql/ -e sql dependencies            # Cross-schema deps
 Export dependency graphs in multiple formats for visualization and integration.
 
 ```bash
-topcat export -i sql/ -e sql -o graph.json json                    # Full graph
-topcat export -i sql/ -e sql -o graph.dot dot                      # GraphViz
-topcat export -i sql/ -e sql --mode deps --node my_node -o deps.json json
+topcat export -i sql/ -e sql graph.json json                       # Full graph
+topcat export -i sql/ -e sql graph.dot dot                         # GraphViz
+topcat export -i sql/ -e sql deps.json json --mode deps --node my_node
 ```
+
+**Arguments:**
+- `<OUTPUT>` - Output file path (positional)
+- `<FORMAT>` - Export format subcommand: `json`, `dot`, `graphml`, `mermaid`
 
 **Export Formats:**
 - `json` - JSON with full metadata
@@ -258,7 +256,6 @@ topcat export -i sql/ -e sql --mode deps --node my_node -o deps.json json
 - `--mode direct` - Node and immediate neighbors only
 
 **Options:**
-- `-o, --output <FILE>` - Output file path (required)
 - `--node <NAME>` - Target node (required for deps/dependents/direct modes)
 - `--schema <SCHEMA>...` - Filter by schemas
 
@@ -342,7 +339,7 @@ Layers enforce high-level ordering between groups of files. Files in earlier lay
 
 **Custom Layers:**
 ```bash
-topcat concat -i sql/ -o output.sql --layers setup,functions,views,cleanup
+topcat concat -i sql/ -e sql output.sql --layers setup,functions,views,cleanup
 ```
 
 **Use Cases:**
@@ -397,6 +394,10 @@ uuid_generate_v4 = "uuid-ossp"
 strip_suffixes = ["_or_ref", "_view"]
 model_gen_patterns = ["codegen_tmf\\.proc_(?:make_model|combine_enums)"]
 
+# Convert hard deps to soft deps for specific patterns (config-only)
+[sql_discovery.soft_deps_mappings]
+"^codegen_tmf\\b" = "^c_tmf\\b"
+
 [analysis]
 # Protect these nodes from dead branch detection
 root_nodes = ["api_main", "public_entry"]
@@ -408,13 +409,21 @@ root_dirs = ["api/", "migrations/"]
 external_check_dirs = ["src/", "app/"]
 external_check_patterns = ["*.py", "*.rs", "*.ts"]
 
+# Protect implicit nodes (CAST, OPERATOR) from cleanup
+protect_implicit = true
+
 [layers]
 names = ["prepend", "normal", "append"]
 fallback = "normal"
 
+# Auto-assign layers based on node name patterns (config-only)
+[layers.auto_mapping]
+"^\\w+\\.grants$" = "append"
+"^\\w+\\.schema$" = "prepend"
+
 [filters]
 include_extensions = ["sql"]
-exclude_patterns = ["*.backup.sql", "*.old.sql"]
+exclude_globs = ["**/*.backup.sql", "**/*.old.sql"]
 
 [behavior]
 verbose = false
@@ -473,9 +482,19 @@ export TOPCAT_FILTERS__INCLUDE_GLOBS="**/*.sql,**/*.ddl"
 # Exclude glob patterns
 export TOPCAT_FILTERS__EXCLUDE_GLOBS="**/*.backup.sql,**/temp/**"
 
-# Prefix filters
-export TOPCAT_FILTERS__INCLUDE_PREFIXES="api_,public_"
-export TOPCAT_FILTERS__EXCLUDE_PREFIXES="test_,deprecated_"
+# Include hidden files
+export TOPCAT_FILTERS__INCLUDE_HIDDEN=true
+```
+
+#### Node Filtering
+
+```bash
+# Prefix filters for node names
+export TOPCAT_NODE_FILTERING__INCLUDE_PREFIXES="api_,public_"
+export TOPCAT_NODE_FILTERING__EXCLUDE_PREFIXES="test_,deprecated_"
+
+# Subdirectory filter
+export TOPCAT_NODE_FILTERING__SUBDIR_FILTER="sql/auth"
 ```
 
 #### Layer Configuration
@@ -528,6 +547,9 @@ export TOPCAT_ANALYSIS__ROOT_DIRS="api/,migrations/"
 # External usage checking
 export TOPCAT_ANALYSIS__EXTERNAL_CHECK_DIRS="/app/src,/app/lib"
 export TOPCAT_ANALYSIS__EXTERNAL_CHECK_PATTERNS="*.py,*.ts,*.rs"
+
+# Protect implicit nodes (CAST, OPERATOR)
+export TOPCAT_ANALYSIS__PROTECT_IMPLICIT=true
 ```
 
 #### Formatting
@@ -539,8 +561,8 @@ export TOPCAT_FORMATTING__COMMENT_STR="--"
 # File separator in concatenated output
 export TOPCAT_FORMATTING__FILE_SEPARATOR_STR="---"
 
-# Required file suffix
-export TOPCAT_FORMATTING__SUFFIX_STR=";"
+# String appended at end of each file
+export TOPCAT_FORMATTING__FILE_END_STR=";"
 ```
 
 #### Schema Filtering
@@ -553,13 +575,10 @@ export TOPCAT_SCHEMA_FILTERING__SCHEMAS="auth,billing,analytics"
 #### Export Configuration
 
 ```bash
-# Export format
-export TOPCAT_EXPORT__FORMAT="json"
-
-# Export mode
+# Export mode (full, deps, dependents, direct)
 export TOPCAT_EXPORT__MODE="full"
 
-# Target node (for deps/dependents/direct modes)
+# Target node (required for deps/dependents/direct modes)
 export TOPCAT_EXPORT__NODE="api_main"
 ```
 
@@ -618,10 +637,10 @@ topcat config generate > topcat.toml
 
 ### SQL Discovery
 
-Automatically extract dependencies from SQL code, eliminating manual header maintenance:
+Automatically extract dependencies from SQL code, eliminating manual header maintenance. SQL discovery is now part of the `update` command:
 
 ```bash
-topcat concat -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "myapp_\\w+"
+topcat update -i sql/ -e sql --enable-sql-discovery true --schema-pattern "myapp_\\w+" --update-headers true --mode execute
 ```
 
 **Discovery Features:**
@@ -647,10 +666,10 @@ Use `--rename-files` with header management to rename files based on discovered 
 
 ```bash
 # Update headers and rename files in-place
-topcat concat -i sql/ -o output.sql --enable-sql-discovery --update-headers --rename-files
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
 
 # Generate renamed files in a new directory
-topcat concat -i sql/ -o output.sql --enable-sql-discovery --generate-headers ./updated --rename-files
+topcat update -i sql/ -e sql --enable-sql-discovery true --generate-headers ./updated --rename-files true
 ```
 
 For schema.object nodes, files are renamed to `object.ext` (e.g., `my_schema.users` → `users.sql`). For schema-only nodes, files keep the schema name (e.g., `my_schema` → `my_schema.sql`).
@@ -704,7 +723,7 @@ CREATE VIEW myapp.active_users AS
 
 **Concatenate:**
 ```bash
-topcat concat -i sql/ -o migrations/deploy.sql -e sql
+topcat concat -i sql/ -e sql migrations/deploy.sql
 ```
 
 **Result:** Files ordered as `schema.sql` → `user_auth.sql` → `user_profile.sql` → `active_users.sql`
@@ -719,7 +738,7 @@ topcat analyze -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches
 topcat clean -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches
 
 # Step 3: Execute deletion with confirmation
-topcat clean -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches --no-dry-run
+topcat clean -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches --mode execute
 
 # Step 4: Verify no cycles or missing deps remain
 topcat analyze -i sql/ -e sql cycles
@@ -739,7 +758,7 @@ topcat schema -i sql/ -e sql analyze auth
 topcat schema -i sql/ -e sql dependencies
 
 # Concatenate only one schema
-topcat concat -i sql/ -e sql -o auth.sql --include-prefix auth.
+topcat concat -i sql/ -e sql auth.sql --include-prefix auth.
 ```
 
 ### CI/CD Integration
@@ -792,14 +811,14 @@ fi
 
 ```bash
 # Export to GraphViz and render
-topcat export -i sql/ -e sql -o graph.dot dot
+topcat export -i sql/ -e sql graph.dot dot
 dot -Tpng graph.dot -o graph.png
 
 # Export to Mermaid for documentation
-topcat export -i sql/ -e sql -o graph.md mermaid
+topcat export -i sql/ -e sql graph.md mermaid
 
 # Export dependencies of specific node
-topcat export -i sql/ -e sql --mode deps --node api_main -o api_deps.json json
+topcat export -i sql/ -e sql api_deps.json json --mode deps --node api_main
 ```
 
 ## Best Practices
@@ -832,11 +851,11 @@ topcat export -i sql/ -e sql --mode deps --node api_main -o api_deps.json json
 
 ### 3. Use Discovery for SQL Projects
 ```bash
-# Enable discovery to avoid manual maintenance
-topcat concat -i sql/ -o output.sql --enable-sql-discovery --schema-pattern "myapp_\\w+"
+# Use update command to discover and maintain headers
+topcat update -i sql/ -e sql --enable-sql-discovery true --schema-pattern "myapp_\\w+" --update-headers true
 
 # Validate your manual headers match reality
-topcat concat -i sql/ -o output.sql --enable-sql-discovery --merge-strategy validate
+topcat update -i sql/ -e sql --enable-sql-discovery true --merge-strategy validate
 ```
 
 ### 4. Protect Entry Points
@@ -864,7 +883,7 @@ topcat analyze -i sql/ -e sql \
 topcat clean -i sql/ -e sql dead-branches
 
 # Only execute after reviewing
-topcat clean -i sql/ -e sql dead-branches --no-dry-run
+topcat clean -i sql/ -e sql dead-branches --mode execute
 ```
 
 ### 7. Use Configuration Files

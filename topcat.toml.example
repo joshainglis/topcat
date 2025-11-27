@@ -65,6 +65,14 @@ names = ["prepend", "normal", "append"]
 # Environment: TOPCAT_LAYERS__FALLBACK="normal"
 fallback = "normal"
 
+# Automatic layer mapping based on node name regex patterns (config-only)
+# Maps regex patterns to layer names. Patterns are evaluated in order,
+# first match wins. Useful for auto-assigning layers based on naming conventions.
+# Example: {"^\\w+\\.grants$": "append"} assigns all *.grants nodes to append layer
+# [layers.auto_mapping]
+# "^\\w+\\.grants$" = "append"
+# "^\\w+\\.schema$" = "prepend"
+
 # ============================================================================
 # SQL Dependency Discovery
 # ============================================================================
@@ -96,9 +104,37 @@ enabled = false
 # Environment: TOPCAT_SQL_DISCOVERY__MERGE_STRATEGY="union"
 merge_strategy = "union"
 
-# Normalize schema and object names to lowercase
-# Environment: TOPCAT_SQL_DISCOVERY__NORMALIZE_NAMES=true
-normalize_names = true
+# Type mappings for SQL type transformations (config-only, no CLI equivalent)
+# Maps from SQL type to defining node name
+# Example: {"TSTZRANGE": "c_tmf.t_time_period", "my_enum": "schema.enum_def"}
+# Environment: TOPCAT_SQL_DISCOVERY__TYPE_MAPPINGS='{"TSTZRANGE":"c_tmf.t_time_period"}'
+# [sql_discovery.type_mappings]
+# TSTZRANGE = "c_tmf.t_time_period"
+
+# Extension mappings for PostgreSQL extensions (config-only, no CLI equivalent)
+# Maps function/object names to their providing extension
+# Example: {"digest": "pgcrypto", "nlevel": "ltree"}
+# Environment: TOPCAT_SQL_DISCOVERY__EXTENSION_MAPPINGS='{"digest":"pgcrypto"}'
+# [sql_discovery.extension_mappings]
+# digest = "pgcrypto"
+# nlevel = "ltree"
+
+# Object name suffixes to strip during discovery (config-only, no CLI equivalent)
+# Example: ["_or_ref", "_view"]
+# Environment: TOPCAT_SQL_DISCOVERY__STRIP_SUFFIXES="_or_ref,_view"
+strip_suffixes = []
+
+# Patterns for model generation procedure calls (config-only, no CLI equivalent)
+# Example: "codegen_tmf\\.proc_(?:make_model|combine_enums)"
+# Environment: TOPCAT_SQL_DISCOVERY__MODEL_GEN_PATTERNS="codegen_.*"
+model_gen_patterns = []
+
+# Soft dependency mappings for automatic conversion from `requires` to `exists`
+# Maps node name regex patterns to dependency name regex patterns.
+# Both patterns must match (AND logic) for conversion to occur. (config-only)
+# Example: {"^codegen_tmf\\b": "^c_tmf\\b"} converts c_tmf.* deps to `exists` for codegen_tmf nodes
+# [sql_discovery.soft_deps_mappings]
+# "^codegen_tmf\\b" = "^c_tmf\\b"
 
 # ============================================================================
 # Analysis Configuration
@@ -135,6 +171,12 @@ external_check_dirs = []
 # Only files matching these patterns in external_check_dirs are scanned
 # Environment: TOPCAT_ANALYSIS__EXTERNAL_CHECK_PATTERNS="*.py,*.ts,*.js"
 external_check_patterns = []
+
+# Protect implicit nodes (CAST, OPERATOR) from dead-branch cleanup
+# When true, nodes that appear to be PostgreSQL implicit operations are protected
+# CLI: --no-protect-implicit (to disable)
+# Environment: TOPCAT_ANALYSIS__PROTECT_IMPLICIT=true
+protect_implicit = true
 
 # ============================================================================
 # Formatting Configuration
@@ -231,26 +273,6 @@ schemas = []
 # node = "my_schema.my_table"
 
 # ============================================================================
-# Logging Configuration
-# ============================================================================
-
-[logging]
-# Log level (error, warn, info, debug, trace)
-# Controls the verbosity of log output
-# Environment: TOPCAT_LOGGING__LEVEL="info"
-level = "info"
-
-# Log to file instead of stderr
-# If specified, all log output is written to this file
-# Environment: TOPCAT_LOGGING__FILE="/var/log/topcat.log"
-# file = "/var/log/topcat.log"
-
-# Include timestamps in log output
-# Useful for debugging and auditing
-# Environment: TOPCAT_LOGGING__TIMESTAMPS=true
-timestamps = false
-
-# ============================================================================
 # Header Update Configuration
 # ============================================================================
 
@@ -300,8 +322,3 @@ timestamps = false
 # [behavior]
 # quiet = true
 # force = true
-#
-# [logging]
-# level = "warn"
-# file = "/var/log/topcat/pipeline.log"
-# timestamps = true

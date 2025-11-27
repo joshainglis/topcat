@@ -35,16 +35,15 @@ Primary use case: Ordering SQL migration files where execution order matters bas
 ```bash
 # Build and run
 cargo build --release
-cargo run -- -i input_dir/ -o output.sql
+cargo run -- concat -i input_dir/ output.sql
 
 # Update file headers (with SQL discovery)
 topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
 topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --dry-run true  # Preview
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --mode dry-run  # Preview
 
 # Concatenation
-topcat concat -i sql/ -o migrations.sql             # Concatenate files
-topcat concat -i sql/ -o output.sql                 # Basic concatenation
+topcat concat -i sql/ -e sql migrations.sql         # Concatenate files
 
 # Analysis
 topcat analyze -i sql/ -e sql dead-branches         # Find dead code
@@ -53,15 +52,15 @@ topcat analyze -i sql/ -e sql orphans               # Find isolated files
 
 # Cleanup (dry-run by default)
 topcat clean -i sql/ -e sql dead-branches           # Preview deletion
-topcat clean -i sql/ -e sql orphans --no-dry-run    # Actually delete
+topcat clean -i sql/ -e sql orphans --mode execute  # Actually delete
 
 # Schema operations
 topcat schema -i sql/ -e sql list                   # View all schemas
 topcat schema -i sql/ -e sql analyze my_schema      # Detailed schema view
 
 # Export
-topcat export -i sql/ -e sql -o graph.json json     # Export to JSON
-topcat export -i sql/ -e sql -o graph.dot dot       # Export to GraphViz
+topcat export -i sql/ -e sql graph.json json        # Export to JSON
+topcat export -i sql/ -e sql graph.dot dot          # Export to GraphViz
 
 # Configuration management
 topcat config show                                  # View effective config
@@ -84,7 +83,7 @@ cargo clippy                     # Lint code
 cargo fmt                        # Format code
 
 # Run with test data
-cargo run -- -i tests/input/sql -o /tmp/output.sql
+cargo run -- concat -i tests/input/sql /tmp/output.sql
 ```
 
 ## Architecture Summary
@@ -94,35 +93,24 @@ cargo run -- -i tests/input/sql -o /tmp/output.sql
 | Module | Purpose |
 |--------|---------|
 | `main.rs` | CLI parsing, command routing |
-| `settings.rs` | Unified configuration system, multi-source loading |
-| `cli.rs` | CommonArgs shared across commands |
-| `config.rs` | Config struct for graph operations |
-| `file_node.rs` | File representation with metadata, schema extraction |
-| `file_dag.rs` | DAG management, validation, schema operations |
-| `stable_topo.rs` | Deterministic topological sort |
-| `commands/common.rs` | Shared command utilities, GraphBuilder pattern |
-| `commands/concat.rs` | File concatenation command |
-| `commands/update.rs` | Header update and file renaming command |
-| `commands/config.rs` | Configuration management (show/validate/generate) |
-| `commands/analyze/` | Modularized dependency analysis (10 modules) |
-| `commands/clean/` | Modularized safe file deletion (6 modules) |
-| `commands/schema.rs` | Schema operations |
-| `commands/export/` | Modularized graph export (multiple formats) |
-| `analysis/mod.rs` | GraphAnalyzer trait, analysis algorithms |
-| `analysis/root_matcher.rs` | Root node protection patterns |
-| `analysis/external_usage.rs` | External usage checking |
-| `output.rs` | Output generation |
-| `io_utils.rs` | File system operations |
+| `cli/` | Composable argument groups (7 modules: global, input, filter, analysis, sql_discovery, formatting, execution) |
+| `settings/` | Unified configuration system (5 modules: loading, validation, configs, tests) |
+| `file_node/` | File representation with metadata (5 modules: parsing, soft_deps, filename, tests) |
+| `file_dag/` | DAG management and validation (6 modules: core, builder, validation, schema, filters) |
+| `commands/` | Command implementations (concat, update, config, schema + analyze/, clean/, export/) |
+| `analysis/` | GraphAnalyzer trait, root matching, external usage checking |
 
 ### Utility Modules
 
-| Module | Purpose | Lines |
-|--------|---------|-------|
-| `schema_utils.rs` | SchemaFilter with matching/filtering operations | 338 |
-| `display_utils.rs` | Table creation, formatting, output utilities | 338 |
-| `graph_utils.rs` | Node mapping, graph analysis helpers | 375 |
-| `platform.rs` | Platform-specific utilities (null device, temp files) | 165 |
-| `exceptions.rs` | Enhanced error handling with ErrorContext trait | - |
+| Module | Purpose |
+|--------|---------|
+| `display_utils/` | Table creation, tree rendering, output formatting (4 modules) |
+| `header_generator/` | Header generation and in-place updates (4 modules) |
+| `sql_parser/` | SQL dependency extraction (3 modules: analyzer, tests) |
+| `schema_utils.rs` | SchemaFilter with matching/filtering operations |
+| `graph_utils.rs` | Node mapping, graph analysis helpers |
+| `stable_topo.rs` | Deterministic topological sort |
+| `logging.rs` | Logging with verbose/quiet modes |
 
 ### Modularized Commands
 
@@ -170,7 +158,7 @@ Layers enforce ordering between groups of files:
 ### Concatenation
 
 ```bash
-topcat concat -i sql/ -o output.sql                      # Basic concat
+topcat concat -i sql/ -e sql output.sql                  # Basic concat
 # See 'discovering-sql-dependencies' skill for detailed workflows
 ```
 
@@ -180,13 +168,13 @@ The `update` command discovers dependencies from SQL content and updates file he
 
 ```bash
 # Update headers in-place with SQL discovery
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --mode execute
+
+# Preview changes without modifying files (default is dry-run)
 topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
 
-# Preview changes without modifying files
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --dry-run true
-
 # Update headers and rename files based on node names
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
 
 # Generate updated files to a separate directory
 topcat update -i sql/ -e sql --enable-sql-discovery true --generate-headers ./updated/
@@ -197,11 +185,14 @@ topcat update -i sql/ -e sql --enable-sql-discovery true --schema-pattern "myapp
 
 **Typical workflow:**
 ```bash
-# Step 1: Discover dependencies and update headers
+# Step 1: Preview changes
 topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
 
-# Step 2: Concatenate the properly annotated files
-topcat concat -i sql/ -o migrations.sql
+# Step 2: Apply changes
+topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
+
+# Step 3: Concatenate the properly annotated files
+topcat concat -i sql/ -e sql migrations.sql
 ```
 
 ### Analysis Commands
@@ -236,9 +227,9 @@ topcat analyze -i sql/ -e sql --quiet cycles  # Exit code 0/1
 | `clean unrequired` | Dry-run | Remove unrequired files |
 
 ```bash
-topcat clean -i sql/ -e sql dead-branches                # Preview
-topcat clean -i sql/ -e sql dead-branches --no-dry-run   # Execute with confirmation
-topcat clean -i sql/ -e sql orphans --no-dry-run --force # Force mode (no confirmation)
+topcat clean -i sql/ -e sql dead-branches                   # Preview (dry-run default)
+topcat clean -i sql/ -e sql dead-branches --mode execute    # Execute with confirmation
+topcat clean -i sql/ -e sql orphans --mode execute --force  # Force mode (no confirmation)
 ```
 
 ### Schema Commands
@@ -250,7 +241,7 @@ topcat schema -i sql/ -e sql dependencies         # Cross-schema dependencies
 
 # Schema filtering
 topcat analyze -i sql/ -e sql --schema auth dead-branches
-topcat clean -i sql/ -e sql --schema billing orphans --no-dry-run
+topcat clean -i sql/ -e sql --schema billing orphans --mode execute
 ```
 
 ### Export Commands
@@ -263,9 +254,9 @@ topcat clean -i sql/ -e sql --schema billing orphans --no-dry-run
 | `mermaid` | Markdown diagrams |
 
 ```bash
-topcat export -i sql/ -e sql -o graph.json json           # Full graph
-topcat export -i sql/ -e sql --mode deps --node my_node -o deps.json json  # Dependencies
-topcat export -i sql/ -e sql --schema auth -o auth.dot dot  # Schema-filtered
+topcat export -i sql/ -e sql graph.json json              # Full graph
+topcat export -i sql/ -e sql deps.json json --mode deps --node my_node  # Dependencies
+topcat export -i sql/ -e sql auth.dot dot --schema auth   # Schema-filtered
 ```
 
 ## Configuration
