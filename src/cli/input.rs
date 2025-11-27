@@ -1,6 +1,6 @@
 //! Graph input arguments for commands that build dependency graphs.
 
-use clap::Args;
+use clap::{ArgAction, Args};
 use std::path::PathBuf;
 
 use crate::settings::Settings;
@@ -31,8 +31,12 @@ pub struct GraphInputArgs {
     pub exclude_globs: Option<Vec<String>>,
 
     /// Include hidden files and directories
-    #[arg(long = "include-hidden")]
-    pub include_hidden: Option<bool>,
+    #[arg(long = "include-hidden", action = ArgAction::SetTrue, overrides_with = "no_include_hidden")]
+    pub include_hidden: bool,
+
+    /// Exclude hidden files and directories (default)
+    #[arg(long = "no-include-hidden", action = ArgAction::SetTrue, overrides_with = "include_hidden", hide = true)]
+    pub no_include_hidden: bool,
 
     /// Comma-separated list of layer names in execution order
     #[arg(long = "layers", value_name = "LAYERS")]
@@ -44,6 +48,17 @@ pub struct GraphInputArgs {
 }
 
 impl GraphInputArgs {
+    /// Get effective include_hidden setting: Some(true/false) if explicitly set, None if not specified.
+    pub fn effective_include_hidden(&self) -> Option<bool> {
+        if self.include_hidden {
+            Some(true)
+        } else if self.no_include_hidden {
+            Some(false)
+        } else {
+            None
+        }
+    }
+
     /// Apply graph input arguments to settings.
     pub fn apply_to_settings(&self, settings: &mut Settings) {
         if let Some(ref input_dirs) = self.input_dirs {
@@ -66,7 +81,7 @@ impl GraphInputArgs {
             settings.filters.exclude_globs = globs.clone();
         }
 
-        if let Some(hidden) = self.include_hidden {
+        if let Some(hidden) = self.effective_include_hidden() {
             settings.filters.include_hidden = hidden;
         }
 
@@ -115,5 +130,26 @@ mod tests {
         args.apply_to_settings(&mut settings);
 
         assert_eq!(settings.layers.names, vec!["prepend", "normal", "append"]);
+    }
+
+    #[test]
+    fn test_effective_include_hidden() {
+        // Neither flag set -> None
+        let args = GraphInputArgs::default();
+        assert_eq!(args.effective_include_hidden(), None);
+
+        // --include-hidden -> Some(true)
+        let args = GraphInputArgs {
+            include_hidden: true,
+            ..Default::default()
+        };
+        assert_eq!(args.effective_include_hidden(), Some(true));
+
+        // --no-include-hidden -> Some(false)
+        let args = GraphInputArgs {
+            no_include_hidden: true,
+            ..Default::default()
+        };
+        assert_eq!(args.effective_include_hidden(), Some(false));
     }
 }

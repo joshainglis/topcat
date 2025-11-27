@@ -4,20 +4,32 @@
 //! discovers dependencies, and updates file headers accordingly. It can also
 //! rename files based on discovered node names.
 //!
+//! # Smart Defaults
+//!
+//! When SQL-like extensions are specified (`sql`, `pg`, `psql`, `ddl`, `pgsql`),
+//! the update command automatically enables:
+//! - SQL discovery (`--sql-discovery`)
+//! - In-place header updates (`--update-headers`)
+//! - File renaming based on discovered names (`--rename-files`)
+//!
+//! These can be explicitly disabled with `--no-sql-discovery`,
+//! `--no-update-headers`, or `--no-rename-files`.
+//!
 //! # Examples
 //!
 //! ```bash
-//! # Update headers in-place (dry-run by default)
-//! topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
+//! # Preview changes (dry-run by default)
+//! topcat update -i sql/ -e sql
 //!
-//! # Actually update headers
-//! topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --mode execute
+//! # Apply changes
+//! topcat update -i sql/ -e sql --mode execute
 //!
-//! # Update headers and rename files
-//! topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
+//! # Generate to separate directory instead of in-place
+//! topcat update -i sql/ -e sql --generate-headers ./updated/
 //!
-//! # Generate updated files to a separate directory
-//! topcat update -i sql/ -e sql --enable-sql-discovery true --generate-headers ./updated/
+//! # Disable specific defaults
+//! topcat update -i sql/ -e sql --no-rename-files         # Keep original filenames
+//! topcat update -i sql/ -e sql --no-sql-discovery        # Header-only parsing
 //! ```
 
 use clap::Args;
@@ -73,6 +85,36 @@ impl UpdateArgs {
         self.input.apply_to_settings(&mut settings);
         self.sql_discovery.apply_to_settings(&mut settings);
         self.execution.apply_to_settings(&mut settings);
+
+        // Smart defaults for SQL files: enable discovery and in-place updates
+        let sql_extensions = ["sql", "pg", "psql", "ddl", "pgsql"];
+        let has_sql_ext = settings
+            .filters
+            .include_extensions
+            .iter()
+            .any(|ext| sql_extensions.contains(&ext.to_lowercase().as_str()));
+
+        if has_sql_ext {
+            // Default: enable SQL discovery unless explicitly set via CLI or config
+            if self.sql_discovery.effective_sql_discovery().is_none()
+                && !settings.sql_discovery.enabled
+            {
+                settings.sql_discovery.enabled = true;
+            }
+
+            // Default: update headers in-place unless explicitly set otherwise
+            if self.sql_discovery.effective_update_headers().is_none()
+                && self.sql_discovery.generate_headers_dir.is_none()
+                && settings.header_update_mode == sql_config::HeaderUpdateMode::Never
+            {
+                settings.header_update_mode = sql_config::HeaderUpdateMode::InPlace;
+            }
+
+            // Default: rename files based on discovered node names
+            if self.sql_discovery.effective_rename_files().is_none() && !settings.rename_files {
+                settings.rename_files = true;
+            }
+        }
 
         // Validate settings
         settings.validate().map_err(TopCatError::ConfigError)?;
@@ -189,7 +231,13 @@ impl UpdateArgs {
             .count();
 
         if update_count == 0 {
-            logger.info("No files with discovered dependencies found. Did you enable --enable-sql-discovery?");
+            if settings.sql_discovery.enabled {
+                logger.info("No dependencies discovered in any files.");
+            } else {
+                logger.info(
+                    "No files with discovered dependencies found. SQL discovery is disabled.",
+                );
+            }
             return Ok(());
         }
 

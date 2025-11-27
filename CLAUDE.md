@@ -37,10 +37,9 @@ Primary use case: Ordering SQL migration files where execution order matters bas
 cargo build --release
 cargo run -- concat -i input_dir/ output.sql
 
-# Update file headers (with SQL discovery)
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --mode dry-run  # Preview
+# Update file headers (SQL discovery, header updates, and renaming enabled by default)
+topcat update -i sql/ -e sql                           # Preview changes (dry-run)
+topcat update -i sql/ -e sql --mode execute            # Apply changes
 
 # Concatenation
 topcat concat -i sql/ -e sql migrations.sql         # Concatenate files
@@ -166,30 +165,33 @@ topcat concat -i sql/ -e sql output.sql                  # Basic concat
 
 The `update` command discovers dependencies from SQL content and updates file headers accordingly. It can also rename files based on discovered node names.
 
+**Smart defaults:** When using SQL extensions (`-e sql`, `-e pg`, etc.), SQL discovery, header updates, and file renaming are all enabled by default.
+
 ```bash
-# Update headers in-place with SQL discovery
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --mode execute
+# Preview changes (dry-run by default)
+topcat update -i sql/ -e sql
 
-# Preview changes without modifying files (default is dry-run)
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
+# Apply changes
+topcat update -i sql/ -e sql --mode execute
 
-# Update headers and rename files based on node names
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
-
-# Generate updated files to a separate directory
-topcat update -i sql/ -e sql --enable-sql-discovery true --generate-headers ./updated/
+# Generate updated files to a separate directory (instead of in-place)
+topcat update -i sql/ -e sql --generate-headers ./updated/
 
 # With custom schema pattern
-topcat update -i sql/ -e sql --enable-sql-discovery true --schema-pattern "myapp_\\w+" --update-headers true
+topcat update -i sql/ -e sql --schema-pattern "myapp_\\w+"
+
+# Disable specific defaults
+topcat update -i sql/ -e sql --no-rename-files         # Keep original filenames
+topcat update -i sql/ -e sql --no-sql-discovery        # Use header-only parsing
 ```
 
 **Typical workflow:**
 ```bash
 # Step 1: Preview changes
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
+topcat update -i sql/ -e sql
 
 # Step 2: Apply changes
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
+topcat update -i sql/ -e sql --mode execute
 
 # Step 3: Concatenate the properly annotated files
 topcat concat -i sql/ -e sql migrations.sql

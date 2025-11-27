@@ -47,8 +47,8 @@ nix develop  # Enter development environment with all dependencies
 ## Quick Start
 
 ```bash
-# Update file headers with discovered SQL dependencies
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --mode execute
+# Update file headers with discovered SQL dependencies (smart defaults for .sql files)
+topcat update -i sql/ -e sql --mode execute
 
 # Concatenate SQL files in dependency order
 topcat concat -i sql/ -e sql migrations.sql
@@ -105,41 +105,42 @@ topcat concat -i dir1/ -i dir2/ -e sql output.sql --layers prepend,normal,append
 
 ### `update` - Update File Headers
 
-Discover dependencies from SQL content and update file headers accordingly. Optionally rename files based on discovered node names.
+Discover dependencies from SQL content and update file headers accordingly.
+
+**Smart Defaults:** When using SQL extensions (`-e sql`, `-e pg`, etc.), SQL discovery, header updates, and file renaming are all enabled by default.
 
 ```bash
 # Preview changes (dry-run is default)
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true
+topcat update -i sql/ -e sql
 
-# Update headers in-place with SQL discovery
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --mode execute
+# Apply changes
+topcat update -i sql/ -e sql --mode execute
 
-# Update headers and rename files
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
+# Generate updated files to a separate directory (instead of in-place)
+topcat update -i sql/ -e sql --generate-headers ./updated/
 
-# Generate updated files to a separate directory
-topcat update -i sql/ -e sql --enable-sql-discovery true --generate-headers ./updated/
+# Disable specific defaults
+topcat update -i sql/ -e sql --no-rename-files         # Keep original filenames
+topcat update -i sql/ -e sql --no-sql-discovery        # Header-only parsing
 ```
 
-**Header Management Options:**
-- `--update-headers true` - Update source files in-place with discovered dependencies
+**Options:**
+- `--update-headers` / `--no-update-headers` - Update source files in-place (default: enabled for SQL)
 - `--generate-headers <DIR>` - Write files with updated headers to a separate directory
-- `--rename-files true` - Rename files based on discovered node names (use with header options)
-- `--mode <MODE>` - `dry-run` (default) or `execute`
-
-**SQL Discovery Options:**
-- `--enable-sql-discovery true` - Extract dependencies from SQL code (required)
+- `--rename-files` / `--no-rename-files` - Rename files based on discovered node names (default: enabled for SQL)
+- `--sql-discovery` / `--no-sql-discovery` - Extract dependencies from SQL code (default: enabled for SQL)
 - `--schema-pattern <REGEX>` - Pattern for schema names (e.g., `"myapp_\\w+"`)
 - `--merge-strategy <STRATEGY>` - How to merge manual vs discovered dependencies
+- `--mode <MODE>` - `dry-run` (default) or `execute`
 
 **Typical Workflow:**
 
 ```bash
 # Step 1: Preview changes
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true
+topcat update -i sql/ -e sql
 
 # Step 2: Apply changes
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
+topcat update -i sql/ -e sql --mode execute
 
 # Step 3: Concatenate the properly annotated files
 topcat concat -i sql/ -e sql migrations.sql
@@ -637,10 +638,14 @@ topcat config generate > topcat.toml
 
 ### SQL Discovery
 
-Automatically extract dependencies from SQL code, eliminating manual header maintenance. SQL discovery is now part of the `update` command:
+Automatically extract dependencies from SQL code, eliminating manual header maintenance. SQL discovery is enabled by default for SQL files in the `update` command:
 
 ```bash
-topcat update -i sql/ -e sql --enable-sql-discovery true --schema-pattern "myapp_\\w+" --update-headers true --mode execute
+# Smart defaults: discovery, header updates, and file renaming all enabled
+topcat update -i sql/ -e sql --mode execute
+
+# With custom schema pattern
+topcat update -i sql/ -e sql --schema-pattern "myapp_\\w+" --mode execute
 ```
 
 **Discovery Features:**
@@ -662,14 +667,17 @@ Now when your SQL contains `SELECT e_extensions.nlevel(path)`, Topcat automatica
 
 **File Renaming:**
 
-Use `--rename-files` with header management to rename files based on discovered node names:
+File renaming is enabled by default for SQL files. Files are renamed based on discovered node names:
 
 ```bash
-# Update headers and rename files in-place
-topcat update -i sql/ -e sql --enable-sql-discovery true --update-headers true --rename-files true --mode execute
+# Renaming enabled by default - just run update
+topcat update -i sql/ -e sql --mode execute
+
+# Disable renaming if you want to keep original filenames
+topcat update -i sql/ -e sql --no-rename-files --mode execute
 
 # Generate renamed files in a new directory
-topcat update -i sql/ -e sql --enable-sql-discovery true --generate-headers ./updated --rename-files true
+topcat update -i sql/ -e sql --generate-headers ./updated
 ```
 
 For schema.object nodes, files are renamed to `object.ext` (e.g., `my_schema.users` → `users.sql`). For schema-only nodes, files keep the schema name (e.g., `my_schema` → `my_schema.sql`).
@@ -851,11 +859,14 @@ topcat export -i sql/ -e sql api_deps.json json --mode deps --node api_main
 
 ### 3. Use Discovery for SQL Projects
 ```bash
-# Use update command to discover and maintain headers
-topcat update -i sql/ -e sql --enable-sql-discovery true --schema-pattern "myapp_\\w+" --update-headers true
+# Smart defaults handle discovery, header updates, and renaming
+topcat update -i sql/ -e sql --mode execute
+
+# With custom schema pattern
+topcat update -i sql/ -e sql --schema-pattern "myapp_\\w+" --mode execute
 
 # Validate your manual headers match reality
-topcat update -i sql/ -e sql --enable-sql-discovery true --merge-strategy validate
+topcat update -i sql/ -e sql --merge-strategy validate
 ```
 
 ### 4. Protect Entry Points
