@@ -28,7 +28,6 @@ pub static METADATA_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching COMMENT statements.
 /// Example: `COMMENT ON TABLE "schema"."table" IS 'description';`
-#[allow(dead_code)]
 pub static COMMENT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xs)
@@ -216,8 +215,6 @@ pub static DEFAULT_ACL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching SECURITY LABEL statements.
 /// Example: `SECURITY LABEL FOR "provider" ON TABLE "schema"."table" IS 'label';`
-/// Reserved for future security label parsing feature.
-#[allow(dead_code)]
 pub static SECURITY_LABEL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -240,8 +237,6 @@ pub static SECURITY_LABEL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE TEXT SEARCH CONFIGURATION statements.
 /// Example: `CREATE TEXT SEARCH CONFIGURATION "schema"."name" (PARSER = pg_catalog.default);`
-/// Reserved for future FTS configuration parsing feature.
-#[allow(dead_code)]
 pub static FTS_CONFIG_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -255,8 +250,6 @@ pub static FTS_CONFIG_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE TEXT SEARCH DICTIONARY statements.
 /// Example: `CREATE TEXT SEARCH DICTIONARY "schema"."name" (TEMPLATE = snowball, ...);`
-/// Reserved for future FTS dictionary parsing feature.
-#[allow(dead_code)]
 pub static FTS_DICTIONARY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -274,8 +267,6 @@ pub static FTS_DICTIONARY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE FOREIGN DATA WRAPPER statements.
 /// Example: `CREATE FOREIGN DATA WRAPPER "name" HANDLER handler_func;`
-/// Reserved for future FDW creation parsing feature.
-#[allow(dead_code)]
 pub static FDW_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -337,8 +328,6 @@ pub static FOREIGN_TABLE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE PUBLICATION statements.
 /// Example: `CREATE PUBLICATION "name" FOR TABLE "schema"."table";`
-/// Reserved for future publication parsing feature.
-#[allow(dead_code)]
 pub static PUBLICATION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -371,8 +360,6 @@ pub static SUBSCRIPTION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE AGGREGATE statements.
 /// Example: `CREATE AGGREGATE "schema"."name" (basetype) (...);`
-/// Reserved for future aggregate parsing feature.
-#[allow(dead_code)]
 pub static AGGREGATE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -386,8 +373,6 @@ pub static AGGREGATE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE COLLATION statements.
 /// Example: `CREATE COLLATION "schema"."name" (LOCALE = 'en_US.utf8');`
-/// Reserved for future collation parsing feature.
-#[allow(dead_code)]
 pub static COLLATION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -401,8 +386,6 @@ pub static COLLATION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE CONVERSION statements.
 /// Example: `CREATE CONVERSION "name" FOR 'encoding1' TO 'encoding2' FROM func;`
-/// Reserved for future conversion parsing feature.
-#[allow(dead_code)]
 pub static CONVERSION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -435,8 +418,6 @@ pub static EVENT_TRIGGER_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE LANGUAGE statements.
 /// Example: `CREATE PROCEDURAL LANGUAGE "plpgsql";`
-/// Reserved for future language parsing feature.
-#[allow(dead_code)]
 pub static LANGUAGE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -451,8 +432,6 @@ pub static LANGUAGE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE OPERATOR CLASS statements.
 /// Example: `CREATE OPERATOR CLASS "schema"."name" FOR TYPE type USING index_method AS ...;`
-/// Reserved for future operator class parsing feature.
-#[allow(dead_code)]
 pub static OPERATOR_CLASS_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -471,8 +450,6 @@ pub static OPERATOR_CLASS_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE OPERATOR FAMILY statements.
 /// Example: `CREATE OPERATOR FAMILY "schema"."name" USING index_method;`
-/// Reserved for future operator family parsing feature.
-#[allow(dead_code)]
 pub static OPERATOR_FAMILY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -487,8 +464,6 @@ pub static OPERATOR_FAMILY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE ACCESS METHOD statements.
 /// Example: `CREATE ACCESS METHOD "name" TYPE INDEX HANDLER handler_func;`
-/// Reserved for future access method parsing feature.
-#[allow(dead_code)]
 pub static ACCESS_METHOD_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -539,8 +514,6 @@ pub static STATISTICS_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE RULE statements.
 /// Example: `CREATE RULE "name" AS ON INSERT TO "schema"."table" DO ...;`
-/// Reserved for future rule parsing feature.
-#[allow(dead_code)]
 pub static RULE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -557,8 +530,6 @@ pub static RULE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE MATERIALIZED VIEW statements.
 /// Example: `CREATE MATERIALIZED VIEW "schema"."name" AS SELECT ...;`
-/// Reserved for future materialized view parsing feature.
-#[allow(dead_code)]
 pub static MATERIALIZED_VIEW_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)
@@ -572,8 +543,6 @@ pub static MATERIALIZED_VIEW_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching standalone CREATE SEQUENCE statements.
 /// Example: `CREATE SEQUENCE "schema"."name" START 1 INCREMENT 1;`
-/// Reserved for future sequence parsing feature.
-#[allow(dead_code)]
 pub static SEQUENCE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?xi)

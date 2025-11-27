@@ -232,7 +232,6 @@ impl TopcatConfig {
     }
 
     /// Merge CLI overrides into this configuration
-    #[allow(dead_code)]
     pub fn with_overrides(mut self, overrides: &SqlDiscoveryConfig) -> Self {
         // Override only the fields that are explicitly set
         if overrides.enabled {

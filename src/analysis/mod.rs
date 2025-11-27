@@ -9,7 +9,6 @@ use crate::file_dag::TCGraph;
 use std::collections::{HashMap, HashSet};
 
 /// Trait for analyzing dependency graphs
-#[allow(dead_code)]
 pub trait GraphAnalyzer {
     /// Find files with no dependencies and no dependents (orphans)
     fn find_orphans(&self) -> HashSet<String>;
