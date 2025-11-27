@@ -273,9 +273,24 @@ Import pg_dump files and split into organized per-object SQL files with topcat h
 topcat import pg-dump database.sql ./output/              # Split dump file
 topcat import pg-dump database.sql ./output/ --dry-run    # Preview changes
 topcat import pg-dump database.sql ./output/ --schema-pattern "app_\\w+"
+
+# Control optional features (all enabled by default)
+topcat import pg-dump database.sql ./output/ --generate-layers false  # No layer headers
+topcat import pg-dump database.sql ./output/ --generate-deps false    # No requires headers
+topcat import pg-dump database.sql ./output/ --include-acl false      # Skip ACL statements
+topcat import pg-dump database.sql ./output/ --include-owner false    # Skip OWNER statements
 ```
 
-Output structure: `schema/type/{enum,composite,domain}/`, `schema/table/`, `schema/functions/`, `_global/{cast,operator}/`
+**Supported PostgreSQL object types:** Schemas, extensions, tables, views, materialized views, foreign tables, sequences, types (enum/composite/range/domain), collations, functions, procedures, aggregates, indexes, constraints, FK constraints, triggers, policies, row security, defaults, statistics, rules, text search (configs/dictionaries/parsers/templates), foreign data wrappers, servers, user mappings, operators, operator classes/families, access methods, casts, publications, subscriptions, event triggers, languages, transforms, conversions, ACLs, default ACLs, security labels, comments.
+
+**Output structure:**
+- `schema/table/` - Tables with attached indexes, constraints, triggers, policies
+- `schema/view/`, `schema/materialized_view/` - Views
+- `schema/functions/` - Functions, procedures, aggregates
+- `schema/type/{enum,composite,range,domain}/` - Types by category
+- `schema/sequence/`, `schema/collation/` - Other schema objects
+- `schema/text_search/{config,dictionary,parser,template}/` - FTS objects
+- `_global/fdw/`, `_global/server/` - Global objects without schema
 
 ## Configuration
 

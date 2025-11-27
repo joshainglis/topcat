@@ -1,0 +1,330 @@
+//! CLI integration tests for the `import pg-dump` command.
+
+use assert_cmd::Command;
+use predicates::prelude::*;
+use std::fs;
+use std::path::PathBuf;
+use tempfile::TempDir;
+
+/// Get a Command instance for the topcat binary
+fn topcat_cmd() -> Command {
+    Command::new(assert_cmd::cargo::cargo_bin!("topcat"))
+}
+
+/// Create a sample pg_dump file with various object types
+fn create_sample_pg_dump(dir: &TempDir) -> PathBuf {
+    let dump_file = dir.path().join("database.sql");
+
+    let content = r#"--
+-- PostgreSQL database dump
+--
+
+-- Name: public; Type: SCHEMA; Schema: -; Owner: postgres
+
+CREATE SCHEMA public;
+
+-- Name: auth; Type: SCHEMA; Schema: -; Owner: postgres
+
+CREATE SCHEMA auth;
+
+-- Name: users; Type: TABLE; Schema: public; Owner: postgres
+
+CREATE TABLE "public"."users" (
+    id serial PRIMARY KEY,
+    email text NOT NULL,
+    created_at timestamp DEFAULT NOW()
+);
+
+-- Name: roles; Type: TABLE; Schema: auth; Owner: postgres
+
+CREATE TABLE "auth"."roles" (
+    id serial PRIMARY KEY,
+    name text NOT NULL
+);
+
+-- Name: user_roles; Type: TABLE; Schema: auth; Owner: postgres
+
+CREATE TABLE "auth"."user_roles" (
+    user_id integer REFERENCES "public"."users"(id),
+    role_id integer REFERENCES "auth"."roles"(id),
+    PRIMARY KEY (user_id, role_id)
+);
+
+-- Name: status; Type: TYPE; Schema: public; Owner: postgres
+
+CREATE TYPE "public"."status" AS ENUM ('active', 'inactive', 'pending');
+
+-- Name: get_user; Type: FUNCTION; Schema: public; Owner: postgres
+
+CREATE OR REPLACE FUNCTION "public"."get_user"(p_id integer)
+RETURNS TABLE(id integer, email text)
+LANGUAGE sql
+AS $$
+    SELECT id, email FROM "public"."users" WHERE id = p_id;
+$$;
+
+-- Name: users_email_idx; Type: INDEX; Schema: public; Owner: postgres
+
+CREATE INDEX users_email_idx ON "public"."users" (email);
+
+-- Name: users_fk_constraint; Type: FK CONSTRAINT; Schema: auth; Owner: postgres
+
+ALTER TABLE ONLY "auth"."user_roles"
+    ADD CONSTRAINT users_fk_constraint FOREIGN KEY (user_id)
+    REFERENCES "public"."users"(id);
+
+-- Name: user_view; Type: VIEW; Schema: public; Owner: postgres
+
+CREATE VIEW "public"."user_view" AS
+    SELECT id, email FROM "public"."users";
+
+-- Name: MATERIALIZED VIEW report_summary; Type: MATERIALIZED VIEW; Schema: public; Owner: postgres
+
+CREATE MATERIALIZED VIEW "public"."report_summary" AS
+    SELECT COUNT(*) as total FROM "public"."users";
+
+-- Name: user_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+
+CREATE SEQUENCE "public"."user_seq" START 1 INCREMENT 1;
+
+"#;
+
+    fs::write(&dump_file, content).unwrap();
+    dump_file
+}
+
+#[test]
+fn test_import_pg_dump_basic() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = create_sample_pg_dump(&temp_dir);
+    let output_dir = temp_dir.path().join("output");
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created"));
+
+    // Verify output directory was created
+    assert!(output_dir.exists());
+
+    // Verify schema directories were created
+    assert!(output_dir.join("public").exists());
+    assert!(output_dir.join("auth").exists());
+
+    // Verify table files were created
+    assert!(output_dir.join("public/table/users.sql").exists());
+    assert!(output_dir.join("auth/table/roles.sql").exists());
+
+    // Verify type file was created
+    assert!(output_dir.join("public/type/enum/status.sql").exists());
+
+    // Verify function file was created
+    assert!(output_dir.join("public/functions/get_user.sql").exists());
+}
+
+#[test]
+fn test_import_pg_dump_dry_run() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = create_sample_pg_dump(&temp_dir);
+    let output_dir = temp_dir.path().join("output");
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+            "--dry-run",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Would create"));
+
+    // Verify output directory was NOT created
+    assert!(!output_dir.exists());
+}
+
+#[test]
+fn test_import_pg_dump_with_layers() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = create_sample_pg_dump(&temp_dir);
+    let output_dir = temp_dir.path().join("output");
+
+    // Layers are enabled by default, so just run without the flag
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    // Check that a file contains layer header
+    let schema_file = output_dir.join("public/schema/public.sql");
+    if schema_file.exists() {
+        let content = fs::read_to_string(&schema_file).unwrap();
+        assert!(content.contains("-- layer: prepend"));
+    }
+
+    // Check a table file for normal layer
+    let table_file = output_dir.join("public/table/users.sql");
+    if table_file.exists() {
+        let content = fs::read_to_string(&table_file).unwrap();
+        assert!(content.contains("-- layer: normal"));
+    }
+}
+
+#[test]
+fn test_import_pg_dump_no_layers() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = create_sample_pg_dump(&temp_dir);
+    let output_dir = temp_dir.path().join("output");
+
+    // Note: To disable layers, we pass --generate-layers false (two separate args)
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+            "--generate-layers",
+            "false",
+        ])
+        .assert()
+        .success();
+
+    // Check that a file does NOT contain layer header
+    let table_file = output_dir.join("public/table/users.sql");
+    if table_file.exists() {
+        let content = fs::read_to_string(&table_file).unwrap();
+        assert!(!content.contains("-- layer:"));
+    }
+}
+
+#[test]
+fn test_import_pg_dump_missing_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let nonexistent = temp_dir.path().join("nonexistent.sql");
+    let output_dir = temp_dir.path().join("output");
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            nonexistent.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not found"));
+}
+
+#[test]
+fn test_import_pg_dump_file_headers() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = create_sample_pg_dump(&temp_dir);
+    let output_dir = temp_dir.path().join("output");
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    // Check that files have proper name headers
+    let table_file = output_dir.join("public/table/users.sql");
+    if table_file.exists() {
+        let content = fs::read_to_string(&table_file).unwrap();
+        assert!(content.starts_with("-- name: public.users"));
+    }
+
+    let func_file = output_dir.join("public/functions/get_user.sql");
+    if func_file.exists() {
+        let content = fs::read_to_string(&func_file).unwrap();
+        assert!(content.starts_with("-- name: public.get_user"));
+    }
+}
+
+#[test]
+fn test_import_pg_dump_materialized_view() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = create_sample_pg_dump(&temp_dir);
+    let output_dir = temp_dir.path().join("output");
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    // Check that materialized view was created in the right location
+    let mv_file = output_dir.join("public/materialized_view/report_summary.sql");
+    if mv_file.exists() {
+        let content = fs::read_to_string(&mv_file).unwrap();
+        assert!(content.contains("CREATE MATERIALIZED VIEW"));
+    }
+}
+
+#[test]
+fn test_import_pg_dump_view() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = create_sample_pg_dump(&temp_dir);
+    let output_dir = temp_dir.path().join("output");
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    // Check that view was created
+    let view_file = output_dir.join("public/view/user_view.sql");
+    if view_file.exists() {
+        let content = fs::read_to_string(&view_file).unwrap();
+        assert!(content.contains("CREATE VIEW"));
+    }
+}
+
+#[test]
+fn test_import_pg_dump_sequence() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = create_sample_pg_dump(&temp_dir);
+    let output_dir = temp_dir.path().join("output");
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    // Check that sequence was created in the right location
+    let seq_file = output_dir.join("public/sequence/user_seq.sql");
+    if seq_file.exists() {
+        let content = fs::read_to_string(&seq_file).unwrap();
+        assert!(content.contains("CREATE SEQUENCE"));
+    }
+}

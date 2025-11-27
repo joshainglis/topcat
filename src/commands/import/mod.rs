@@ -20,6 +20,8 @@
 //! topcat import pg-dump database.sql ./output/ --schema-pattern "app_\\w+"
 //! ```
 
+mod dependencies;
+mod object_types;
 mod patterns;
 mod pg_dump;
 

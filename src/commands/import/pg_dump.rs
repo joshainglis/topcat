@@ -3,6 +3,19 @@
 //! This module provides functionality to parse pg_dump output files and split them
 //! into organized per-object SQL files with topcat-compatible headers.
 //!
+//! # Supported Object Types
+//!
+//! The parser supports all PostgreSQL object types including:
+//! - Schema-level: TABLE, VIEW, MATERIALIZED VIEW, FOREIGN TABLE, SEQUENCE
+//! - Types: TYPE (enum, composite, domain, range), DOMAIN, COLLATION
+//! - Routines: FUNCTION, PROCEDURE, AGGREGATE
+//! - Full Text Search: TEXT SEARCH CONFIGURATION, DICTIONARY, PARSER, TEMPLATE
+//! - Foreign Data: FOREIGN DATA WRAPPER, SERVER, USER MAPPING
+//! - Operators: OPERATOR, OPERATOR CLASS, OPERATOR FAMILY
+//! - Replication: PUBLICATION, SUBSCRIPTION
+//! - Security: ACL, DEFAULT ACL, SECURITY LABEL
+//! - And more...
+//!
 //! # Example
 //!
 //! ```bash
@@ -21,8 +34,11 @@ use topcat::exceptions::TopCatError;
 use topcat::logging::{Logger, init_logging};
 use topcat::settings::Settings;
 
+use super::dependencies::{DependencyAnalyzer, build_global_header, build_header};
+use super::object_types::{Layer, ObjectType, TypeSubcategory};
 use super::patterns::{
-    ALTER_TABLE_PATTERN, DEFAULT_SCHEMA_PATTERN, EXTENSION_PATTERN, METADATA_PATTERN,
+    ALTER_TABLE_PATTERN, DEFAULT_ACL_PATTERN, DEFAULT_SCHEMA_PATTERN, EXTENSION_PATTERN,
+    GRANT_PATTERN, METADATA_PATTERN, OWNER_PATTERN, REVOKE_PATTERN, STATISTICS_PATTERN,
     TRIGGER_PATTERN, build_cast_pattern, build_operator_pattern,
 };
 
@@ -47,6 +63,22 @@ pub struct PgDumpArgs {
     /// Preview changes without writing files
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Include ACL (GRANT/REVOKE) statements with objects
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    pub include_acl: bool,
+
+    /// Include OWNER statements with objects
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    pub include_owner: bool,
+
+    /// Generate layer headers based on object type
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    pub generate_layers: bool,
+
+    /// Auto-generate dependency headers from SQL content analysis
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    pub generate_deps: bool,
 }
 
 /// Basic object information extracted from pg_dump metadata comments.
@@ -55,21 +87,29 @@ struct ObjInfo {
     schema: String,
     name: String,
     identity: String,
-    obj_type: String,
+    obj_type: ObjectType,
+    pg_type_str: String,
     target_type: Option<String>,
+    owner: Option<String>,
 }
 
 /// Hydrated object with content and categorization.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct HydratedObjInfo {
     schema: String,
     name: String,
+    #[allow(dead_code)]
     identity: String,
-    obj_type: String,
+    obj_type: ObjectType,
+    #[allow(dead_code)]
     target_type: Option<String>,
+    #[allow(dead_code)]
     category: String,
     content: String,
+    #[allow(dead_code)]
+    owner: Option<String>,
+    #[allow(dead_code)]
+    acl: Vec<String>,
 }
 
 impl HydratedObjInfo {
@@ -82,6 +122,8 @@ impl HydratedObjInfo {
             target_type: info.target_type,
             category,
             content,
+            owner: info.owner,
+            acl: Vec::new(),
         }
     }
 }
@@ -100,11 +142,15 @@ struct RelatedObjects {
     row_security: Vec<HydratedObjInfo>,
     index: Vec<HydratedObjInfo>,
     sequence: Vec<HydratedObjInfo>,
+    statistics: Vec<HydratedObjInfo>,
+    rule: Vec<HydratedObjInfo>,
+    acl: Vec<String>,
+    owner: Option<String>,
 }
 
 impl RelatedObjects {
     /// Render all related objects into a single SQL string.
-    fn render(&self) -> String {
+    fn render(&self, include_acl: bool, include_owner: bool) -> String {
         let mut parts: Vec<&str> = Vec::new();
 
         for obj in &self.primary_obj {
@@ -120,6 +166,12 @@ impl RelatedObjects {
             parts.push(&obj.content);
         }
         for obj in &self.fk_constraint {
+            parts.push(&obj.content);
+        }
+        for obj in &self.statistics {
+            parts.push(&obj.content);
+        }
+        for obj in &self.rule {
             parts.push(&obj.content);
         }
         for obj in &self.row_security {
@@ -141,19 +193,51 @@ impl RelatedObjects {
             parts.push(&obj.content);
         }
 
-        parts.join("\n\n")
+        let mut result = parts.join("\n\n");
+
+        // Add owner statement if present
+        if include_owner {
+            if let Some(ref owner_stmt) = self.owner {
+                if !result.is_empty() {
+                    result.push_str("\n\n");
+                }
+                result.push_str(owner_stmt);
+            }
+        }
+
+        // Add ACL statements
+        if include_acl && !self.acl.is_empty() {
+            if !result.is_empty() {
+                result.push_str("\n\n");
+            }
+            result.push_str(&self.acl.join("\n"));
+        }
+
+        result
     }
 }
 
 /// Key for looking up objects: (obj_type, schema, name)
-type ObjectKey = (String, String, String);
+type ObjectKey = (ObjectType, String, String);
 
 /// Global object entry for database-level objects (casts, operators, etc.)
 #[derive(Debug)]
 struct GlobalObject {
     category: String,
+    subcategory: Option<String>,
     name: String,
     content: String,
+    layer: Layer,
+    acl: Vec<String>,
+}
+
+/// Security statement to be attached to an object.
+#[derive(Debug, Clone)]
+struct SecurityStatement {
+    obj_type: Option<String>,
+    obj_schema: Option<String>,
+    obj_name: String,
+    statement: String,
 }
 
 /// Main parser for PostgreSQL dump files.
@@ -167,25 +251,56 @@ pub struct PgDumpParser {
     /// schema -> category -> name -> list of (obj_type, schema, name) keys
     schemas: HashMap<String, HashMap<String, HashMap<String, Vec<ObjectKey>>>>,
     /// type -> schema -> name -> RelatedObjects
-    objects: HashMap<String, HashMap<String, HashMap<String, RelatedObjects>>>,
+    objects: HashMap<ObjectType, HashMap<String, HashMap<String, RelatedObjects>>>,
     /// Database-level objects that don't belong to a schema
     global_objects: Vec<GlobalObject>,
+    /// Pending ACL statements to be attached
+    pending_acl: Vec<SecurityStatement>,
+    /// Pending owner statements to be attached
+    pending_owner: Vec<SecurityStatement>,
+    /// Default ACL statements
+    default_acl: Vec<String>,
+    /// Dependency analyzer for auto-generating requires headers
+    dep_analyzer: Option<DependencyAnalyzer>,
     dry_run: bool,
+    include_acl: bool,
+    include_owner: bool,
+    generate_layers: bool,
+    generate_deps: bool,
     logger: Logger,
 }
 
 impl PgDumpParser {
     /// Create a new parser instance.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         dump_file: PathBuf,
         output_dir: PathBuf,
         schema_pattern: Option<String>,
         dry_run: bool,
+        include_acl: bool,
+        include_owner: bool,
+        generate_layers: bool,
+        generate_deps: bool,
         logger: Logger,
     ) -> Self {
-        let pattern = schema_pattern.unwrap_or_else(|| DEFAULT_SCHEMA_PATTERN.to_string());
+        let pattern = schema_pattern
+            .clone()
+            .unwrap_or_else(|| DEFAULT_SCHEMA_PATTERN.to_string());
         let cast_pattern = build_cast_pattern(&pattern);
         let operator_pattern = build_operator_pattern(&pattern);
+
+        // Create dependency analyzer if enabled
+        let dep_analyzer = if generate_deps {
+            use topcat::sql_config::SqlDiscoveryConfig;
+            let config = SqlDiscoveryConfig {
+                schema_pattern: schema_pattern.clone(),
+                ..Default::default()
+            };
+            DependencyAnalyzer::new(config).ok()
+        } else {
+            None
+        };
 
         Self {
             dump_file,
@@ -196,7 +311,15 @@ impl PgDumpParser {
             schemas: HashMap::new(),
             objects: HashMap::new(),
             global_objects: Vec::new(),
+            pending_acl: Vec::new(),
+            pending_owner: Vec::new(),
+            default_acl: Vec::new(),
+            dep_analyzer,
             dry_run,
+            include_acl,
+            include_owner,
+            generate_layers,
+            generate_deps,
             logger,
         }
     }
@@ -210,9 +333,13 @@ impl PgDumpParser {
         let mut current_content: Vec<&str> = Vec::new();
 
         for line in &lines {
+            // Check for metadata comments first
             if let Some(caps) = METADATA_PATTERN.captures(line) {
-                // Skip COMMENT type entries in metadata
-                if caps.name("type").map(|m| m.as_str().trim()) == Some("COMMENT") {
+                let type_str = caps.name("type").map(|m| m.as_str().trim()).unwrap_or("");
+                let obj_type = ObjectType::from_pg_dump_type(type_str);
+
+                // Skip COMMENT type entries in metadata - they're handled inline
+                if obj_type == ObjectType::Comment {
                     continue;
                 }
 
@@ -227,6 +354,8 @@ impl PgDumpParser {
                     if t == "COLUMN" { "TABLE" } else { t }.to_string()
                 });
 
+                let owner = caps.name("owner").map(|m| m.as_str().trim().to_string());
+
                 current_object = Some(ObjInfo {
                     name: caps
                         .name("name")
@@ -238,17 +367,15 @@ impl PgDumpParser {
                         .map(|m| m.as_str().trim())
                         .unwrap_or("")
                         .to_string(),
-                    obj_type: caps
-                        .name("type")
-                        .map(|m| m.as_str().trim())
-                        .unwrap_or("")
-                        .to_string(),
+                    obj_type,
+                    pg_type_str: type_str.to_string(),
                     target_type,
                     schema: caps
                         .name("schema")
                         .map(|m| m.as_str().trim())
                         .unwrap_or("")
                         .to_string(),
+                    owner,
                 });
                 current_content.clear();
             } else if current_object.is_some() && !line.starts_with("--") && !line.trim().is_empty()
@@ -262,46 +389,206 @@ impl PgDumpParser {
             self.save_object(obj, current_content.join("\n"));
         }
 
+        // Second pass: collect security statements
+        self.collect_security_statements(&content);
+
+        // Attach security statements to objects
+        self.attach_security_statements();
+
         Ok(())
+    }
+
+    /// Collect GRANT/REVOKE/OWNER statements from content.
+    fn collect_security_statements(&mut self, content: &str) {
+        for line in content.lines() {
+            // Check for GRANT statements
+            if let Some(caps) = GRANT_PATTERN.captures(line) {
+                self.pending_acl.push(SecurityStatement {
+                    obj_type: caps.name("obj_type").map(|m| m.as_str().to_uppercase()),
+                    obj_schema: caps.name("obj_schema").map(|m| m.as_str().to_string()),
+                    obj_name: caps
+                        .name("obj_name")
+                        .map(|m| m.as_str().to_string())
+                        .unwrap_or_default(),
+                    statement: line.to_string(),
+                });
+            }
+
+            // Check for REVOKE statements
+            if let Some(caps) = REVOKE_PATTERN.captures(line) {
+                self.pending_acl.push(SecurityStatement {
+                    obj_type: caps.name("obj_type").map(|m| m.as_str().to_uppercase()),
+                    obj_schema: caps.name("obj_schema").map(|m| m.as_str().to_string()),
+                    obj_name: caps
+                        .name("obj_name")
+                        .map(|m| m.as_str().to_string())
+                        .unwrap_or_default(),
+                    statement: line.to_string(),
+                });
+            }
+
+            // Check for OWNER statements
+            if let Some(caps) = OWNER_PATTERN.captures(line) {
+                self.pending_owner.push(SecurityStatement {
+                    obj_type: caps.name("obj_type").map(|m| m.as_str().to_uppercase()),
+                    obj_schema: caps.name("obj_schema").map(|m| m.as_str().to_string()),
+                    obj_name: caps
+                        .name("obj_name")
+                        .map(|m| m.as_str().to_string())
+                        .unwrap_or_default(),
+                    statement: line.to_string(),
+                });
+            }
+
+            // Check for DEFAULT ACL statements
+            if DEFAULT_ACL_PATTERN.is_match(line) {
+                self.default_acl.push(line.to_string());
+            }
+        }
+    }
+
+    /// Attach collected security statements to their parent objects.
+    fn attach_security_statements(&mut self) {
+        // Attach ACL statements
+        for acl in &self.pending_acl {
+            let schema = acl
+                .obj_schema
+                .clone()
+                .unwrap_or_else(|| "public".to_string());
+
+            // Try to find matching object
+            let obj_type = acl
+                .obj_type
+                .as_ref()
+                .map(|t| ObjectType::from_pg_dump_type(t))
+                .unwrap_or(ObjectType::Unknown);
+
+            // Try primary object types
+            let types_to_try = match obj_type {
+                ObjectType::Table => vec![ObjectType::Table],
+                ObjectType::Sequence => vec![ObjectType::Sequence],
+                ObjectType::Function => vec![ObjectType::Function],
+                ObjectType::Procedure => vec![ObjectType::Procedure],
+                ObjectType::Schema => vec![ObjectType::Schema],
+                ObjectType::Type | ObjectType::Domain => vec![ObjectType::Type, ObjectType::Domain],
+                _ => vec![
+                    ObjectType::Table,
+                    ObjectType::View,
+                    ObjectType::MaterializedView,
+                    ObjectType::Function,
+                    ObjectType::Sequence,
+                ],
+            };
+
+            for try_type in types_to_try {
+                if let Some(schema_map) = self.objects.get_mut(&try_type) {
+                    if let Some(name_map) = schema_map.get_mut(&schema) {
+                        if let Some(related) = name_map.get_mut(&acl.obj_name) {
+                            related.acl.push(acl.statement.clone());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Attach owner statements
+        for owner_stmt in &self.pending_owner {
+            let schema = owner_stmt
+                .obj_schema
+                .clone()
+                .unwrap_or_else(|| "public".to_string());
+
+            let obj_type = owner_stmt
+                .obj_type
+                .as_ref()
+                .map(|t| ObjectType::from_pg_dump_type(t))
+                .unwrap_or(ObjectType::Unknown);
+
+            let types_to_try = match obj_type {
+                ObjectType::Table => vec![ObjectType::Table],
+                ObjectType::View => vec![ObjectType::View],
+                ObjectType::MaterializedView => vec![ObjectType::MaterializedView],
+                ObjectType::Function => vec![ObjectType::Function],
+                ObjectType::Procedure => vec![ObjectType::Procedure],
+                _ => vec![ObjectType::Table, ObjectType::View, ObjectType::Function],
+            };
+
+            for try_type in types_to_try {
+                if let Some(schema_map) = self.objects.get_mut(&try_type) {
+                    if let Some(name_map) = schema_map.get_mut(&schema) {
+                        if let Some(related) = name_map.get_mut(&owner_stmt.obj_name) {
+                            related.owner = Some(owner_stmt.statement.clone());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Save an object to the appropriate data structure.
     fn save_object(&mut self, mut obj_info: ObjInfo, content: String) {
         // Handle schema-less objects
         if obj_info.schema == "-" {
-            if obj_info.obj_type == "SCHEMA" {
-                obj_info.schema = obj_info.name.clone();
-            } else if obj_info.obj_type == "CAST" {
-                self.handle_cast(&content);
-                return;
-            } else if obj_info.obj_type == "EXTENSION" {
-                if let Some(caps) = EXTENSION_PATTERN.captures(&content) {
-                    obj_info.schema = caps
-                        .name("ext_schema")
-                        .map(|m| m.as_str().to_string())
-                        .unwrap_or_else(|| "public".to_string());
-                    obj_info.name = caps
-                        .name("ext_name")
-                        .map(|m| m.as_str().to_string())
-                        .unwrap_or_default();
+            match obj_info.obj_type {
+                ObjectType::Schema => {
+                    obj_info.schema = obj_info.name.clone();
                 }
-            } else {
-                obj_info.schema = "public".to_string();
+                ObjectType::Cast => {
+                    self.handle_cast(&content);
+                    return;
+                }
+                ObjectType::Extension => {
+                    if let Some(caps) = EXTENSION_PATTERN.captures(&content) {
+                        obj_info.schema = caps
+                            .name("ext_schema")
+                            .map(|m| m.as_str().to_string())
+                            .unwrap_or_else(|| "public".to_string());
+                        obj_info.name = caps
+                            .name("ext_name")
+                            .map(|m| m.as_str().to_string())
+                            .unwrap_or_default();
+                    }
+                }
+                // Global objects
+                ObjectType::ForeignDataWrapper
+                | ObjectType::Server
+                | ObjectType::Language
+                | ObjectType::EventTrigger
+                | ObjectType::Publication
+                | ObjectType::Subscription
+                | ObjectType::AccessMethod => {
+                    self.handle_global_object(&obj_info, &content);
+                    return;
+                }
+                _ => {
+                    obj_info.schema = "public".to_string();
+                }
             }
         }
 
         // Handle OPERATOR type
-        if obj_info.obj_type == "OPERATOR" {
+        if obj_info.obj_type == ObjectType::Operator {
             self.handle_operator(&content);
             return;
         }
 
-        let category = self.categorize_object(&obj_info.obj_type, &obj_info.name, &content);
+        // Handle operator class/family
+        if matches!(
+            obj_info.obj_type,
+            ObjectType::OperatorClass | ObjectType::OperatorFamily
+        ) {
+            self.handle_global_object(&obj_info, &content);
+            return;
+        }
+
+        let category = self.categorize_object(&obj_info, &content);
         let hydrated =
             HydratedObjInfo::from_info(obj_info.clone(), category.clone(), content.clone());
 
         // Handle TRIGGER - associate with function
-        if obj_info.obj_type == "TRIGGER" {
+        if obj_info.obj_type == ObjectType::Trigger {
             if let Some(caps) = TRIGGER_PATTERN.captures(&content) {
                 let fn_schema = caps
                     .name("fn_schema")
@@ -311,8 +598,26 @@ impl PgDumpParser {
                     .name("fn_name")
                     .map(|m| m.as_str().trim().to_string())
                     .unwrap_or_default();
-                self.get_or_create_related("FUNCTION", &fn_schema, &fn_name)
+                self.get_or_create_related(ObjectType::Function, &fn_schema, &fn_name)
                     .trigger
+                    .push(hydrated);
+                return;
+            }
+        }
+
+        // Handle STATISTICS - attach to table
+        if obj_info.obj_type == ObjectType::Statistics {
+            if let Some(caps) = STATISTICS_PATTERN.captures(&content) {
+                let tbl_schema = caps
+                    .name("table_schema")
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_else(|| obj_info.schema.clone());
+                let tbl_name = caps
+                    .name("table_name")
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_default();
+                self.get_or_create_related(ObjectType::Table, &tbl_schema, &tbl_name)
+                    .statistics
                     .push(hydrated);
                 return;
             }
@@ -328,40 +633,41 @@ impl PgDumpParser {
                 .name("tbl_name")
                 .map(|m| m.as_str().trim().to_string())
                 .unwrap_or_default();
-            let related = self.get_or_create_related("TABLE", &tbl_schema, &tbl_name);
+            let related = self.get_or_create_related(ObjectType::Table, &tbl_schema, &tbl_name);
 
             // Store in appropriate bucket based on object type
-            match obj_info.obj_type.as_str() {
-                "CONSTRAINT" => related.constraint.push(hydrated),
-                "INDEX" => related.index.push(hydrated),
-                "POLICY" => related.policy.push(hydrated),
-                "ROW SECURITY" => related.row_security.push(hydrated),
-                "DEFAULT" => related.primary_obj.push(hydrated), // Column defaults go with table
-                "FK CONSTRAINT" => related.fk_constraint.push(hydrated),
-                _ => related.trigger.push(hydrated), // Fallback for triggers and unknowns
+            match obj_info.obj_type {
+                ObjectType::Constraint => related.constraint.push(hydrated),
+                ObjectType::Index => related.index.push(hydrated),
+                ObjectType::Policy => related.policy.push(hydrated),
+                ObjectType::RowSecurity => related.row_security.push(hydrated),
+                ObjectType::Default => related.primary_obj.push(hydrated),
+                ObjectType::FkConstraint => related.fk_constraint.push(hydrated),
+                ObjectType::Rule => related.rule.push(hydrated),
+                _ => related.trigger.push(hydrated),
             }
             return;
         }
 
-        // Handle FUNCTION/PROCEDURE - try to add to existing object
-        if matches!(obj_info.obj_type.as_str(), "FUNCTION" | "PROCEDURE") {
-            self.try_add_to_existing(&hydrated, &["TABLE", "TYPE"]);
+        // Handle FUNCTION/PROCEDURE - try to add to existing object (for overloads)
+        if matches!(
+            obj_info.obj_type,
+            ObjectType::Function | ObjectType::Procedure | ObjectType::Aggregate
+        ) {
+            self.try_add_to_existing(&hydrated, &[ObjectType::Table, ObjectType::Type]);
         }
 
         // Primary object types
-        if matches!(
-            obj_info.obj_type.as_str(),
-            "TABLE" | "TYPE" | "DOMAIN" | "SCHEMA" | "VIEW" | "FUNCTION" | "PROCEDURE" | "OPERATOR"
-        ) {
+        if obj_info.obj_type.is_primary() {
             let related =
-                self.get_or_create_related(&obj_info.obj_type, &obj_info.schema, &obj_info.name);
+                self.get_or_create_related(obj_info.obj_type, &obj_info.schema, &obj_info.name);
             let is_first = related.primary_obj.is_empty();
             related.primary_obj.push(hydrated.clone());
 
             if is_first {
-                // Store key reference instead of clone
+                // Store key reference
                 let key = (
-                    obj_info.obj_type.clone(),
+                    obj_info.obj_type,
                     obj_info.schema.clone(),
                     obj_info.name.clone(),
                 );
@@ -373,21 +679,58 @@ impl PgDumpParser {
                     .entry(obj_info.name.clone())
                     .or_default()
                     .push(key);
+
+                // Register with dependency analyzer
+                if let Some(ref mut analyzer) = self.dep_analyzer {
+                    analyzer.register_object(&obj_info.schema, &obj_info.name);
+                }
             }
-        } else if let Some(target_type) = &obj_info.target_type {
+        } else if let Some(ref target_type_str) = obj_info.target_type {
             // Secondary objects - attach to parent
+            let target_type = ObjectType::from_pg_dump_type(target_type_str);
             let related = self.get_or_create_related(target_type, &obj_info.schema, &obj_info.name);
-            match category.as_str() {
-                "constraint" => related.constraint.push(hydrated),
-                "fk_constraint" => related.fk_constraint.push(hydrated),
-                "index" => related.index.push(hydrated),
-                "sequence" => related.sequence.push(hydrated),
-                "policy" => related.policy.push(hydrated),
-                "row_security" => related.row_security.push(hydrated),
-                "comment" => related.comment.push(hydrated),
+            match obj_info.obj_type {
+                ObjectType::Constraint => related.constraint.push(hydrated),
+                ObjectType::FkConstraint => related.fk_constraint.push(hydrated),
+                ObjectType::Index => related.index.push(hydrated),
+                ObjectType::Sequence => related.sequence.push(hydrated),
+                ObjectType::Policy => related.policy.push(hydrated),
+                ObjectType::RowSecurity => related.row_security.push(hydrated),
+                ObjectType::Comment => related.comment.push(hydrated),
+                ObjectType::Statistics => related.statistics.push(hydrated),
+                ObjectType::Rule => related.rule.push(hydrated),
                 _ => {} // Ignore unknown categories
             }
         }
+    }
+
+    /// Handle global objects that don't belong to a schema.
+    fn handle_global_object(&mut self, obj_info: &ObjInfo, content: &str) {
+        let (category, subcategory) = match obj_info.obj_type {
+            ObjectType::ForeignDataWrapper => ("fdw".to_string(), Some("wrapper".to_string())),
+            ObjectType::Server => ("fdw".to_string(), Some("server".to_string())),
+            ObjectType::UserMapping => ("fdw".to_string(), Some("user_mapping".to_string())),
+            ObjectType::Language => ("language".to_string(), None),
+            ObjectType::EventTrigger => ("event_trigger".to_string(), None),
+            ObjectType::Publication => ("replication".to_string(), Some("publication".to_string())),
+            ObjectType::Subscription => {
+                ("replication".to_string(), Some("subscription".to_string()))
+            }
+            ObjectType::AccessMethod => ("access_method".to_string(), None),
+            ObjectType::OperatorClass => ("operator".to_string(), Some("class".to_string())),
+            ObjectType::OperatorFamily => ("operator".to_string(), Some("family".to_string())),
+            ObjectType::Transform => ("transform".to_string(), None),
+            _ => ("other".to_string(), None),
+        };
+
+        self.global_objects.push(GlobalObject {
+            category,
+            subcategory,
+            name: obj_info.name.clone(),
+            content: content.to_string(),
+            layer: obj_info.obj_type.layer(),
+            acl: Vec::new(),
+        });
     }
 
     /// Handle CAST objects.
@@ -409,18 +752,23 @@ impl PgDumpParser {
                 schema: schema.clone(),
                 name: to_name.clone(),
                 identity: format!("{from_name}::{to_name}"),
-                obj_type: "CAST".to_string(),
+                obj_type: ObjectType::Cast,
                 target_type: Some("CAST".to_string()),
                 category: "CAST".to_string(),
                 content: content.to_string(),
+                owner: None,
+                acl: Vec::new(),
             };
 
-            if !self.try_add_to_existing(&hydrated, &["TABLE", "TYPE"]) {
+            if !self.try_add_to_existing(&hydrated, &[ObjectType::Table, ObjectType::Type]) {
                 // Add to global objects
                 self.global_objects.push(GlobalObject {
                     category: "cast".to_string(),
+                    subcategory: None,
                     name: format!("{from_name}_to_{to_name}"),
                     content: content.to_string(),
+                    layer: Layer::Prepend,
+                    acl: Vec::new(),
                 });
             }
         }
@@ -450,27 +798,40 @@ impl PgDumpParser {
                 schema: "public".to_string(),
                 name: procedure_name.clone(),
                 identity: format!("{left_arg_name}({operator_name}){right_arg_name}"),
-                obj_type: "OPERATOR".to_string(),
+                obj_type: ObjectType::Operator,
                 target_type: Some("OPERATOR".to_string()),
                 category: "OPERATOR".to_string(),
                 content: content.to_string(),
+                owner: None,
+                acl: Vec::new(),
             };
 
-            if !self.try_add_to_existing(&hydrated, &["TABLE", "TYPE", "FUNCTION", "PROCEDURE"]) {
+            if !self.try_add_to_existing(
+                &hydrated,
+                &[
+                    ObjectType::Table,
+                    ObjectType::Type,
+                    ObjectType::Function,
+                    ObjectType::Procedure,
+                ],
+            ) {
                 // Add to global objects
                 self.global_objects.push(GlobalObject {
                     category: "operator".to_string(),
+                    subcategory: None,
                     name: format!("{left_arg_name}_{operator_name}_{right_arg_name}"),
                     content: content.to_string(),
+                    layer: Layer::Prepend,
+                    acl: Vec::new(),
                 });
             }
         }
     }
 
     /// Try to add an object to an existing parent object.
-    fn try_add_to_existing(&mut self, obj: &HydratedObjInfo, parent_types: &[&str]) -> bool {
+    fn try_add_to_existing(&mut self, obj: &HydratedObjInfo, parent_types: &[ObjectType]) -> bool {
         for parent_type in parent_types {
-            if let Some(schema_map) = self.objects.get_mut(*parent_type) {
+            if let Some(schema_map) = self.objects.get_mut(parent_type) {
                 if let Some(name_map) = schema_map.get_mut(&obj.schema) {
                     if let Some(related) = name_map.get_mut(&obj.name) {
                         if !related.primary_obj.is_empty() {
@@ -487,12 +848,12 @@ impl PgDumpParser {
     /// Get or create a RelatedObjects for the given type, schema, and name.
     fn get_or_create_related(
         &mut self,
-        obj_type: &str,
+        obj_type: ObjectType,
         schema: &str,
         name: &str,
     ) -> &mut RelatedObjects {
         self.objects
-            .entry(obj_type.to_string())
+            .entry(obj_type)
             .or_default()
             .entry(schema.to_string())
             .or_default()
@@ -501,24 +862,27 @@ impl PgDumpParser {
     }
 
     /// Categorize an object based on its type and content.
-    fn categorize_object(&self, obj_type: &str, name: &str, content: &str) -> String {
-        match obj_type {
-            "TYPE" => self.categorize_type(content),
-            "DOMAIN" => "type/domain".to_string(),
-            "FUNCTION" => self.categorize_function(name),
-            _ => obj_type.to_lowercase().replace(' ', "_"),
-        }
-    }
-
-    /// Categorize a TYPE object into type/enum, type/composite, or type/domain.
-    fn categorize_type(&self, content: &str) -> String {
-        if content.contains("AS ENUM") {
-            "type/enum".to_string()
-        } else if content.contains("CREATE DOMAIN") {
-            "type/domain".to_string()
-        } else {
-            // Composite types (AS (...)) and other types
-            "type/composite".to_string()
+    fn categorize_object(&self, obj_info: &ObjInfo, content: &str) -> String {
+        match obj_info.obj_type {
+            ObjectType::Type => {
+                let subcat = TypeSubcategory::from_content(content);
+                format!("type/{}", subcat.subdirectory())
+            }
+            ObjectType::Domain => "type/domain".to_string(),
+            ObjectType::Function | ObjectType::Procedure => {
+                self.categorize_function(&obj_info.name)
+            }
+            ObjectType::Aggregate => "functions/aggregate".to_string(),
+            ObjectType::MaterializedView => "materialized_view".to_string(),
+            ObjectType::ForeignTable => "foreign_table".to_string(),
+            ObjectType::Collation => "collation".to_string(),
+            ObjectType::Conversion => "conversion".to_string(),
+            ObjectType::TextSearchConfiguration => "fts/configuration".to_string(),
+            ObjectType::TextSearchDictionary => "fts/dictionary".to_string(),
+            ObjectType::TextSearchParser => "fts/parser".to_string(),
+            ObjectType::TextSearchTemplate => "fts/template".to_string(),
+            ObjectType::Sequence => "sequence".to_string(),
+            _ => obj_info.pg_type_str.to_lowercase().replace(' ', "_"),
         }
     }
 
@@ -543,19 +907,16 @@ impl PgDumpParser {
             "functions/builder".to_string()
         } else if name.starts_with("util_") {
             "functions/utility".to_string()
+        } else if name.starts_with("trigger_") || name.ends_with("_trigger") {
+            "functions/trigger".to_string()
         } else {
             "functions".to_string()
         }
     }
 
-    /// Create a topcat-compatible file header.
-    fn create_file_header(&self, name: &str, schema: &str) -> String {
-        format!("-- name: {schema}.{name}\n\n")
-    }
-
-    /// Create a file header for global objects (no schema prefix).
-    fn create_global_file_header(&self, name: &str) -> String {
-        format!("-- name: {name}\n\n")
+    /// Get the layer for a set of related objects.
+    fn get_layer_for_objects(&self, objects: &RelatedObjects) -> Option<Layer> {
+        objects.primary_obj.first().map(|obj| obj.obj_type.layer())
     }
 
     /// Write all parsed objects to the output directory.
@@ -595,8 +956,8 @@ impl PgDumpParser {
                     } else {
                         fs::create_dir_all(&category_dir)?;
 
-                        let header = self.create_file_header(name, schema_name);
                         // Look up actual objects using the stored keys
+                        let mut layer: Option<Layer> = None;
                         let content: Vec<String> = key_list
                             .iter()
                             .filter_map(|(obj_type, schema, obj_name)| {
@@ -604,10 +965,34 @@ impl PgDumpParser {
                                     .get(obj_type)
                                     .and_then(|s| s.get(schema))
                                     .and_then(|n| n.get(obj_name))
-                                    .map(|r| r.render())
+                                    .map(|r| {
+                                        if layer.is_none() {
+                                            layer = self.get_layer_for_objects(r);
+                                        }
+                                        r.render(self.include_acl, self.include_owner)
+                                    })
                             })
                             .collect();
-                        let full_content = format!("{header}{}", content.join("\n\n"));
+
+                        let rendered_content = content.join("\n\n");
+
+                        // Analyze dependencies if enabled
+                        let requires = if self.generate_deps {
+                            self.dep_analyzer
+                                .as_ref()
+                                .map(|analyzer| analyzer.analyze_dependencies(&rendered_content))
+                        } else {
+                            None
+                        };
+
+                        let header = build_header(
+                            schema_name,
+                            name,
+                            layer,
+                            requires.as_ref(),
+                            self.generate_layers,
+                        );
+                        let full_content = format!("{header}{rendered_content}");
 
                         let final_content = if full_content.ends_with('\n') {
                             full_content
@@ -624,17 +1009,22 @@ impl PgDumpParser {
 
         // Write global objects to _global directory
         if !self.global_objects.is_empty() {
-            // Group global objects by category
-            let mut global_by_category: HashMap<&str, Vec<&GlobalObject>> = HashMap::new();
+            // Group global objects by category and subcategory
+            let mut global_by_category: HashMap<(&str, Option<&str>), Vec<&GlobalObject>> =
+                HashMap::new();
             for obj in &self.global_objects {
                 global_by_category
-                    .entry(&obj.category)
+                    .entry((&obj.category, obj.subcategory.as_deref()))
                     .or_default()
                     .push(obj);
             }
 
-            for (category, objects) in global_by_category {
-                let category_dir = self.output_dir.join("_global").join(category);
+            for ((category, subcategory), objects) in global_by_category {
+                let category_dir = if let Some(subcat) = subcategory {
+                    self.output_dir.join("_global").join(category).join(subcat)
+                } else {
+                    self.output_dir.join("_global").join(category)
+                };
 
                 for obj in objects {
                     let file_path = category_dir.join(format!("{}.sql", obj.name));
@@ -646,8 +1036,28 @@ impl PgDumpParser {
                     } else {
                         fs::create_dir_all(&category_dir)?;
 
-                        let header = self.create_global_file_header(&obj.name);
-                        let full_content = format!("{header}{}", obj.content);
+                        // Analyze dependencies for global objects
+                        let requires = if self.generate_deps {
+                            self.dep_analyzer
+                                .as_ref()
+                                .map(|analyzer| analyzer.analyze_dependencies(&obj.content))
+                        } else {
+                            None
+                        };
+
+                        let header = build_global_header(
+                            &obj.name,
+                            Some(obj.layer),
+                            requires.as_ref(),
+                            self.generate_layers,
+                        );
+                        let mut full_content = format!("{header}{}", obj.content);
+
+                        // Add ACL if present
+                        if self.include_acl && !obj.acl.is_empty() {
+                            full_content.push_str("\n\n");
+                            full_content.push_str(&obj.acl.join("\n"));
+                        }
 
                         let final_content = if full_content.ends_with('\n') {
                             full_content
@@ -659,6 +1069,29 @@ impl PgDumpParser {
                         file_count += 1;
                     }
                 }
+            }
+        }
+
+        // Write default ACL statements
+        if !self.default_acl.is_empty() && self.include_acl {
+            let acl_dir = self.output_dir.join("_global").join("acl");
+            let file_path = acl_dir.join("default_acl.sql");
+
+            if self.dry_run {
+                self.logger
+                    .info(&format!("  Would create: {}", file_path.display()));
+                file_count += 1;
+            } else {
+                fs::create_dir_all(&acl_dir)?;
+                let header = build_global_header(
+                    "default_acl",
+                    Some(Layer::Append),
+                    None,
+                    self.generate_layers,
+                );
+                let content = format!("{header}{}\n", self.default_acl.join("\n"));
+                fs::write(&file_path, content)?;
+                file_count += 1;
             }
         }
 
@@ -721,6 +1154,10 @@ impl PgDumpArgs {
             self.output_dir.clone(),
             schema_pattern,
             self.dry_run,
+            self.include_acl,
+            self.include_owner,
+            self.generate_layers,
+            self.generate_deps,
             logger.clone(),
         );
 
