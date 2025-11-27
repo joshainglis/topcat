@@ -3,6 +3,14 @@
 //! This module provides functionality to import database dumps and other sources
 //! into organized directory structures with topcat-compatible headers.
 //!
+//! # Architecture
+//!
+//! The import system uses a layered architecture:
+//!
+//! 1. **Sources** ([`sources`]): Extract raw object data from various inputs (pg_dump, etc.)
+//! 2. **Handlers** ([`handlers`]): Process objects with type-specific logic
+//! 3. **Output** ([`output`]): Write processed objects to files with headers
+//!
 //! # Available Subcommands
 //!
 //! - **pg-dump**: Import a PostgreSQL pg_dump file and split into per-object files
@@ -20,10 +28,16 @@
 //! topcat import pg-dump database.sql ./output/ --schema-pattern "app_\\w+"
 //! ```
 
+// Core modules (existing)
 mod dependencies;
 mod object_types;
 mod patterns;
 mod pg_dump;
+
+// New layered architecture modules
+pub mod handlers;
+pub mod output;
+pub mod sources;
 
 use clap::{Args, Subcommand};
 
