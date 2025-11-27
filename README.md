@@ -64,6 +64,9 @@ topcat schema -i sql/ -e sql list
 
 # Export dependency graph for visualization
 topcat export -i sql/ -e sql graph.json json
+
+# Import a pg_dump and split into per-object files
+topcat import pg-dump database.sql ./output/
 ```
 
 ## Commands
@@ -259,6 +262,51 @@ topcat export -i sql/ -e sql deps.json json --mode deps --node my_node
 **Options:**
 - `--node <NAME>` - Target node (required for deps/dependents/direct modes)
 - `--schema <SCHEMA>...` - Filter by schemas
+
+### `import` - Import External Sources
+
+Import database dumps and other sources into organized file structures with topcat headers.
+
+```bash
+topcat import pg-dump database.sql ./output/                   # Split pg_dump file
+topcat import pg-dump database.sql ./output/ --dry-run         # Preview changes
+topcat import pg-dump database.sql ./output/ --schema-pattern "app_\\w+"
+```
+
+**Subcommands:**
+- `pg-dump` - Import PostgreSQL pg_dump file and split into per-object files
+
+**Arguments:**
+- `<DUMP_FILE>` - Path to the pg_dump SQL file to import
+- `<OUTPUT_DIR>` - Output directory for the split SQL files
+
+**Options:**
+- `--schema-pattern <PATTERN>` - Regex pattern for matching schema names (for CAST/OPERATOR parsing)
+- `--dry-run` - Preview changes without writing files
+
+**Output Structure:**
+
+```
+output_dir/
+├── _global/                    # Database-level objects
+│   ├── cast/                   # CAST definitions
+│   └── operator/               # OPERATOR definitions
+└── schema_name/
+    ├── schema_name.sql         # SCHEMA definition
+    ├── table/
+    │   └── table_name.sql      # TABLE + constraints, indexes
+    ├── functions/
+    │   └── func_name.sql       # FUNCTION definitions
+    └── type/
+        ├── enum/
+        │   └── status.sql      # ENUM types
+        ├── composite/
+        │   └── address.sql     # Composite types
+        └── domain/
+            └── email.sql       # DOMAIN types
+```
+
+Each file includes a topcat-compatible header (`-- name: schema.object_name`) for dependency tracking.
 
 ### `config` - Configuration Management
 

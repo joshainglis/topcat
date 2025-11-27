@@ -27,6 +27,8 @@ enum Commands {
     Export(commands::export::ExportArgs),
     /// Manage configuration files and settings
     Config(commands::config::ConfigArgs),
+    /// Import external sources (e.g., pg_dump) into organized file structures
+    Import(commands::import::ImportArgs),
 }
 
 fn main() {
@@ -40,6 +42,7 @@ fn main() {
         Commands::Schema(args) => args.execute(),
         Commands::Export(args) => args.execute(),
         Commands::Config(args) => args.execute(),
+        Commands::Import(args) => args.execute(),
     };
 
     if let Err(e) = result {

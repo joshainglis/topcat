@@ -61,6 +61,10 @@ topcat schema -i sql/ -e sql analyze my_schema      # Detailed schema view
 topcat export -i sql/ -e sql graph.json json        # Export to JSON
 topcat export -i sql/ -e sql graph.dot dot          # Export to GraphViz
 
+# Import (split pg_dump into per-object files)
+topcat import pg-dump database.sql ./output/        # Split dump file
+topcat import pg-dump database.sql ./output/ --dry-run  # Preview
+
 # Configuration management
 topcat config show                                  # View effective config
 topcat config validate                              # Validate config file
@@ -96,7 +100,7 @@ cargo run -- concat -i tests/input/sql /tmp/output.sql
 | `settings/` | Unified configuration system (5 modules: loading, validation, configs, tests) |
 | `file_node/` | File representation with metadata (5 modules: parsing, soft_deps, filename, tests) |
 | `file_dag/` | DAG management and validation (6 modules: core, builder, validation, schema, filters) |
-| `commands/` | Command implementations (concat, update, config, schema + analyze/, clean/, export/) |
+| `commands/` | Command implementations (concat, update, config, schema, import + analyze/, clean/, export/) |
 | `analysis/` | GraphAnalyzer trait, root matching, external usage checking |
 
 ### Utility Modules
@@ -260,6 +264,18 @@ topcat export -i sql/ -e sql graph.json json              # Full graph
 topcat export -i sql/ -e sql deps.json json --mode deps --node my_node  # Dependencies
 topcat export -i sql/ -e sql auth.dot dot --schema auth   # Schema-filtered
 ```
+
+### Import Commands
+
+Import pg_dump files and split into organized per-object SQL files with topcat headers:
+
+```bash
+topcat import pg-dump database.sql ./output/              # Split dump file
+topcat import pg-dump database.sql ./output/ --dry-run    # Preview changes
+topcat import pg-dump database.sql ./output/ --schema-pattern "app_\\w+"
+```
+
+Output structure: `schema/type/{enum,composite,domain}/`, `schema/table/`, `schema/functions/`, `_global/{cast,operator}/`
 
 ## Configuration
 
