@@ -516,11 +516,7 @@ impl fmt::Display for Layer {
 
 /// Configuration for how to handle a specific object type during import.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ObjectTypeConfig {
-    /// The object type this config applies to.
-    pub object_type: ObjectType,
-
     /// Whether this type should be skipped during import.
     pub skip: bool,
 
@@ -530,11 +526,11 @@ pub struct ObjectTypeConfig {
     /// The parent object types to try attaching to.
     pub parent_types: Vec<ObjectType>,
 
-    /// Subdirectory within the category directory.
+    /// Custom subdirectory within the category directory.
+    /// If None, the default categorization logic is used.
     pub subdirectory: Option<String>,
 }
 
-#[allow(dead_code)]
 impl ObjectTypeConfig {
     /// Create default configuration for an object type.
     pub fn default_for(object_type: ObjectType) -> Self {
@@ -556,8 +552,16 @@ impl ObjectTypeConfig {
             // Cast can attach to type or table
             ObjectType::Cast => (false, vec![ObjectType::Type, ObjectType::Table]),
 
-            // Operator can attach to type or function
-            ObjectType::Operator => (false, vec![ObjectType::Type, ObjectType::Function]),
+            // Operator can attach to type, function, or procedure
+            ObjectType::Operator => (
+                false,
+                vec![
+                    ObjectType::Type,
+                    ObjectType::Function,
+                    ObjectType::Procedure,
+                    ObjectType::Table,
+                ],
+            ),
 
             // Comments attach to their target
             ObjectType::Comment => (true, vec![]),
@@ -570,12 +574,67 @@ impl ObjectTypeConfig {
         };
 
         Self {
-            object_type,
             skip: object_type == ObjectType::Unknown,
             attach_to_parent,
             parent_types,
             subdirectory: None,
         }
+    }
+
+    /// Build a map of default configurations for all object types.
+    pub fn build_default_configs() -> std::collections::HashMap<ObjectType, ObjectTypeConfig> {
+        use ObjectType::*;
+        let types = [
+            Schema,
+            Extension,
+            Table,
+            View,
+            MaterializedView,
+            ForeignTable,
+            Sequence,
+            Type,
+            Domain,
+            Collation,
+            Function,
+            Procedure,
+            Aggregate,
+            Index,
+            Constraint,
+            FkConstraint,
+            Trigger,
+            Policy,
+            RowSecurity,
+            Default,
+            Statistics,
+            Rule,
+            TextSearchConfiguration,
+            TextSearchDictionary,
+            TextSearchParser,
+            TextSearchTemplate,
+            ForeignDataWrapper,
+            Server,
+            UserMapping,
+            Operator,
+            OperatorClass,
+            OperatorFamily,
+            AccessMethod,
+            Cast,
+            Publication,
+            Subscription,
+            EventTrigger,
+            Language,
+            Transform,
+            Conversion,
+            Acl,
+            DefaultAcl,
+            SecurityLabel,
+            Comment,
+            Unknown,
+        ];
+        types
+            .into_iter()
+            .map(|t| (t, Self::default_for(t)))
+            .collect()
     }
 }
 

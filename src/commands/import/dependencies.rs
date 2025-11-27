@@ -3,18 +3,24 @@
 //! This module analyzes SQL content during import to automatically generate
 //! `requires:` headers for topcat dependency tracking.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use topcat::sql_config::SqlDiscoveryConfig;
 use topcat::sql_parser::SqlAnalyzer;
 
 use super::object_types::{Layer, ObjectType};
+use super::patterns::{
+    EVENT_TRIGGER_PATTERN, FOREIGN_TABLE_PATTERN, SERVER_PATTERN, SUBSCRIPTION_PATTERN,
+    TRANSFORM_PATTERN, USER_MAPPING_PATTERN,
+};
 
 /// Analyzes SQL content to extract dependencies for imported objects.
 pub struct DependencyAnalyzer {
     sql_analyzer: SqlAnalyzer,
     /// Known objects that we've seen during this import
     known_objects: HashSet<String>,
+    /// Known objects organized by type for implicit dependency analysis
+    known_objects_by_type: HashMap<ObjectType, HashSet<String>>,
 }
 
 impl DependencyAnalyzer {
@@ -24,17 +30,34 @@ impl DependencyAnalyzer {
         Ok(Self {
             sql_analyzer,
             known_objects: HashSet::new(),
+            known_objects_by_type: HashMap::new(),
         })
     }
 
     /// Register an object that we've seen during import.
     ///
     /// This helps filter out dependencies on objects that don't exist in the import.
-    pub fn register_object(&mut self, schema: &str, name: &str) {
+    fn register_object(&mut self, schema: &str, name: &str) {
         let full_name = format!("{schema}.{name}");
         self.known_objects.insert(full_name.to_lowercase());
         // Also register the schema itself
         self.known_objects.insert(schema.to_lowercase());
+    }
+
+    /// Register an object with its type for enhanced dependency analysis.
+    ///
+    /// This enables using implicit dependency information when analyzing objects
+    /// of types that have known dependency patterns.
+    pub fn register_object_with_type(&mut self, schema: &str, name: &str, obj_type: ObjectType) {
+        // Register in the basic set
+        self.register_object(schema, name);
+
+        // Register by type for implicit dependency analysis
+        let full_name = format!("{schema}.{name}");
+        self.known_objects_by_type
+            .entry(obj_type)
+            .or_default()
+            .insert(full_name.to_lowercase());
     }
 
     /// Analyze SQL content and extract dependencies.
@@ -56,22 +79,143 @@ impl DependencyAnalyzer {
             .collect()
     }
 
-    /// Analyze dependencies and return formatted header lines.
+    /// Analyze dependencies for a specific object type.
     ///
-    /// Returns the dependencies as a `requires:` header line, or None if no dependencies found.
-    #[allow(dead_code)]
-    pub fn generate_requires_header(&self, content: &str) -> Option<String> {
-        let deps = self.analyze_dependencies(content);
+    /// Uses implicit dependency information to prioritize dependencies from
+    /// types that the given object type typically depends on.
+    pub fn analyze_dependencies_for_type(
+        &self,
+        content: &str,
+        obj_type: ObjectType,
+    ) -> HashSet<String> {
+        let result = self.sql_analyzer.analyze(content);
+        let implicit_types = implicit_dependencies_for_type(obj_type);
 
-        if deps.is_empty() {
-            return None;
+        // Build a set of objects from implicit dependency types
+        let implicit_objects: HashSet<&String> = implicit_types
+            .iter()
+            .filter_map(|t| self.known_objects_by_type.get(t))
+            .flatten()
+            .collect();
+
+        // Start with SQL-parsed dependencies
+        let mut deps: HashSet<String> = result
+            .dependencies
+            .iter()
+            .filter(|dep| {
+                let dep_lower = dep.to_lowercase();
+                // Include if it's in our known objects
+                // (either from implicit types or general registration)
+                self.known_objects.contains(&dep_lower) || implicit_objects.contains(&dep_lower)
+            })
+            .cloned()
+            .collect();
+
+        // Add pattern-extracted dependencies
+        deps.extend(self.extract_pattern_dependencies(content, obj_type));
+
+        deps
+    }
+
+    /// Extract dependencies from SQL content using specialized patterns.
+    ///
+    /// These patterns detect structural dependencies that the general SQL parser
+    /// might miss, such as:
+    /// - Foreign tables depending on servers
+    /// - Servers depending on foreign data wrappers
+    /// - Subscriptions depending on publications
+    /// - Event triggers depending on functions
+    fn extract_pattern_dependencies(&self, content: &str, obj_type: ObjectType) -> HashSet<String> {
+        let mut deps = HashSet::new();
+
+        match obj_type {
+            ObjectType::ForeignTable => {
+                // Foreign tables depend on their server
+                if let Some(caps) = FOREIGN_TABLE_PATTERN.captures(content) {
+                    if let Some(server) = caps.name("server") {
+                        let server_name = server.as_str().to_lowercase();
+                        if self.known_objects.contains(&server_name) {
+                            deps.insert(server_name);
+                        }
+                    }
+                }
+            }
+            ObjectType::Server => {
+                // Servers depend on their foreign data wrapper
+                if let Some(caps) = SERVER_PATTERN.captures(content) {
+                    if let Some(fdw) = caps.name("fdw") {
+                        let fdw_name = fdw.as_str().to_lowercase();
+                        if self.known_objects.contains(&fdw_name) {
+                            deps.insert(fdw_name);
+                        }
+                    }
+                }
+            }
+            ObjectType::UserMapping => {
+                // User mappings depend on their server
+                if let Some(caps) = USER_MAPPING_PATTERN.captures(content) {
+                    if let Some(server) = caps.name("server") {
+                        let server_name = server.as_str().to_lowercase();
+                        if self.known_objects.contains(&server_name) {
+                            deps.insert(server_name);
+                        }
+                    }
+                }
+            }
+            ObjectType::Subscription => {
+                // Subscriptions depend on their publication
+                if let Some(caps) = SUBSCRIPTION_PATTERN.captures(content) {
+                    if let Some(pub_name) = caps.name("publication") {
+                        let pub_lower = pub_name.as_str().to_lowercase();
+                        if self.known_objects.contains(&pub_lower) {
+                            deps.insert(pub_lower);
+                        }
+                    }
+                }
+            }
+            ObjectType::EventTrigger => {
+                // Event triggers depend on their function
+                if let Some(caps) = EVENT_TRIGGER_PATTERN.captures(content) {
+                    if let (Some(schema), Some(name)) =
+                        (caps.name("fn_schema"), caps.name("fn_name"))
+                    {
+                        let full_name =
+                            format!("{}.{}", schema.as_str(), name.as_str()).to_lowercase();
+                        if self.known_objects.contains(&full_name) {
+                            deps.insert(full_name);
+                        }
+                    } else if let Some(name) = caps.name("fn_name") {
+                        let fn_name = name.as_str().to_lowercase();
+                        if self.known_objects.contains(&fn_name) {
+                            deps.insert(fn_name);
+                        }
+                    }
+                }
+            }
+            ObjectType::Transform => {
+                // Transforms depend on their type and language
+                if let Some(caps) = TRANSFORM_PATTERN.captures(content) {
+                    if let Some(lang) = caps.name("language") {
+                        let lang_name = lang.as_str().to_lowercase();
+                        if self.known_objects.contains(&lang_name) {
+                            deps.insert(lang_name);
+                        }
+                    }
+                    if let (Some(schema), Some(name)) =
+                        (caps.name("type_schema"), caps.name("type_name"))
+                    {
+                        let full_name =
+                            format!("{}.{}", schema.as_str(), name.as_str()).to_lowercase();
+                        if self.known_objects.contains(&full_name) {
+                            deps.insert(full_name);
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
 
-        // Sort for deterministic output
-        let mut sorted_deps: Vec<_> = deps.into_iter().collect();
-        sorted_deps.sort();
-
-        Some(format!("-- requires: {}", sorted_deps.join(", ")))
+        deps
     }
 }
 
@@ -137,7 +281,6 @@ pub fn build_global_header(
 /// - Tables depend on their column types
 /// - Views depend on the tables they reference
 /// - Triggers depend on the tables they're attached to
-#[allow(dead_code)]
 pub fn implicit_dependencies_for_type(obj_type: ObjectType) -> Vec<ObjectType> {
     match obj_type {
         ObjectType::Function | ObjectType::Procedure | ObjectType::Aggregate => {
