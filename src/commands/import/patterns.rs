@@ -401,13 +401,14 @@ pub static CONVERSION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Pattern for matching CREATE EVENT TRIGGER statements.
 /// Example: `CREATE EVENT TRIGGER "name" ON ddl_command_end EXECUTE FUNCTION func();`
+/// Note: Uses non-greedy matching to handle WHEN clauses containing any characters
 pub static EVENT_TRIGGER_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r#"(?xi)
+        r#"(?xis)
         ^CREATE\s+EVENT\s+TRIGGER\s+
         "?(?P<name>[^"\s]+)"?\s+
         ON\s+(?P<event>\w+)\s+
-        (?:WHEN\s+[^E]+)?
+        (?:WHEN\s+.+?\s+)?
         EXECUTE\s+(?:FUNCTION|PROCEDURE)\s+
         (?:"(?P<fn_schema>[^"]+)"\.)?
         "?(?P<fn_name>[^"(\s]+)"?

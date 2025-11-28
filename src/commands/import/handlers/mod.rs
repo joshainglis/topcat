@@ -39,12 +39,10 @@ pub use traits::{
 pub mod attachments;
 pub mod fdw;
 pub mod fts;
+pub mod global;
 pub mod operators;
 pub mod replication;
 pub mod routines;
 pub mod schema_objects;
 pub mod security;
 pub mod types;
-
-// Remaining category modules will be added as they are migrated:
-// pub mod global;
