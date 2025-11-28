@@ -30,5 +30,6 @@ mod orchestrator;
 mod parser;
 mod patterns;
 
+pub use orchestrator::{ImportOrchestrator, OrchestratorConfig};
 pub use parser::PgDumpParser;
 pub use patterns::*;
