@@ -20,18 +20,36 @@
 | Trait design | Composable traits | Maximum flexibility, single responsibility |
 | Import source | Layered approach | Decouples sources from handlers, easy to add new sources |
 | Attachments | Registry pattern | Decoupled, both types contribute to relationship |
+| Pattern ownership | Patterns owned by sources | Different sources (pg_dump versions, MySQL, introspection) need different patterns |
+| Dependency extraction | Source populates `extracted_deps` on `RawObject` | Handlers remain source-agnostic, receive pre-extracted deps |
 
-## Current State
+## Current State (as of Phase 3 in progress)
 
 ```
 src/commands/import/
 ├── mod.rs                 (64 lines)    - Module entry point and CLI dispatch
 ├── object_types.rs        (828 lines)   - PostgreSQL object type definitions
-├── patterns.rs            (592 lines)   - Regex patterns for parsing
 ├── dependencies.rs        (375 lines)   - Dependency analysis
-└── pg_dump.rs            (1,295 lines)  - Main parser and file writer
-
-Total: 3,154 lines, 41+ object types supported
+├── pg_dump.rs            (1,295 lines)  - Main parser and file writer (to be refactored)
+│
+├── sources/                             - NEW: Import sources
+│   ├── mod.rs
+│   ├── raw_object.rs                    - RawObject with extracted_deps
+│   ├── traits.rs                        - ImportSource trait
+│   └── pg_dump/
+│       ├── mod.rs
+│       └── patterns.rs   (592 lines)    - Moved from import/patterns.rs
+│
+├── handlers/                            - NEW: 45 type handlers in 10 categories
+│   ├── mod.rs, traits.rs, registry.rs
+│   ├── schema_objects/ (7), types/ (3), routines/ (3)
+│   ├── attachments/ (10), fts/ (4), fdw/ (3)
+│   ├── operators/ (5), replication/ (2), security/ (3), global/ (5)
+│
+└── output/                              - NEW: File writing infrastructure
+    ├── mod.rs
+    ├── header_builder.rs
+    └── file_writer.rs
 ```
 
 ## Target Directory Structure
@@ -176,6 +194,19 @@ pub enum SecurityKind {
 ```rust
 use std::collections::HashMap;
 
+/// A dependency extracted by the source using source-specific patterns.
+///
+/// This allows sources to extract structural dependencies during parsing
+/// (e.g., trigger → function relationships) without handlers needing to
+/// know about source-specific patterns.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractedDep {
+    /// The name of the dependency (qualified or unqualified).
+    pub name: String,
+    /// The type of the dependency.
+    pub dep_type: ObjectType,
+}
+
 /// Intermediate representation produced by ImportSource, consumed by handlers
 #[derive(Debug, Clone)]
 pub struct RawObject {
@@ -202,6 +233,18 @@ pub struct RawObject {
 
     /// Source-specific metadata (flexible for different sources)
     pub source_metadata: HashMap<String, String>,
+
+    /// Dependencies extracted by the source using source-specific patterns.
+    ///
+    /// Sources populate this during parsing by analyzing the SQL content with
+    /// their own patterns. This decouples handlers from source-specific pattern
+    /// knowledge - handlers just read the pre-extracted dependencies.
+    ///
+    /// Examples:
+    /// - Trigger → Function (extracted from EXECUTE FUNCTION clause)
+    /// - Foreign Table → Server (extracted from SERVER clause)
+    /// - Subscription → Publication (extracted from PUBLICATION clause)
+    pub extracted_deps: Vec<ExtractedDep>,
 }
 
 impl RawObject {
@@ -791,17 +834,82 @@ Each category is independent and can be done in parallel:
 
 ### Phase 3: Refactor pg_dump Parser
 
-**Goal:** Update pg_dump parser to use new abstractions.
+**Goal:** Update pg_dump parser to use new abstractions. Separate parsing from file writing.
 
-**Tasks:**
-- [ ] Move `pg_dump.rs` to `sources/pg_dump/parser.rs`
-- [ ] Move `patterns.rs` to `sources/pg_dump/patterns.rs`
-- [ ] Refactor parser to produce `Vec<RawObject>`
-- [ ] Use `HandlerRegistry` for type-specific logic
-- [ ] Use `AttachmentRegistry` for attachment resolution
-- [ ] Update file writing to use `output/` module
+**Key architectural change:** Patterns are source-specific. The pg_dump parser owns its patterns and populates `RawObject.extracted_deps` during parsing. Handlers read pre-extracted dependencies rather than calling patterns directly.
 
-**Verification:** Full integration tests pass.
+**Completed Tasks:**
+- [x] Add `ExtractedDep` struct and `extracted_deps` field to `RawObject`
+- [x] Create `sources/pg_dump/` directory structure
+- [x] Move `patterns.rs` to `sources/pg_dump/patterns.rs`
+- [x] Update all pattern imports across handlers (17 files)
+
+**Completed Tasks (Phase 3d-3f):**
+- [x] Created `sources/pg_dump/parser.rs` implementing `ImportSource` trait
+- [x] Parser produces `Vec<RawObject>` with `extracted_deps` populated
+- [x] Populates `extracted_deps` during parsing for:
+  - Trigger → Function (EXECUTE FUNCTION)
+  - ForeignTable → Server (SERVER clause)
+  - Subscription → Publication (PUBLICATION clause)
+  - Server → ForeignDataWrapper (FOREIGN DATA WRAPPER)
+  - UserMapping → Server (SERVER clause)
+  - EventTrigger → Function (EXECUTE FUNCTION)
+  - Statistics → Table (FROM table)
+  - Rule → Table (ON table)
+  - Index/Constraint/Policy → Table (ALTER TABLE pattern)
+  - Cast → Type (to type)
+  - Operator → Function (FUNCTION = clause)
+- [x] Created `sources/pg_dump/orchestrator.rs` for file writing
+  - Uses `extracted_deps` to resolve parent relationships
+  - Uses `output/header_builder.rs` for header generation
+  - Handles global objects, security statements, default ACL
+
+**Remaining Tasks:**
+- [ ] Wire up `pg_dump.rs` to use new parser + orchestrator
+- [ ] Update handlers to read from `RawObject.extracted_deps` instead of calling patterns
+- [ ] Remove `extract_pattern_dependencies` from handler traits (or make it a fallback)
+
+**Current Directory Structure:**
+```
+src/commands/import/
+├── sources/
+│   ├── mod.rs              # Exports pg_dump, RawObject, ExtractedDep, SecurityStatement
+│   ├── raw_object.rs       # RawObject with extracted_deps field
+│   ├── traits.rs           # ImportSource trait, SecurityStatement
+│   └── pg_dump/
+│       ├── mod.rs
+│       ├── parser.rs       # NEW: PgDumpParser implementing ImportSource
+│       ├── orchestrator.rs # NEW: ImportOrchestrator for file writing
+│       └── patterns.rs     # Moved from import/patterns.rs
+├── handlers/               # Complete (imports updated)
+├── output/
+│   ├── mod.rs
+│   └── header_builder.rs   # HeaderBuilder, build_header, build_global_header
+└── pg_dump.rs              # Original parser + file writer (still working)
+```
+
+**Verification:** Full integration tests pass (9 import CLI tests currently passing).
+
+### Architecture Note: Pattern Ownership and extracted_deps
+
+**Problem:** Handlers were calling source-specific patterns directly (e.g., `TRIGGER_PATTERN.captures(content)`), which would break if we add different import sources (database introspection, MySQL dumps, etc.).
+
+**Solution:** Sources own their patterns and extract dependencies during parsing:
+
+1. Each source (pg_dump, future introspection) has its own patterns
+2. During parsing, the source uses its patterns to populate `RawObject.extracted_deps`
+3. Handlers read from `extracted_deps` instead of calling patterns
+4. Handlers become source-agnostic
+
+**Migration path:**
+- Currently: Handlers still call patterns (transitional state)
+- Phase 3 remaining: Parser populates `extracted_deps`
+- Phase 4: Remove `extract_pattern_dependencies` from handlers or make it fallback-only
+
+**Benefits:**
+- pg_dump v14 vs v10 can have different patterns
+- Database introspection won't use regex at all (SQL queries)
+- Handlers test against `RawObject.extracted_deps`, not pattern matching
 
 ### Phase 4: Cleanup
 
@@ -924,4 +1032,11 @@ Use these to track progress across sessions:
   - [x] Phase 2j (global) complete (2025-11-28)
 - [x] **Checkpoint 3:** Phase 2j complete - all handlers migrated (2025-11-28)
 - [ ] **Checkpoint 4:** Phase 3 complete - parser refactored
+  - [x] Phase 3a: ExtractedDep and extracted_deps field added (2025-11-28)
+  - [x] Phase 3b: patterns.rs moved to sources/pg_dump/ (2025-11-28)
+  - [x] Phase 3c: All imports updated (17 files) (2025-11-28)
+  - [x] Phase 3d: PgDumpParser implements ImportSource (2025-11-28)
+  - [x] Phase 3e: Parser produces Vec<RawObject> with extracted_deps populated (2025-11-28)
+  - [x] Phase 3f: ImportOrchestrator created for file writing (2025-11-28)
+  - [ ] Phase 3g: Wire up pg_dump.rs to use new parser + orchestrator
 - [ ] **Checkpoint 5:** Phase 4 complete - cleanup done
