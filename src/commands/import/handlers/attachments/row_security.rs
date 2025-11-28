@@ -1,0 +1,115 @@
+//! Handler for PostgreSQL ROW SECURITY objects.
+
+use std::path::{Path, PathBuf};
+
+use crate::commands::import::handlers::registry::RegisteredHandler;
+use crate::commands::import::handlers::traits::{
+    Categorizer, Configurable, DependencyExtractor, OutputConfig, PatternProvider, RelatedObjects,
+    Renderer,
+};
+use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
+use crate::commands::import::sources::RawObject;
+
+/// Handler for PostgreSQL ROW SECURITY objects.
+///
+/// Row security objects enable or disable row-level security on tables.
+/// These are `ALTER TABLE ... ENABLE/DISABLE ROW LEVEL SECURITY` statements.
+///
+/// Row security belongs to the Append layer and attaches to the parent table.
+/// It must be enabled before policies can be applied.
+pub struct RowSecurityHandler;
+
+impl PatternProvider for RowSecurityHandler {
+    // Row security is identified by metadata, not content patterns
+}
+
+impl DependencyExtractor for RowSecurityHandler {
+    fn implicit_dependency_types() -> Vec<ObjectType> {
+        vec![ObjectType::Table]
+    }
+}
+
+impl Categorizer for RowSecurityHandler {
+    fn category() -> ObjectCategory {
+        ObjectCategory::Security
+    }
+
+    fn output_path(obj: &RawObject, base_dir: &Path) -> PathBuf {
+        // Row security attaches to tables, so this is fallback only
+        let schema = obj.schema.as_deref().unwrap_or("public");
+        base_dir
+            .join(schema)
+            .join("row_security")
+            .join(format!("{}.sql", obj.name))
+    }
+}
+
+impl Configurable for RowSecurityHandler {
+    fn default_config() -> ObjectTypeConfig {
+        ObjectTypeConfig::default_for(ObjectType::RowSecurity)
+    }
+
+    fn layer() -> Layer {
+        Layer::Append
+    }
+
+    fn is_primary() -> bool {
+        false
+    }
+}
+
+impl Renderer for RowSecurityHandler {
+    fn render(obj: &RawObject, _related: &RelatedObjects, _config: &OutputConfig) -> String {
+        obj.content.clone()
+    }
+}
+
+/// Create a registered handler for RowSecurity objects.
+pub fn create_handler() -> RegisteredHandler {
+    RegisteredHandler::new(ObjectType::RowSecurity)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_row_security_handler_layer() {
+        assert_eq!(RowSecurityHandler::layer(), Layer::Append);
+    }
+
+    #[test]
+    fn test_row_security_handler_is_not_primary() {
+        assert!(!RowSecurityHandler::is_primary());
+    }
+
+    #[test]
+    fn test_row_security_handler_category() {
+        assert_eq!(RowSecurityHandler::category(), ObjectCategory::Security);
+    }
+
+    #[test]
+    fn test_row_security_implicit_deps() {
+        let deps = RowSecurityHandler::implicit_dependency_types();
+        assert!(deps.contains(&ObjectType::Table));
+    }
+
+    #[test]
+    fn test_row_security_default_config() {
+        let config = RowSecurityHandler::default_config();
+        assert!(config.attach_to_parent);
+        assert!(!config.skip);
+    }
+
+    #[test]
+    fn test_row_security_output_path() {
+        let obj = RawObject::new(
+            ObjectType::RowSecurity,
+            Some("public".to_string()),
+            "users".to_string(),
+            "ALTER TABLE users ENABLE ROW LEVEL SECURITY;".to_string(),
+        );
+        let path = RowSecurityHandler::output_path(&obj, Path::new("/output"));
+        assert_eq!(path, PathBuf::from("/output/public/row_security/users.sql"));
+    }
+}
