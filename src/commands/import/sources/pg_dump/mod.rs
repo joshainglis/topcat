@@ -21,11 +21,14 @@
 //! use crate::commands::import::sources::pg_dump::PgDumpParser;
 //! use crate::commands::import::sources::ImportSource;
 //!
-//! let mut parser = PgDumpParser::new(dump_file, schema_pattern);
+//! let mut parser = PgDumpParser::from_file(dump_file, schema_pattern)?;
 //! let objects = parser.extract_objects()?;
 //! let security = parser.collect_security()?;
 //! ```
 
+mod orchestrator;
+mod parser;
 mod patterns;
 
+pub use parser::PgDumpParser;
 pub use patterns::*;

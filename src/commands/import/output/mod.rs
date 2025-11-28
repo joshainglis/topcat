@@ -3,4 +3,4 @@
 //! This module handles writing processed objects to files, including
 //! header generation and directory structure creation.
 
-mod header_builder;
+pub mod header_builder;

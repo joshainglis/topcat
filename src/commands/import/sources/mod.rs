@@ -22,4 +22,4 @@ mod traits;
 pub mod pg_dump;
 
 pub use raw_object::RawObject;
-pub use traits::ImportSource;
+pub use traits::{ImportSource, SecurityKind, SecurityStatement};
