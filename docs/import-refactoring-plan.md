@@ -864,9 +864,14 @@ Each category is independent and can be done in parallel:
   - Uses `output/header_builder.rs` for header generation
   - Handles global objects, security statements, default ACL
 
-**Remaining Tasks:**
-- [ ] Wire up `pg_dump.rs` to use new parser + orchestrator
-- [ ] Update handlers to read from `RawObject.extracted_deps` instead of calling patterns
+**Completed Tasks (Phase 3g):**
+- [x] Wire up `pg_dump.rs` to use new parser + orchestrator
+- [x] Simplified `pg_dump.rs` from 1,295 lines to 132 lines (CLI args + execute())
+- [x] All 9 import CLI tests pass
+
+**Remaining for Phase 4 (cleanup):**
+- [ ] Remove unused code (dead code warnings)
+- [ ] Update handlers to read from `RawObject.extracted_deps` (or remove unused traits)
 - [ ] Remove `extract_pattern_dependencies` from handler traits (or make it a fallback)
 
 **Current Directory Structure:**
@@ -1031,12 +1036,12 @@ Use these to track progress across sessions:
   - [x] Phase 2i (security) complete (2025-11-28)
   - [x] Phase 2j (global) complete (2025-11-28)
 - [x] **Checkpoint 3:** Phase 2j complete - all handlers migrated (2025-11-28)
-- [ ] **Checkpoint 4:** Phase 3 complete - parser refactored
+- [x] **Checkpoint 4:** Phase 3 complete - parser refactored (2025-11-28)
   - [x] Phase 3a: ExtractedDep and extracted_deps field added (2025-11-28)
   - [x] Phase 3b: patterns.rs moved to sources/pg_dump/ (2025-11-28)
   - [x] Phase 3c: All imports updated (17 files) (2025-11-28)
   - [x] Phase 3d: PgDumpParser implements ImportSource (2025-11-28)
   - [x] Phase 3e: Parser produces Vec<RawObject> with extracted_deps populated (2025-11-28)
   - [x] Phase 3f: ImportOrchestrator created for file writing (2025-11-28)
-  - [ ] Phase 3g: Wire up pg_dump.rs to use new parser + orchestrator
+  - [x] Phase 3g: pg_dump.rs now uses PgDumpParser + ImportOrchestrator (2025-11-28)
 - [ ] **Checkpoint 5:** Phase 4 complete - cleanup done
