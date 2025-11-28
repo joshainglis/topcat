@@ -8,8 +8,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::patterns::{DEFAULT_SCHEMA_PATTERN, build_operator_pattern};
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::{DEFAULT_SCHEMA_PATTERN, build_operator_pattern};
 
 /// Handler for PostgreSQL OPERATOR objects.
 ///

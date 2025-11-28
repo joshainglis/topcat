@@ -8,6 +8,29 @@ use std::collections::HashMap;
 
 use crate::commands::import::object_types::ObjectType;
 
+/// A dependency extracted by the source using source-specific patterns.
+///
+/// This allows sources to extract structural dependencies during parsing
+/// (e.g., trigger → function relationships) without handlers needing to
+/// know about source-specific patterns.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractedDep {
+    /// The name of the dependency (qualified or unqualified).
+    pub name: String,
+    /// The type of the dependency.
+    pub dep_type: ObjectType,
+}
+
+impl ExtractedDep {
+    /// Create a new extracted dependency.
+    pub fn new(name: impl Into<String>, dep_type: ObjectType) -> Self {
+        Self {
+            name: name.into(),
+            dep_type,
+        }
+    }
+}
+
 /// Intermediate representation of a database object produced by import sources.
 ///
 /// This struct represents a database object in a source-agnostic way. Import sources
@@ -73,6 +96,18 @@ pub struct RawObject {
     /// - `"line_number"`: Source file line number
     /// - `"pg_dump_type"`: Original pg_dump type string (before normalization)
     pub source_metadata: HashMap<String, String>,
+
+    /// Dependencies extracted by the source using source-specific patterns.
+    ///
+    /// Sources populate this during parsing by analyzing the SQL content with
+    /// their own patterns. This decouples handlers from source-specific pattern
+    /// knowledge - handlers just read the pre-extracted dependencies.
+    ///
+    /// Examples:
+    /// - Trigger → Function (extracted from EXECUTE FUNCTION clause)
+    /// - Foreign Table → Server (extracted from SERVER clause)
+    /// - Subscription → Publication (extracted from PUBLICATION clause)
+    pub extracted_deps: Vec<ExtractedDep>,
 }
 
 impl RawObject {
@@ -93,6 +128,7 @@ impl RawObject {
             owner: None,
             target_type: None,
             source_metadata: HashMap::new(),
+            extracted_deps: Vec::new(),
         }
     }
 
@@ -152,6 +188,22 @@ impl RawObject {
         self.set_metadata(key, value);
         self
     }
+
+    /// Add an extracted dependency.
+    pub fn add_extracted_dep(&mut self, name: impl Into<String>, dep_type: ObjectType) {
+        self.extracted_deps.push(ExtractedDep::new(name, dep_type));
+    }
+
+    /// Builder method to add an extracted dependency.
+    pub fn with_extracted_dep(mut self, name: impl Into<String>, dep_type: ObjectType) -> Self {
+        self.add_extracted_dep(name, dep_type);
+        self
+    }
+
+    /// Get extracted dependencies.
+    pub fn extracted_deps(&self) -> &[ExtractedDep] {
+        &self.extracted_deps
+    }
 }
 
 impl Default for RawObject {
@@ -165,6 +217,7 @@ impl Default for RawObject {
             owner: None,
             target_type: None,
             source_metadata: HashMap::new(),
+            extracted_deps: Vec::new(),
         }
     }
 }

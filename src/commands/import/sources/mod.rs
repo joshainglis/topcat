@@ -11,9 +11,15 @@
 //! 3. **Output**: Write processed objects to files
 //!
 //! Sources produce [`RawObject`] instances that are then processed by handlers.
+//!
+//! # Available Sources
+//!
+//! - [`pg_dump`]: PostgreSQL pg_dump file parser
 
 mod raw_object;
 mod traits;
+
+pub mod pg_dump;
 
 pub use raw_object::RawObject;
 pub use traits::ImportSource;

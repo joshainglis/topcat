@@ -36,7 +36,7 @@ use topcat::settings::Settings;
 
 use super::dependencies::{DependencyAnalyzer, build_global_header, build_header};
 use super::object_types::{Layer, ObjectType, ObjectTypeConfig, TypeSubcategory};
-use super::patterns::{
+use super::sources::pg_dump::{
     ALTER_TABLE_PATTERN, DEFAULT_ACL_PATTERN, DEFAULT_SCHEMA_PATTERN, EXTENSION_PATTERN,
     GRANT_PATTERN, METADATA_PATTERN, OWNER_PATTERN, REVOKE_PATTERN, STATISTICS_PATTERN,
     TRIGGER_PATTERN, build_cast_pattern, build_operator_pattern,

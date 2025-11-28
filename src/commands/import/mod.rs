@@ -31,7 +31,6 @@
 // Core modules (existing)
 mod dependencies;
 mod object_types;
-mod patterns;
 mod pg_dump;
 
 // New layered architecture modules

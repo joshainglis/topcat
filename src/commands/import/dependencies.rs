@@ -9,7 +9,7 @@ use topcat::sql_config::SqlDiscoveryConfig;
 use topcat::sql_parser::SqlAnalyzer;
 
 use super::object_types::{Layer, ObjectType};
-use super::patterns::{
+use super::sources::pg_dump::{
     EVENT_TRIGGER_PATTERN, FOREIGN_TABLE_PATTERN, SERVER_PATTERN, SUBSCRIPTION_PATTERN,
     TRANSFORM_PATTERN, USER_MAPPING_PATTERN,
 };

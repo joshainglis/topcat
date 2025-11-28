@@ -14,8 +14,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::patterns::{GRANT_PATTERN, REVOKE_PATTERN};
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::{GRANT_PATTERN, REVOKE_PATTERN};
 
 /// Handler for PostgreSQL ACL (GRANT/REVOKE) objects.
 ///
