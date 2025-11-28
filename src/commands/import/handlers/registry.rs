@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::commands::import::dependencies::implicit_dependencies_for_type;
 use crate::commands::import::handlers::{
-    attachments, fdw, fts, operators, routines, schema_objects, types,
+    attachments, fdw, fts, operators, replication, routines, schema_objects, types,
 };
 use crate::commands::import::object_types::{Layer, ObjectType, ObjectTypeConfig};
 use crate::commands::import::sources::RawObject;
@@ -211,6 +211,7 @@ impl HandlerRegistry {
         fts::register_handlers(self);
         fdw::register_handlers(self);
         operators::register_handlers(self);
+        replication::register_handlers(self);
     }
 
     /// Check if a handler is registered for a type.
