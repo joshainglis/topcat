@@ -36,11 +36,11 @@ pub use traits::{
 };
 
 // Category modules - migrated handlers organized by type
+pub mod routines;
 pub mod schema_objects;
+pub mod types;
 
 // Remaining category modules will be added as they are migrated:
-// pub mod types;
-// pub mod routines;
 // pub mod attachments;
 // pub mod fts;
 // pub mod fdw;

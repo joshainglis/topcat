@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::commands::import::dependencies::implicit_dependencies_for_type;
-use crate::commands::import::handlers::schema_objects;
+use crate::commands::import::handlers::{routines, schema_objects, types};
 use crate::commands::import::object_types::{Layer, ObjectType, ObjectTypeConfig};
 use crate::commands::import::sources::RawObject;
 
@@ -203,6 +203,8 @@ impl HandlerRegistry {
 
         // Override with specialized handlers from category modules
         schema_objects::register_handlers(self);
+        types::register_handlers(self);
+        routines::register_handlers(self);
     }
 
     /// Check if a handler is registered for a type.
