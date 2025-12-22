@@ -3,6 +3,9 @@
 //! Conversions define how to convert character encodings.
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use crate::commands::import::handlers::registry::RegisteredHandler;
 use crate::commands::import::handlers::traits::{
@@ -10,6 +13,7 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
+use crate::commands::import::sources::pg_dump::CONVERSION_PATTERN;
 use crate::commands::import::sources::RawObject;
 
 /// Handler for PostgreSQL CONVERSION objects.
@@ -24,7 +28,9 @@ use crate::commands::import::sources::RawObject;
 pub struct ConversionHandler;
 
 impl PatternProvider for ConversionHandler {
-    // Conversions are identified by metadata, not content patterns
+    fn content_patterns() -> Vec<&'static LazyLock<Regex>> {
+        vec![&CONVERSION_PATTERN]
+    }
 }
 
 impl DependencyExtractor for ConversionHandler {

@@ -13,9 +13,6 @@
 //! - `attach_to_parent` is `false` in their config
 //! - Output path uses `_global/operator/`, `_global/access_method/`, or `_global/cast/` structure
 
-// Allow unused - scaffolded for future phases
-#![allow(unused_imports)]
-
 mod access_method;
 mod cast;
 mod operator;

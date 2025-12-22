@@ -12,18 +12,10 @@
 //! - `attach_to_parent` is `false` in their config
 //! - Output path uses `fts/{subcategory}/` structure
 
-// Allow unused - scaffolded for future phases
-#![allow(unused_imports)]
-
 mod configuration;
 mod dictionary;
 mod parser;
 mod template;
-
-pub use configuration::ConfigurationHandler;
-pub use dictionary::DictionaryHandler;
-pub use parser::ParserHandler;
-pub use template::TemplateHandler;
 
 use super::registry::HandlerRegistry;
 

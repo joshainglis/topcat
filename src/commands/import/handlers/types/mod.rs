@@ -5,16 +5,9 @@
 //! - [`DomainHandler`]: Domain types (constrained base types)
 //! - [`CollationHandler`]: Collation definitions
 
-// Allow unused - scaffolded for future phases
-#![allow(unused_imports)]
-
 mod collation;
 mod domain;
 mod type_handler;
-
-pub use collation::CollationHandler;
-pub use domain::DomainHandler;
-pub use type_handler::TypeHandler;
 
 use super::registry::HandlerRegistry;
 

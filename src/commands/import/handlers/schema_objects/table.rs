@@ -1,13 +1,17 @@
 //! Handler for PostgreSQL TABLE objects.
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use crate::commands::import::handlers::registry::RegisteredHandler;
 use crate::commands::import::handlers::traits::{
-    Categorizer, Configurable, DependencyExtractor, OutputConfig, PatternProvider, RelatedObjects,
-    Renderer,
+    Categorizer, Configurable, DependencyExtractor, ObjectHandler, OutputConfig, PatternProvider,
+    RelatedObjects, Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
+use crate::commands::import::sources::pg_dump::TABLE_PATTERN;
 use crate::commands::import::sources::RawObject;
 
 /// Handler for PostgreSQL TABLE objects.
@@ -18,7 +22,9 @@ use crate::commands::import::sources::RawObject;
 pub struct TableHandler;
 
 impl PatternProvider for TableHandler {
-    // Tables are identified by metadata, not content patterns
+    fn content_patterns() -> Vec<&'static LazyLock<Regex>> {
+        vec![&TABLE_PATTERN]
+    }
 }
 
 impl DependencyExtractor for TableHandler {
@@ -65,6 +71,12 @@ impl Renderer for TableHandler {
         }
 
         parts.join("\n\n")
+    }
+}
+
+impl ObjectHandler for TableHandler {
+    fn object_type() -> ObjectType {
+        ObjectType::Table
     }
 }
 

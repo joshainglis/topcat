@@ -437,14 +437,151 @@ pub fn extract_deps_with_pattern(
     deps
 }
 
+// ============================================================================
+// Helper functions that use traits as bounds
+// ============================================================================
+
+/// Get content patterns from a handler type.
+///
+/// This helper provides a generic interface to PatternProvider.
+pub fn get_patterns<T: PatternProvider>() -> Vec<&'static LazyLock<Regex>> {
+    T::content_patterns()
+}
+
+/// Extract dependencies from content using a handler type.
+///
+/// This helper provides a generic interface to DependencyExtractor.
+pub fn extract_dependencies<T: DependencyExtractor>(content: &str) -> Vec<(String, ObjectType)> {
+    T::extract_pattern_dependencies(content)
+}
+
+/// Get implicit dependency types from a handler type.
+///
+/// This helper provides a generic interface to DependencyExtractor.
+pub fn get_implicit_deps<T: DependencyExtractor>() -> Vec<ObjectType> {
+    T::implicit_dependency_types()
+}
+
+/// Get category and output path from a handler type.
+///
+/// This helper provides a generic interface to Categorizer.
+pub fn get_category_info<T: Categorizer>(obj: &RawObject, base_dir: &Path) -> (ObjectCategory, PathBuf) {
+    (T::category(), T::output_path(obj, base_dir))
+}
+
+/// Render an object using a handler type.
+///
+/// This helper provides a generic interface to Renderer.
+pub fn render_object<T: Renderer>(
+    obj: &RawObject,
+    related: &RelatedObjects,
+    config: &OutputConfig,
+) -> String {
+    T::render(obj, related, config)
+}
+
+/// Get configuration from a handler type.
+///
+/// This helper provides a generic interface to Configurable.
+pub fn get_handler_config<T: Configurable>() -> (ObjectTypeConfig, Layer, bool) {
+    (T::default_config(), T::layer(), T::is_primary())
+}
+
+/// Full object handler interface combining all traits.
+///
+/// This helper uses the ObjectHandler supertrait.
+pub fn process_object<T: ObjectHandler>(
+    obj: &RawObject,
+    related: &RelatedObjects,
+    config: &OutputConfig,
+    base_dir: &Path,
+) -> (PathBuf, String, Layer) {
+    let path = T::output_path(obj, base_dir);
+    let output = T::render(obj, related, config);
+    let layer = T::layer();
+    (path, output, layer)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::import::handlers::attachments::TriggerHandler;
+    use std::path::Path;
 
     #[test]
     fn test_related_objects_is_empty() {
         let related = RelatedObjects::new();
         assert!(related.is_empty());
+    }
+
+    #[test]
+    fn test_helper_get_patterns() {
+        let patterns = get_patterns::<TriggerHandler>();
+        assert!(!patterns.is_empty());
+    }
+
+    #[test]
+    fn test_helper_extract_dependencies() {
+        let content = r#"CREATE TRIGGER my_trigger AFTER INSERT ON "public"."users" FOR EACH ROW EXECUTE FUNCTION "public"."notify"()"#;
+        let deps = extract_dependencies::<TriggerHandler>(content);
+        assert!(!deps.is_empty());
+    }
+
+    #[test]
+    fn test_helper_get_implicit_deps() {
+        let deps = get_implicit_deps::<TriggerHandler>();
+        assert!(deps.contains(&ObjectType::Function));
+    }
+
+    #[test]
+    fn test_helper_get_category_info() {
+        let obj = RawObject::new(
+            ObjectType::Trigger,
+            Some("public".to_string()),
+            "my_trigger".to_string(),
+            "CREATE TRIGGER...".to_string(),
+        );
+        let (category, path) = get_category_info::<TriggerHandler>(&obj, Path::new("/output"));
+        assert_eq!(category, ObjectCategory::TableAttachment);
+        assert!(path.to_string_lossy().contains("trigger"));
+    }
+
+    #[test]
+    fn test_helper_render_object() {
+        let obj = RawObject::new(
+            ObjectType::Trigger,
+            Some("public".to_string()),
+            "my_trigger".to_string(),
+            "CREATE TRIGGER my_trigger...".to_string(),
+        );
+        let related = RelatedObjects::new();
+        let config = OutputConfig::new();
+        let output = render_object::<TriggerHandler>(&obj, &related, &config);
+        assert!(output.contains("CREATE TRIGGER"));
+    }
+
+    #[test]
+    fn test_helper_get_handler_config() {
+        let (config, layer, is_primary) = get_handler_config::<TriggerHandler>();
+        assert!(!config.skip);
+        assert_eq!(layer, Layer::Append);
+        assert!(!is_primary);
+    }
+
+    #[test]
+    fn test_helper_process_object() {
+        let obj = RawObject::new(
+            ObjectType::Trigger,
+            Some("public".to_string()),
+            "my_trigger".to_string(),
+            "CREATE TRIGGER my_trigger...".to_string(),
+        );
+        let related = RelatedObjects::new();
+        let config = OutputConfig::new();
+        let (path, output, layer) = process_object::<TriggerHandler>(&obj, &related, &config, Path::new("/output"));
+        assert!(path.to_string_lossy().contains("trigger"));
+        assert!(output.contains("CREATE TRIGGER"));
+        assert_eq!(layer, Layer::Append);
     }
 
     #[test]

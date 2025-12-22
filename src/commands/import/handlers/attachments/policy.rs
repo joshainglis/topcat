@@ -1,6 +1,9 @@
 //! Handler for PostgreSQL POLICY objects.
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use crate::commands::import::handlers::registry::RegisteredHandler;
 use crate::commands::import::handlers::traits::{
@@ -8,6 +11,7 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
+use crate::commands::import::sources::pg_dump::POLICY_PATTERN;
 use crate::commands::import::sources::RawObject;
 
 /// Handler for PostgreSQL POLICY objects.
@@ -20,7 +24,9 @@ use crate::commands::import::sources::RawObject;
 pub struct PolicyHandler;
 
 impl PatternProvider for PolicyHandler {
-    // Policies are identified by metadata, not content patterns
+    fn content_patterns() -> Vec<&'static LazyLock<Regex>> {
+        vec![&POLICY_PATTERN]
+    }
 }
 
 impl DependencyExtractor for PolicyHandler {

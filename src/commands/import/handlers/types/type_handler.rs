@@ -1,6 +1,9 @@
 //! Handler for PostgreSQL TYPE objects.
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use crate::commands::import::handlers::registry::RegisteredHandler;
 use crate::commands::import::handlers::traits::{
@@ -10,6 +13,7 @@ use crate::commands::import::handlers::traits::{
 use crate::commands::import::object_types::{
     Layer, ObjectCategory, ObjectType, ObjectTypeConfig, TypeSubcategory,
 };
+use crate::commands::import::sources::pg_dump::TYPE_PATTERN;
 use crate::commands::import::sources::RawObject;
 
 /// Handler for PostgreSQL TYPE objects.
@@ -25,7 +29,9 @@ use crate::commands::import::sources::RawObject;
 pub struct TypeHandler;
 
 impl PatternProvider for TypeHandler {
-    // Types are identified by metadata, not content patterns
+    fn content_patterns() -> Vec<&'static LazyLock<Regex>> {
+        vec![&TYPE_PATTERN]
+    }
 }
 
 impl DependencyExtractor for TypeHandler {

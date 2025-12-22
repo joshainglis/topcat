@@ -14,8 +14,6 @@
 //! - `ForeignTableHandler` - Foreign tables (FDW)
 //! - `SequenceHandler` - Sequences
 
-// Allow unused - scaffolded for future phases
-#![allow(unused_imports)]
 
 mod extension;
 mod foreign_table;
@@ -25,8 +23,10 @@ mod sequence;
 mod table;
 mod view;
 
+// TableHandler is used by the orchestrator's validate_handler_traits
+pub use table::TableHandler;
+
 use super::registry::HandlerRegistry;
-use crate::commands::import::object_types::ObjectType;
 
 /// Register all schema object handlers with the registry.
 ///
@@ -49,6 +49,7 @@ pub fn register_handlers(registry: &mut HandlerRegistry) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::import::object_types::ObjectType;
 
     #[test]
     fn test_register_handlers() {

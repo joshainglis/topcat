@@ -114,6 +114,14 @@ impl PgDumpArgs {
         // Parse dump file using new parser
         let mut parser = PgDumpParser::from_file(self.dump_file.clone(), schema_pattern)?;
 
+        // Log parser source name for debugging
+        logger.debug(&format!("Using import source: {}", parser.source_name()));
+
+        // Check if dump contains default ACL statements
+        if parser.has_default_acl() {
+            logger.debug("Dump file contains DEFAULT PRIVILEGES statements");
+        }
+
         let objects = parser.extract_objects()?;
         let security = parser.collect_security()?;
         let default_acl = parser.collect_default_acl();

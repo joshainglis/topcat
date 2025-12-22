@@ -1,6 +1,9 @@
 //! Handler for PostgreSQL SERVER objects.
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use crate::commands::import::handlers::registry::RegisteredHandler;
 use crate::commands::import::handlers::traits::{
@@ -8,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::RawObject;
 use crate::commands::import::sources::pg_dump::SERVER_PATTERN;
+use crate::commands::import::sources::RawObject;
 
 /// Handler for PostgreSQL SERVER objects.
 ///
@@ -19,7 +22,9 @@ use crate::commands::import::sources::pg_dump::SERVER_PATTERN;
 pub struct ServerHandler;
 
 impl PatternProvider for ServerHandler {
-    // Servers are identified by metadata, not content patterns
+    fn content_patterns() -> Vec<&'static LazyLock<Regex>> {
+        vec![&SERVER_PATTERN]
+    }
 }
 
 impl DependencyExtractor for ServerHandler {

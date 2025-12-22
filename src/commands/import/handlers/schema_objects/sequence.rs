@@ -11,19 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
+use crate::commands::import::sources::pg_dump::SEQUENCE_PATTERN;
 use crate::commands::import::sources::RawObject;
-
-/// Pattern for matching CREATE SEQUENCE statements.
-pub static SEQUENCE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r#"(?xi)
-        ^CREATE\s+SEQUENCE\s+
-        (?:"(?P<schema>[^"]+)"\.)?
-        "?(?P<name>[^"\s;]+)"?
-        "#,
-    )
-    .expect("Invalid SEQUENCE_PATTERN regex")
-});
 
 /// Handler for PostgreSQL SEQUENCE objects.
 ///

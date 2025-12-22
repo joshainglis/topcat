@@ -11,19 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
+use crate::commands::import::sources::pg_dump::MATERIALIZED_VIEW_PATTERN;
 use crate::commands::import::sources::RawObject;
-
-/// Pattern for matching CREATE MATERIALIZED VIEW statements.
-pub static MATERIALIZED_VIEW_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r#"(?xi)
-        ^CREATE\s+MATERIALIZED\s+VIEW\s+
-        (?:"(?P<schema>[^"]+)"\.)?
-        "?(?P<name>[^"\s(]+)"?\s*
-        "#,
-    )
-    .expect("Invalid MATERIALIZED_VIEW_PATTERN regex")
-});
 
 /// Handler for PostgreSQL MATERIALIZED VIEW objects.
 ///

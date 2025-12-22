@@ -1,6 +1,9 @@
 //! Handler for PostgreSQL DOMAIN objects.
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use crate::commands::import::handlers::registry::RegisteredHandler;
 use crate::commands::import::handlers::traits::{
@@ -8,6 +11,7 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
+use crate::commands::import::sources::pg_dump::DOMAIN_PATTERN;
 use crate::commands::import::sources::RawObject;
 
 /// Handler for PostgreSQL DOMAIN objects.
@@ -21,7 +25,9 @@ use crate::commands::import::sources::RawObject;
 pub struct DomainHandler;
 
 impl PatternProvider for DomainHandler {
-    // Domains are identified by metadata, not content patterns
+    fn content_patterns() -> Vec<&'static LazyLock<Regex>> {
+        vec![&DOMAIN_PATTERN]
+    }
 }
 
 impl DependencyExtractor for DomainHandler {

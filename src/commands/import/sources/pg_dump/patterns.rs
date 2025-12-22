@@ -555,6 +555,297 @@ pub static SEQUENCE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     .expect("Invalid SEQUENCE_PATTERN regex")
 });
 
+// =============================================================================
+// Schema and Table Patterns
+// =============================================================================
+
+/// Pattern for matching CREATE SCHEMA statements.
+/// Example: `CREATE SCHEMA "public";`
+pub static SCHEMA_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+SCHEMA\s+
+        (?:IF\s+NOT\s+EXISTS\s+)?
+        "?(?P<name>[^"\s;]+)"?
+        "#,
+    )
+    .expect("Invalid SCHEMA_PATTERN regex")
+});
+
+/// Pattern for matching CREATE TABLE statements.
+/// Example: `CREATE TABLE "schema"."name" (...);`
+pub static TABLE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+
+        (?:UNLOGGED\s+)?
+        TABLE\s+
+        (?:IF\s+NOT\s+EXISTS\s+)?
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<name>[^"\s(]+)"?\s*
+        "#,
+    )
+    .expect("Invalid TABLE_PATTERN regex")
+});
+
+/// Pattern for matching CREATE VIEW statements.
+/// Example: `CREATE VIEW "schema"."name" AS SELECT ...;`
+pub static VIEW_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+
+        (?:OR\s+REPLACE\s+)?
+        (?:TEMP(?:ORARY)?\s+)?
+        VIEW\s+
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<name>[^"\s(]+)"?\s*
+        "#,
+    )
+    .expect("Invalid VIEW_PATTERN regex")
+});
+
+// =============================================================================
+// Routine Patterns (Functions, Procedures)
+// =============================================================================
+
+/// Pattern for matching CREATE FUNCTION statements.
+/// Example: `CREATE FUNCTION "schema"."name"(...) RETURNS ...;`
+pub static FUNCTION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+
+        (?:OR\s+REPLACE\s+)?
+        FUNCTION\s+
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<name>[^"\s(]+)"?\s*
+        \(
+        "#,
+    )
+    .expect("Invalid FUNCTION_PATTERN regex")
+});
+
+/// Pattern for matching CREATE PROCEDURE statements.
+/// Example: `CREATE PROCEDURE "schema"."name"(...);`
+pub static PROCEDURE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+
+        (?:OR\s+REPLACE\s+)?
+        PROCEDURE\s+
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<name>[^"\s(]+)"?\s*
+        \(
+        "#,
+    )
+    .expect("Invalid PROCEDURE_PATTERN regex")
+});
+
+// =============================================================================
+// Type Patterns
+// =============================================================================
+
+/// Pattern for matching CREATE TYPE statements.
+/// Example: `CREATE TYPE "schema"."name" AS ENUM (...);`
+pub static TYPE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+TYPE\s+
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<name>[^"\s(]+)"?\s*
+        "#,
+    )
+    .expect("Invalid TYPE_PATTERN regex")
+});
+
+/// Pattern for matching CREATE DOMAIN statements.
+/// Example: `CREATE DOMAIN "schema"."name" AS type ...;`
+pub static DOMAIN_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+DOMAIN\s+
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<name>[^"\s]+)"?\s+
+        AS\s+
+        "#,
+    )
+    .expect("Invalid DOMAIN_PATTERN regex")
+});
+
+// =============================================================================
+// Text Search Patterns (Parser, Template)
+// =============================================================================
+
+/// Pattern for matching CREATE TEXT SEARCH PARSER statements.
+/// Example: `CREATE TEXT SEARCH PARSER "name" (START = func, ...);`
+pub static FTS_PARSER_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+TEXT\s+SEARCH\s+PARSER\s+
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<name>[^"\s(]+)"?\s*
+        \(
+        "#,
+    )
+    .expect("Invalid FTS_PARSER_PATTERN regex")
+});
+
+/// Pattern for matching CREATE TEXT SEARCH TEMPLATE statements.
+/// Example: `CREATE TEXT SEARCH TEMPLATE "name" (INIT = func, LEXIZE = func);`
+pub static FTS_TEMPLATE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+TEXT\s+SEARCH\s+TEMPLATE\s+
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<name>[^"\s(]+)"?\s*
+        \(
+        "#,
+    )
+    .expect("Invalid FTS_TEMPLATE_PATTERN regex")
+});
+
+// =============================================================================
+// Attachment Patterns (Index, Constraint, Policy, etc.)
+// =============================================================================
+
+/// Pattern for matching CREATE INDEX statements.
+/// Example: `CREATE INDEX "name" ON "schema"."table" (...);`
+pub static INDEX_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+
+        (?:UNIQUE\s+)?
+        INDEX\s+
+        (?:CONCURRENTLY\s+)?
+        (?:IF\s+NOT\s+EXISTS\s+)?
+        "?(?P<name>[^"\s]+)"?\s+
+        ON\s+
+        (?:ONLY\s+)?
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<table>[^"\s(]+)"?
+        "#,
+    )
+    .expect("Invalid INDEX_PATTERN regex")
+});
+
+/// Pattern for matching ADD CONSTRAINT statements (non-FK).
+/// Example: `ALTER TABLE "schema"."table" ADD CONSTRAINT "name" CHECK (...);`
+pub static CONSTRAINT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^ALTER\s+TABLE\s+
+        (?:ONLY\s+)?
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<table>[^"\s]+)"?\s+
+        ADD\s+CONSTRAINT\s+
+        "?(?P<name>[^"\s]+)"?\s+
+        (?P<type>CHECK|UNIQUE|PRIMARY\s+KEY|EXCLUDE)
+        "#,
+    )
+    .expect("Invalid CONSTRAINT_PATTERN regex")
+});
+
+/// Pattern for matching ADD CONSTRAINT ... FOREIGN KEY statements.
+/// Example: `ALTER TABLE "schema"."table" ADD CONSTRAINT "name" FOREIGN KEY ...;`
+pub static FK_CONSTRAINT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^ALTER\s+TABLE\s+
+        (?:ONLY\s+)?
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<table>[^"\s]+)"?\s+
+        ADD\s+CONSTRAINT\s+
+        "?(?P<name>[^"\s]+)"?\s+
+        FOREIGN\s+KEY\s*\([^)]+\)\s*
+        REFERENCES\s+
+        (?:"(?P<ref_schema>[^"]+)"\.)?
+        "?(?P<ref_table>[^"\s(]+)"?
+        "#,
+    )
+    .expect("Invalid FK_CONSTRAINT_PATTERN regex")
+});
+
+/// Pattern for matching ALTER TABLE ... SET DEFAULT statements.
+/// Example: `ALTER TABLE ONLY "schema"."table" ALTER COLUMN "col" SET DEFAULT ...;`
+pub static DEFAULT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^ALTER\s+TABLE\s+
+        (?:ONLY\s+)?
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<table>[^"\s]+)"?\s+
+        ALTER\s+COLUMN\s+
+        "?(?P<column>[^"\s]+)"?\s+
+        SET\s+DEFAULT\s+
+        "#,
+    )
+    .expect("Invalid DEFAULT_PATTERN regex")
+});
+
+/// Pattern for matching CREATE POLICY statements.
+/// Example: `CREATE POLICY "name" ON "schema"."table" ...;`
+pub static POLICY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+POLICY\s+
+        "?(?P<name>[^"\s]+)"?\s+
+        ON\s+
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<table>[^"\s]+)"?
+        "#,
+    )
+    .expect("Invalid POLICY_PATTERN regex")
+});
+
+/// Pattern for matching ALTER TABLE ... ENABLE ROW LEVEL SECURITY statements.
+/// Example: `ALTER TABLE "schema"."table" ENABLE ROW LEVEL SECURITY;`
+pub static ROW_SECURITY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^ALTER\s+TABLE\s+
+        (?:ONLY\s+)?
+        (?:"(?P<schema>[^"]+)"\.)?
+        "?(?P<table>[^"\s]+)"?\s+
+        ENABLE\s+ROW\s+LEVEL\s+SECURITY
+        "#,
+    )
+    .expect("Invalid ROW_SECURITY_PATTERN regex")
+});
+
+// =============================================================================
+// Operator Patterns (Static versions)
+// =============================================================================
+
+/// Pattern for matching CREATE CAST statements.
+/// Example: `CREATE CAST (source AS target) WITH FUNCTION func;`
+pub static CAST_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+CAST\s+\(
+        (?:"(?P<from_schema>[^"]+)"\.)?
+        "?(?P<from_type>[^"\s\[\]]+)"?(?:\[\])?\s+
+        AS\s+
+        (?:"(?P<to_schema>[^"]+)"\.)?
+        "?(?P<to_type>[^"\s\[\])]+)"?(?:\[\])?
+        \)
+        "#,
+    )
+    .expect("Invalid CAST_PATTERN regex")
+});
+
+/// Pattern for matching CREATE OPERATOR statements.
+/// Example: `CREATE OPERATOR "schema".@@ (FUNCTION = func, ...);`
+pub static OPERATOR_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?xi)
+        ^CREATE\s+OPERATOR\s+
+        (?:"(?P<schema>[^"]+)"\.)?
+        (?:"?(?P<name>\S+)"?)\s*
+        \(
+        "#,
+    )
+    .expect("Invalid OPERATOR_PATTERN regex")
+});
+
 #[cfg(test)]
 mod tests {
     use super::*;

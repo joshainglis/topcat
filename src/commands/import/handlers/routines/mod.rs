@@ -5,16 +5,12 @@
 //! - [`ProcedureHandler`]: Stored procedures (PostgreSQL 11+)
 //! - [`AggregateHandler`]: User-defined aggregate functions
 
-// Allow unused - scaffolded for future phases
-#![allow(unused_imports)]
-
 mod aggregate;
 mod function;
 mod procedure;
 
-pub use aggregate::AggregateHandler;
+// FunctionHandler is used by the orchestrator's categorize_object
 pub use function::FunctionHandler;
-pub use procedure::ProcedureHandler;
 
 use super::registry::HandlerRegistry;
 

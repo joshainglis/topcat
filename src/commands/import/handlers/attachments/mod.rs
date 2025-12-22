@@ -16,8 +16,6 @@
 //! - `layer()` returns `Layer::Append`
 //! - `attach_to_parent` is `true` in their config
 
-// Allow unused - scaffolded for future phases
-#![allow(unused_imports)]
 
 mod constraint;
 mod default;
@@ -29,14 +27,7 @@ mod rule;
 mod statistics;
 mod trigger;
 
-pub use constraint::ConstraintHandler;
-pub use default::DefaultHandler;
-pub use fk_constraint::FkConstraintHandler;
-pub use index::IndexHandler;
-pub use policy::PolicyHandler;
-pub use row_security::RowSecurityHandler;
-pub use rule::RuleHandler;
-pub use statistics::StatisticsHandler;
+// TriggerHandler is used by the orchestrator's validate_handler_traits
 pub use trigger::TriggerHandler;
 
 use super::registry::HandlerRegistry;
