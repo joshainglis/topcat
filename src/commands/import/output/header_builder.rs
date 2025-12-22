@@ -105,10 +105,10 @@ impl HeaderBuilder {
 
         let mut header = name_line;
 
-        if self.generate_layer {
-            if let Some(layer) = self.layer {
-                header.push_str(&format!("-- layer: {}\n", layer.as_str()));
-            }
+        if self.generate_layer
+            && let Some(layer) = self.layer
+        {
+            header.push_str(&format!("-- layer: {}\n", layer.as_str()));
         }
 
         if !self.requires.is_empty() {

@@ -1,7 +1,8 @@
 # Import Module Refactoring Plan
 
 **Created:** 2025-11-27
-**Status:** Planning
+**Completed:** 2025-12-22
+**Status:** Complete
 **Scope:** Refactor `src/commands/import/` into per-type submodules with composable traits
 
 ## Goals
@@ -973,16 +974,22 @@ These represent API extensibility points that are designed for future use (e.g.,
 
 **All 25 handlers now have proper `PatternProvider::content_patterns()` implementations.**
 
-### Phase 6: Final Cleanup
+### Phase 6: Final Cleanup ✅
 
 **Goal:** Remove any remaining dead code.
 
-**Tasks:**
-- [ ] Delete any truly unused patterns
-- [ ] Delete any unused ObjectTypeConfig functionality
-- [ ] Consider if attachment registry dynamic APIs are needed
-- [ ] Update documentation
-- [ ] Run final clippy
+**Completed Tasks (2025-12-22):**
+- [x] All patterns verified as actively used (47 patterns, no dead code)
+- [x] Removed `subdirectory` field from `ObjectTypeConfig`
+- [x] Removed `build_default_configs()` from `ObjectTypeConfig`
+- [x] Removed `attachment_registry_mut()` from `HandlerRegistry`
+- [x] Removed `register()` and `get_rules()` from `AttachmentRegistry`
+- [x] Removed `parent_types` field from `AttachmentRule`
+- [x] Removed `with_metadata()` and `with_extracted_dep()` from `RawObject`
+- [x] Updated `deps_rule()` helper (no longer needs parent_type parameter)
+- [x] Removed subdirectory logging from orchestrator.rs
+- [x] All tests pass (540 tests)
+- [x] Clippy clean (0 warnings)
 
 **Verification:** All tests pass, clippy clean, no `#![allow(...)]` directives.
 
@@ -1110,4 +1117,8 @@ Use these to track progress across sessions:
   - Wired all 25 handlers with proper `content_patterns()` implementation
   - Removed all "identified by metadata" comments
   - All tests pass, clippy clean (5 extensibility API warnings remain)
-- [ ] **Checkpoint 7:** Phase 6 complete - final cleanup done
+- [x] **Checkpoint 7:** Phase 6 complete - final cleanup done (2025-12-22)
+  - Removed 8 dead code items across 4 files
+  - All patterns verified as used (47 patterns)
+  - 540 tests pass, clippy clean (0 warnings)
+  - **Import refactoring complete!**

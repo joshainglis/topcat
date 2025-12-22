@@ -38,10 +38,10 @@ impl DependencyExtractor for DefaultAclHandler {
         let mut deps = vec![];
 
         // Default ACLs reference schemas
-        if let Some(caps) = DEFAULT_ACL_PATTERN.captures(content) {
-            if let Some(schema) = caps.name("schema") {
-                deps.push((schema.as_str().to_string(), ObjectType::Schema));
-            }
+        if let Some(caps) = DEFAULT_ACL_PATTERN.captures(content)
+            && let Some(schema) = caps.name("schema")
+        {
+            deps.push((schema.as_str().to_string(), ObjectType::Schema));
         }
 
         deps

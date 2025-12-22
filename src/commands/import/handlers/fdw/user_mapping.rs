@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::USER_MAPPING_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::USER_MAPPING_PATTERN;
 
 /// Handler for PostgreSQL USER MAPPING objects.
 ///
@@ -37,10 +37,10 @@ impl DependencyExtractor for UserMappingHandler {
         let mut deps = vec![];
 
         // Extract server dependency from CREATE USER MAPPING FOR user SERVER server_name
-        if let Some(caps) = USER_MAPPING_PATTERN.captures(content) {
-            if let Some(server) = caps.name("server") {
-                deps.push((server.as_str().to_string(), ObjectType::Server));
-            }
+        if let Some(caps) = USER_MAPPING_PATTERN.captures(content)
+            && let Some(server) = caps.name("server")
+        {
+            deps.push((server.as_str().to_string(), ObjectType::Server));
         }
 
         deps

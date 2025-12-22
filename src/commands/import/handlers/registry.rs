@@ -138,11 +138,6 @@ impl HandlerRegistry {
         &self.attachment_registry
     }
 
-    /// Get a mutable reference to the attachment registry.
-    pub fn attachment_registry_mut(&mut self) -> &mut AttachmentRegistry {
-        &mut self.attachment_registry
-    }
-
     /// Register a handler for an object type.
     pub fn register(&mut self, handler: RegisteredHandler) {
         self.handlers.insert(handler.obj_type, handler);
@@ -247,9 +242,6 @@ pub struct AttachmentRegistry {
 
 /// A rule for attaching an object to its parent.
 pub struct AttachmentRule {
-    /// Possible parent types for this attachment.
-    pub parent_types: Vec<ObjectType>,
-
     /// Function to extract parent identity from attachment content.
     ///
     /// This function analyzes the attachment's content and returns the
@@ -316,16 +308,6 @@ impl AttachmentRegistry {
         None
     }
 
-    /// Register an attachment rule.
-    pub fn register(&mut self, attachment_type: ObjectType, rule: AttachmentRule) {
-        self.rules.entry(attachment_type).or_default().push(rule);
-    }
-
-    /// Get rules for an attachment type.
-    pub fn get_rules(&self, attachment_type: &ObjectType) -> Option<&Vec<AttachmentRule>> {
-        self.rules.get(attachment_type)
-    }
-
     /// Register default attachment rules.
     ///
     /// These rules define the standard PostgreSQL attachment relationships.
@@ -333,10 +315,9 @@ impl AttachmentRegistry {
     /// making them source-agnostic.
     fn register_default_rules(&mut self) {
         // Helper: create a rule that uses extracted_deps to find the parent
-        fn deps_rule(parent_type: ObjectType) -> AttachmentRule {
+        fn deps_rule() -> AttachmentRule {
             AttachmentRule {
-                parent_types: vec![parent_type],
-                extract_parent: Arc::new(move |obj| {
+                extract_parent: Arc::new(|obj| {
                     obj.extracted_deps.first().map(|dep| {
                         let parts: Vec<&str> = dep.name.split('.').collect();
                         let (schema, name) = if parts.len() == 2 {
@@ -351,26 +332,19 @@ impl AttachmentRegistry {
         }
 
         // Table attachments - use extracted_deps
+        self.rules.insert(ObjectType::Index, vec![deps_rule()]);
+        self.rules.insert(ObjectType::Constraint, vec![deps_rule()]);
         self.rules
-            .insert(ObjectType::Index, vec![deps_rule(ObjectType::Table)]);
+            .insert(ObjectType::FkConstraint, vec![deps_rule()]);
+        self.rules.insert(ObjectType::Policy, vec![deps_rule()]);
         self.rules
-            .insert(ObjectType::Constraint, vec![deps_rule(ObjectType::Table)]);
-        self.rules
-            .insert(ObjectType::FkConstraint, vec![deps_rule(ObjectType::Table)]);
-        self.rules
-            .insert(ObjectType::Policy, vec![deps_rule(ObjectType::Table)]);
-        self.rules
-            .insert(ObjectType::RowSecurity, vec![deps_rule(ObjectType::Table)]);
-        self.rules
-            .insert(ObjectType::Default, vec![deps_rule(ObjectType::Table)]);
-        self.rules
-            .insert(ObjectType::Statistics, vec![deps_rule(ObjectType::Table)]);
-        self.rules
-            .insert(ObjectType::Rule, vec![deps_rule(ObjectType::Table)]);
+            .insert(ObjectType::RowSecurity, vec![deps_rule()]);
+        self.rules.insert(ObjectType::Default, vec![deps_rule()]);
+        self.rules.insert(ObjectType::Statistics, vec![deps_rule()]);
+        self.rules.insert(ObjectType::Rule, vec![deps_rule()]);
 
         // Trigger → Function (primary parent)
-        self.rules
-            .insert(ObjectType::Trigger, vec![deps_rule(ObjectType::Function)]);
+        self.rules.insert(ObjectType::Trigger, vec![deps_rule()]);
     }
 
     /// Check if a type is an attachment type.

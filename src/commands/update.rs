@@ -331,33 +331,33 @@ fn collect_and_filter_files(config: &config::Config) -> Result<HashSet<PathBuf>,
         .into_iter()
         .filter(|file| {
             // Include glob filter
-            if let Some(ref include) = include_globs {
-                if !include.contains(file) {
-                    return false;
-                }
+            if let Some(ref include) = include_globs
+                && !include.contains(file)
+            {
+                return false;
             }
 
             // Exclude glob filter
-            if let Some(ref exclude) = exclude_globs {
-                if exclude.contains(file) {
-                    return false;
-                }
+            if let Some(ref exclude) = exclude_globs
+                && exclude.contains(file)
+            {
+                return false;
             }
 
             // Extension filters
             if let Some(extension) = file.extension().and_then(|e| e.to_str()) {
                 // Include extensions
-                if let Some(ref include_ext) = include_extensions {
-                    if !include_ext.contains(extension) {
-                        return false;
-                    }
+                if let Some(ref include_ext) = include_extensions
+                    && !include_ext.contains(extension)
+                {
+                    return false;
                 }
 
                 // Exclude extensions
-                if let Some(ref exclude_ext) = exclude_extensions {
-                    if exclude_ext.contains(extension) {
-                        return false;
-                    }
+                if let Some(ref exclude_ext) = exclude_extensions
+                    && exclude_ext.contains(extension)
+                {
+                    return false;
                 }
             } else if include_extensions.is_some() {
                 // No extension but we have include filter - exclude this file
@@ -458,13 +458,13 @@ fn discover_files_without_graph(config: &config::Config) -> Result<Vec<FileNode>
             let analysis_result = analyzer.analyze(&content);
 
             // Update node name if discovered (and not manual)
-            if let Some(discovered_name) = analysis_result.node_name {
-                if !file_node.manual {
-                    file_node.name = discovered_name.clone();
-                    file_node.name_source = NameSource::Discovered;
-                    // Update schema from discovered name
-                    file_node.schema = FileNode::extract_schema(&discovered_name);
-                }
+            if let Some(discovered_name) = analysis_result.node_name
+                && !file_node.manual
+            {
+                file_node.name = discovered_name.clone();
+                file_node.name_source = NameSource::Discovered;
+                // Update schema from discovered name
+                file_node.schema = FileNode::extract_schema(&discovered_name);
             }
 
             // Re-apply auto-mapping when using discovery-only strategy
@@ -473,13 +473,11 @@ fn discover_files_without_graph(config: &config::Config) -> Result<Vec<FileNode>
             // node name didn't change (e.g., header name matches discovered name)
             if config.sql_discovery.merge_strategy == MergeStrategy::DiscoveryOnly
                 && !file_node.manual
+                && let Some(ref mapper) = layer_mapper
+                && let Some(mapped_layer) = mapper.map_node_to_layer(&file_node.name)
             {
-                if let Some(ref mapper) = layer_mapper {
-                    if let Some(mapped_layer) = mapper.map_node_to_layer(&file_node.name) {
-                        file_node.layer = mapped_layer;
-                        file_node.layer_is_fallback = false;
-                    }
-                }
+                file_node.layer = mapped_layer;
+                file_node.layer_is_fallback = false;
             }
 
             // Clean up discovered dependencies: remove self-references and subobjects

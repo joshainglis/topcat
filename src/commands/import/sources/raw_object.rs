@@ -183,21 +183,9 @@ impl RawObject {
         self
     }
 
-    /// Builder method to add metadata.
-    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.set_metadata(key, value);
-        self
-    }
-
     /// Add an extracted dependency.
     pub fn add_extracted_dep(&mut self, name: impl Into<String>, dep_type: ObjectType) {
         self.extracted_deps.push(ExtractedDep::new(name, dep_type));
-    }
-
-    /// Builder method to add an extracted dependency.
-    pub fn with_extracted_dep(mut self, name: impl Into<String>, dep_type: ObjectType) -> Self {
-        self.add_extracted_dep(name, dep_type);
-        self
     }
 
     /// Get extracted dependencies.
@@ -266,15 +254,15 @@ mod tests {
 
     #[test]
     fn test_raw_object_builder_methods() {
-        let obj = RawObject::new(
+        let mut obj = RawObject::new(
             ObjectType::Function,
             Some("public".to_string()),
             "my_func".to_string(),
             "CREATE FUNCTION...".to_string(),
         )
         .with_identity("my_func(integer, text)")
-        .with_owner("app_owner")
-        .with_metadata("line_number", "42");
+        .with_owner("app_owner");
+        obj.set_metadata("line_number", "42");
 
         assert_eq!(obj.identity, "my_func(integer, text)");
         assert_eq!(obj.owner, Some("app_owner".to_string()));

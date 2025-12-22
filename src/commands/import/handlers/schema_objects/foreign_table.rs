@@ -46,10 +46,10 @@ impl DependencyExtractor for ForeignTableHandler {
         let mut deps = Vec::new();
 
         // Extract server dependency from FOREIGN TABLE definition
-        if let Some(caps) = FOREIGN_TABLE_PATTERN.captures(content) {
-            if let Some(server) = caps.name("server") {
-                deps.push((server.as_str().to_string(), ObjectType::Server));
-            }
+        if let Some(caps) = FOREIGN_TABLE_PATTERN.captures(content)
+            && let Some(server) = caps.name("server")
+        {
+            deps.push((server.as_str().to_string(), ObjectType::Server));
         }
 
         deps

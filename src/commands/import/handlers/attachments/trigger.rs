@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     RelatedObjects, Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::TRIGGER_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::TRIGGER_PATTERN;
 
 /// Handler for PostgreSQL TRIGGER objects.
 ///
@@ -34,12 +34,11 @@ impl DependencyExtractor for TriggerHandler {
         let mut deps = vec![];
 
         // Extract function dependency from EXECUTE FUNCTION/PROCEDURE
-        if let Some(caps) = TRIGGER_PATTERN.captures(content) {
-            if let (Some(fn_schema), Some(fn_name)) = (caps.name("fn_schema"), caps.name("fn_name"))
-            {
-                let qualified = format!("{}.{}", fn_schema.as_str(), fn_name.as_str());
-                deps.push((qualified, ObjectType::Function));
-            }
+        if let Some(caps) = TRIGGER_PATTERN.captures(content)
+            && let (Some(fn_schema), Some(fn_name)) = (caps.name("fn_schema"), caps.name("fn_name"))
+        {
+            let qualified = format!("{}.{}", fn_schema.as_str(), fn_name.as_str());
+            deps.push((qualified, ObjectType::Function));
         }
 
         deps

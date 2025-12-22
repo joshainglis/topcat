@@ -131,45 +131,45 @@ impl DependencyAnalyzer {
         match obj_type {
             ObjectType::ForeignTable => {
                 // Foreign tables depend on their server
-                if let Some(caps) = FOREIGN_TABLE_PATTERN.captures(content) {
-                    if let Some(server) = caps.name("server") {
-                        let server_name = server.as_str().to_lowercase();
-                        if self.known_objects.contains(&server_name) {
-                            deps.insert(server_name);
-                        }
+                if let Some(caps) = FOREIGN_TABLE_PATTERN.captures(content)
+                    && let Some(server) = caps.name("server")
+                {
+                    let server_name = server.as_str().to_lowercase();
+                    if self.known_objects.contains(&server_name) {
+                        deps.insert(server_name);
                     }
                 }
             }
             ObjectType::Server => {
                 // Servers depend on their foreign data wrapper
-                if let Some(caps) = SERVER_PATTERN.captures(content) {
-                    if let Some(fdw) = caps.name("fdw") {
-                        let fdw_name = fdw.as_str().to_lowercase();
-                        if self.known_objects.contains(&fdw_name) {
-                            deps.insert(fdw_name);
-                        }
+                if let Some(caps) = SERVER_PATTERN.captures(content)
+                    && let Some(fdw) = caps.name("fdw")
+                {
+                    let fdw_name = fdw.as_str().to_lowercase();
+                    if self.known_objects.contains(&fdw_name) {
+                        deps.insert(fdw_name);
                     }
                 }
             }
             ObjectType::UserMapping => {
                 // User mappings depend on their server
-                if let Some(caps) = USER_MAPPING_PATTERN.captures(content) {
-                    if let Some(server) = caps.name("server") {
-                        let server_name = server.as_str().to_lowercase();
-                        if self.known_objects.contains(&server_name) {
-                            deps.insert(server_name);
-                        }
+                if let Some(caps) = USER_MAPPING_PATTERN.captures(content)
+                    && let Some(server) = caps.name("server")
+                {
+                    let server_name = server.as_str().to_lowercase();
+                    if self.known_objects.contains(&server_name) {
+                        deps.insert(server_name);
                     }
                 }
             }
             ObjectType::Subscription => {
                 // Subscriptions depend on their publication
-                if let Some(caps) = SUBSCRIPTION_PATTERN.captures(content) {
-                    if let Some(pub_name) = caps.name("publication") {
-                        let pub_lower = pub_name.as_str().to_lowercase();
-                        if self.known_objects.contains(&pub_lower) {
-                            deps.insert(pub_lower);
-                        }
+                if let Some(caps) = SUBSCRIPTION_PATTERN.captures(content)
+                    && let Some(pub_name) = caps.name("publication")
+                {
+                    let pub_lower = pub_name.as_str().to_lowercase();
+                    if self.known_objects.contains(&pub_lower) {
+                        deps.insert(pub_lower);
                     }
                 }
             }

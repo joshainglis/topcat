@@ -84,8 +84,8 @@ pub fn from_file(
     fallback_layer: &str,
     layer_mapper: Option<&crate::layer_mapper::LayerMapper>,
 ) -> Result<FileNode, FileNodeError> {
-    let file_data =
-        get_file_headers(path, comment_str).map_err(|err| FileNodeError::FileOpen(path.clone(), err))?;
+    let file_data = get_file_headers(path, comment_str)
+        .map_err(|err| FileNodeError::FileOpen(path.clone(), err))?;
 
     // Store original headers for later preservation if needed
     let original_headers_text = if !file_data.is_empty() {
@@ -201,13 +201,12 @@ pub fn from_file(
     // 1. Layer is still at fallback (no explicit layer header)
     // 2. Layer mapper is configured
     // 3. Node name matches a pattern
-    if layer_is_fallback {
-        if let Some(mapper) = layer_mapper {
-            if let Some(mapped_layer) = mapper.map_node_to_layer(&name) {
-                layer = mapped_layer;
-                layer_is_fallback = false;
-            }
-        }
+    if layer_is_fallback
+        && let Some(mapper) = layer_mapper
+        && let Some(mapped_layer) = mapper.map_node_to_layer(&name)
+    {
+        layer = mapped_layer;
+        layer_is_fallback = false;
     }
 
     // Validate that the declared layer exists in the configured layers
@@ -215,7 +214,14 @@ pub fn from_file(
         return Err(FileNodeError::InvalidLayer(path.clone(), layer));
     }
 
-    let mut file_node = FileNode::new(name, path.clone(), deps, layer, layer_is_fallback, ensure_exists);
+    let mut file_node = FileNode::new(
+        name,
+        path.clone(),
+        deps,
+        layer,
+        layer_is_fallback,
+        ensure_exists,
+    );
     file_node.override_deps = override_deps;
     file_node.implicit = implicit;
     file_node.manual = manual;

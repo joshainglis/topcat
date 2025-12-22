@@ -34,15 +34,15 @@ impl DependencyExtractor for StatisticsHandler {
         let mut deps = vec![];
 
         // Extract table dependency from CREATE STATISTICS ... FROM table
-        if let Some(caps) = STATISTICS_PATTERN.captures(content) {
-            if let Some(table_name) = caps.name("table_name") {
-                let schema = caps.name("table_schema").map(|m| m.as_str().to_string());
-                let qualified = match schema {
-                    Some(s) => format!("{}.{}", s, table_name.as_str()),
-                    None => table_name.as_str().to_string(),
-                };
-                deps.push((qualified, ObjectType::Table));
-            }
+        if let Some(caps) = STATISTICS_PATTERN.captures(content)
+            && let Some(table_name) = caps.name("table_name")
+        {
+            let schema = caps.name("table_schema").map(|m| m.as_str().to_string());
+            let qualified = match schema {
+                Some(s) => format!("{}.{}", s, table_name.as_str()),
+                None => table_name.as_str().to_string(),
+            };
+            deps.push((qualified, ObjectType::Table));
         }
 
         deps

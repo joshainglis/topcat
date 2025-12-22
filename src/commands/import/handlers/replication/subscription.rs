@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::SUBSCRIPTION_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::SUBSCRIPTION_PATTERN;
 
 /// Handler for PostgreSQL SUBSCRIPTION objects.
 ///
@@ -37,10 +37,10 @@ impl DependencyExtractor for SubscriptionHandler {
         let mut deps = vec![];
 
         // Extract publication dependency from CREATE SUBSCRIPTION ... PUBLICATION pub_name
-        if let Some(caps) = SUBSCRIPTION_PATTERN.captures(content) {
-            if let Some(pub_name) = caps.name("publication") {
-                deps.push((pub_name.as_str().to_string(), ObjectType::Publication));
-            }
+        if let Some(caps) = SUBSCRIPTION_PATTERN.captures(content)
+            && let Some(pub_name) = caps.name("publication")
+        {
+            deps.push((pub_name.as_str().to_string(), ObjectType::Publication));
         }
 
         deps

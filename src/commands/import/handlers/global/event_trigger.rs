@@ -13,8 +13,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::EVENT_TRIGGER_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::EVENT_TRIGGER_PATTERN;
 
 /// Handler for PostgreSQL EVENT TRIGGER objects.
 ///
@@ -38,15 +38,15 @@ impl DependencyExtractor for EventTriggerHandler {
         let mut deps = vec![];
 
         // Extract function dependency from EXECUTE FUNCTION clause
-        if let Some(caps) = EVENT_TRIGGER_PATTERN.captures(content) {
-            if let Some(fn_name) = caps.name("fn_name") {
-                let qualified = if let Some(schema) = caps.name("fn_schema") {
-                    format!("{}.{}", schema.as_str(), fn_name.as_str())
-                } else {
-                    fn_name.as_str().to_string()
-                };
-                deps.push((qualified, ObjectType::Function));
-            }
+        if let Some(caps) = EVENT_TRIGGER_PATTERN.captures(content)
+            && let Some(fn_name) = caps.name("fn_name")
+        {
+            let qualified = if let Some(schema) = caps.name("fn_schema") {
+                format!("{}.{}", schema.as_str(), fn_name.as_str())
+            } else {
+                fn_name.as_str().to_string()
+            };
+            deps.push((qualified, ObjectType::Function));
         }
 
         deps

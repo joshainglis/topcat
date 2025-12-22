@@ -44,10 +44,10 @@ impl DependencyExtractor for AclHandler {
             }
         }
         // Try REVOKE pattern
-        else if let Some(caps) = REVOKE_PATTERN.captures(content) {
-            if let Some(dep) = extract_target_dependency(&caps) {
-                deps.push(dep);
-            }
+        else if let Some(caps) = REVOKE_PATTERN.captures(content)
+            && let Some(dep) = extract_target_dependency(&caps)
+        {
+            deps.push(dep);
         }
 
         deps

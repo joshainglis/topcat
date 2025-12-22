@@ -575,10 +575,6 @@ pub struct ObjectTypeConfig {
 
     /// The parent object types to try attaching to.
     pub parent_types: Vec<ObjectType>,
-
-    /// Custom subdirectory within the category directory.
-    /// If None, the default categorization logic is used.
-    pub subdirectory: Option<String>,
 }
 
 impl ObjectTypeConfig {
@@ -627,64 +623,7 @@ impl ObjectTypeConfig {
             skip: object_type == ObjectType::Unknown,
             attach_to_parent,
             parent_types,
-            subdirectory: None,
         }
-    }
-
-    /// Build a map of default configurations for all object types.
-    pub fn build_default_configs() -> std::collections::HashMap<ObjectType, ObjectTypeConfig> {
-        use ObjectType::*;
-        let types = [
-            Schema,
-            Extension,
-            Table,
-            View,
-            MaterializedView,
-            ForeignTable,
-            Sequence,
-            Type,
-            Domain,
-            Collation,
-            Function,
-            Procedure,
-            Aggregate,
-            Index,
-            Constraint,
-            FkConstraint,
-            Trigger,
-            Policy,
-            RowSecurity,
-            Default,
-            Statistics,
-            Rule,
-            TextSearchConfiguration,
-            TextSearchDictionary,
-            TextSearchParser,
-            TextSearchTemplate,
-            ForeignDataWrapper,
-            Server,
-            UserMapping,
-            Operator,
-            OperatorClass,
-            OperatorFamily,
-            AccessMethod,
-            Cast,
-            Publication,
-            Subscription,
-            EventTrigger,
-            Language,
-            Transform,
-            Conversion,
-            Acl,
-            DefaultAcl,
-            SecurityLabel,
-            Comment,
-            Unknown,
-        ];
-        types
-            .into_iter()
-            .map(|t| (t, Self::default_for(t)))
-            .collect()
     }
 }
 

@@ -221,57 +221,50 @@ impl PgDumpParser {
         match obj.obj_type {
             // Trigger → Function (from EXECUTE FUNCTION clause)
             ObjectType::Trigger => {
-                if let Some(caps) = TRIGGER_PATTERN.captures(content) {
-                    if let (Some(fn_schema), Some(fn_name)) =
+                if let Some(caps) = TRIGGER_PATTERN.captures(content)
+                    && let (Some(fn_schema), Some(fn_name)) =
                         (caps.name("fn_schema"), caps.name("fn_name"))
-                    {
-                        obj.add_extracted_dep(
-                            format!("{}.{}", fn_schema.as_str(), fn_name.as_str()),
-                            ObjectType::Function,
-                        );
-                    }
+                {
+                    obj.add_extracted_dep(
+                        format!("{}.{}", fn_schema.as_str(), fn_name.as_str()),
+                        ObjectType::Function,
+                    );
                 }
             }
 
             // ForeignTable → Server (from SERVER clause)
             ObjectType::ForeignTable => {
-                if let Some(caps) = FOREIGN_TABLE_PATTERN.captures(content) {
-                    if let Some(server) = caps.name("server") {
-                        obj.add_extracted_dep(server.as_str().to_string(), ObjectType::Server);
-                    }
+                if let Some(caps) = FOREIGN_TABLE_PATTERN.captures(content)
+                    && let Some(server) = caps.name("server")
+                {
+                    obj.add_extracted_dep(server.as_str().to_string(), ObjectType::Server);
                 }
             }
 
             // Subscription → Publication (from PUBLICATION clause)
             ObjectType::Subscription => {
-                if let Some(caps) = SUBSCRIPTION_PATTERN.captures(content) {
-                    if let Some(pub_name) = caps.name("publication") {
-                        obj.add_extracted_dep(
-                            pub_name.as_str().to_string(),
-                            ObjectType::Publication,
-                        );
-                    }
+                if let Some(caps) = SUBSCRIPTION_PATTERN.captures(content)
+                    && let Some(pub_name) = caps.name("publication")
+                {
+                    obj.add_extracted_dep(pub_name.as_str().to_string(), ObjectType::Publication);
                 }
             }
 
             // Server → ForeignDataWrapper (from FOREIGN DATA WRAPPER clause)
             ObjectType::Server => {
-                if let Some(caps) = SERVER_PATTERN.captures(content) {
-                    if let Some(fdw) = caps.name("fdw") {
-                        obj.add_extracted_dep(
-                            fdw.as_str().to_string(),
-                            ObjectType::ForeignDataWrapper,
-                        );
-                    }
+                if let Some(caps) = SERVER_PATTERN.captures(content)
+                    && let Some(fdw) = caps.name("fdw")
+                {
+                    obj.add_extracted_dep(fdw.as_str().to_string(), ObjectType::ForeignDataWrapper);
                 }
             }
 
             // UserMapping → Server (from SERVER clause)
             ObjectType::UserMapping => {
-                if let Some(caps) = USER_MAPPING_PATTERN.captures(content) {
-                    if let Some(server) = caps.name("server") {
-                        obj.add_extracted_dep(server.as_str().to_string(), ObjectType::Server);
-                    }
+                if let Some(caps) = USER_MAPPING_PATTERN.captures(content)
+                    && let Some(server) = caps.name("server")
+                {
+                    obj.add_extracted_dep(server.as_str().to_string(), ObjectType::Server);
                 }
             }
 
@@ -331,52 +324,50 @@ impl PgDumpParser {
 
             // Index, Constraint, Policy → Table (from ALTER TABLE pattern)
             ObjectType::Index | ObjectType::Constraint | ObjectType::FkConstraint => {
-                if let Some(caps) = ALTER_TABLE_PATTERN.captures(content) {
-                    if let (Some(tbl_schema), Some(tbl_name)) =
+                if let Some(caps) = ALTER_TABLE_PATTERN.captures(content)
+                    && let (Some(tbl_schema), Some(tbl_name)) =
                         (caps.name("tbl_schema"), caps.name("tbl_name"))
-                    {
-                        obj.add_extracted_dep(
-                            format!("{}.{}", tbl_schema.as_str(), tbl_name.as_str()),
-                            ObjectType::Table,
-                        );
-                    }
+                {
+                    obj.add_extracted_dep(
+                        format!("{}.{}", tbl_schema.as_str(), tbl_name.as_str()),
+                        ObjectType::Table,
+                    );
                 }
             }
 
             // Policy → Table
             ObjectType::Policy | ObjectType::RowSecurity => {
-                if let Some(caps) = ALTER_TABLE_PATTERN.captures(content) {
-                    if let (Some(tbl_schema), Some(tbl_name)) =
+                if let Some(caps) = ALTER_TABLE_PATTERN.captures(content)
+                    && let (Some(tbl_schema), Some(tbl_name)) =
                         (caps.name("tbl_schema"), caps.name("tbl_name"))
-                    {
-                        obj.add_extracted_dep(
-                            format!("{}.{}", tbl_schema.as_str(), tbl_name.as_str()),
-                            ObjectType::Table,
-                        );
-                    }
+                {
+                    obj.add_extracted_dep(
+                        format!("{}.{}", tbl_schema.as_str(), tbl_name.as_str()),
+                        ObjectType::Table,
+                    );
                 }
             }
 
             // Cast → Type (try to attach to type)
             ObjectType::Cast => {
-                if let Some(caps) = self.cast_pattern.captures(content) {
-                    if let Some(to_name) = caps.name("to_name") {
-                        let to_schema = caps.name("to_schema").map(|m| m.as_str());
-                        let qualified = match to_schema {
-                            Some(schema) => format!("{}.{}", schema, to_name.as_str()),
-                            None => to_name.as_str().to_string(),
-                        };
-                        obj.add_extracted_dep(qualified, ObjectType::Type);
-                    }
+                if let Some(caps) = self.cast_pattern.captures(content)
+                    && let Some(to_name) = caps.name("to_name")
+                {
+                    let to_schema = caps.name("to_schema").map(|m| m.as_str());
+                    let qualified = match to_schema {
+                        Some(schema) => format!("{}.{}", schema, to_name.as_str()),
+                        None => to_name.as_str().to_string(),
+                    };
+                    obj.add_extracted_dep(qualified, ObjectType::Type);
                 }
             }
 
             // Operator → Function (from FUNCTION = clause)
             ObjectType::Operator => {
-                if let Some(caps) = self.operator_pattern.captures(content) {
-                    if let Some(proc_name) = caps.name("procedure_name") {
-                        obj.add_extracted_dep(proc_name.as_str().to_string(), ObjectType::Function);
-                    }
+                if let Some(caps) = self.operator_pattern.captures(content)
+                    && let Some(proc_name) = caps.name("procedure_name")
+                {
+                    obj.add_extracted_dep(proc_name.as_str().to_string(), ObjectType::Function);
                 }
             }
 

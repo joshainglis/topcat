@@ -71,11 +71,11 @@ impl FileNode {
                 .iter()
                 .filter(|dep| {
                     // Skip this node's own schema dependency (e.g., codegen_tmf.func depending on codegen_tmf)
-                    if let Some(schema) = own_schema {
-                        if dep.as_str() == schema {
-                            log::trace!("Skipping own schema dependency: {} -> {}", self.name, dep);
-                            return false;
-                        }
+                    if let Some(schema) = own_schema
+                        && dep.as_str() == schema
+                    {
+                        log::trace!("Skipping own schema dependency: {} -> {}", self.name, dep);
+                        return false;
                     }
                     // Check if pattern matches
                     let should_convert = mapper.should_convert(&self.name, dep);
@@ -128,8 +128,10 @@ impl FileNode {
             }
             MergeStrategy::Validate => {
                 // Check for discrepancies
-                let manual_only: std::collections::HashSet<_> = self.deps.difference(discovered).collect();
-                let discovered_only: std::collections::HashSet<_> = discovered.difference(&self.deps).collect();
+                let manual_only: std::collections::HashSet<_> =
+                    self.deps.difference(discovered).collect();
+                let discovered_only: std::collections::HashSet<_> =
+                    discovered.difference(&self.deps).collect();
 
                 if !manual_only.is_empty() || !discovered_only.is_empty() {
                     log::warn!(

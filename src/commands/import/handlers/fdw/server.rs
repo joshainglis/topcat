@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::SERVER_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::SERVER_PATTERN;
 
 /// Handler for PostgreSQL SERVER objects.
 ///
@@ -37,10 +37,10 @@ impl DependencyExtractor for ServerHandler {
         let mut deps = vec![];
 
         // Extract FDW dependency from CREATE SERVER ... FOREIGN DATA WRAPPER fdw_name
-        if let Some(caps) = SERVER_PATTERN.captures(content) {
-            if let Some(fdw) = caps.name("fdw") {
-                deps.push((fdw.as_str().to_string(), ObjectType::ForeignDataWrapper));
-            }
+        if let Some(caps) = SERVER_PATTERN.captures(content)
+            && let Some(fdw) = caps.name("fdw")
+        {
+            deps.push((fdw.as_str().to_string(), ObjectType::ForeignDataWrapper));
         }
 
         deps

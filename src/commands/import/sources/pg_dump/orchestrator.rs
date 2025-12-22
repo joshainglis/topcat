@@ -13,8 +13,8 @@ use std::path::PathBuf;
 
 use crate::commands::import::dependencies::DependencyAnalyzer;
 use crate::commands::import::handlers::{
-    extract_dependencies, get_category_info, get_handler_config, get_implicit_deps, get_patterns,
-    process_object, render_object, HandlerRegistry, OutputConfig, RelatedObjects,
+    HandlerRegistry, OutputConfig, RelatedObjects, extract_dependencies, get_category_info,
+    get_handler_config, get_implicit_deps, get_patterns, process_object, render_object,
 };
 use crate::commands::import::object_types::{Layer, ObjectType, TypeSubcategory};
 use crate::commands::import::output::header_builder::HeaderBuilder;
@@ -154,13 +154,11 @@ impl CollectedObject {
         let mut result = parts.join("\n\n");
 
         // Add owner if present
-        if include_owner {
-            if let Some(ref owner_stmt) = self.owner {
-                if !result.is_empty() {
-                    result.push_str("\n\n");
-                }
-                result.push_str(owner_stmt);
+        if include_owner && let Some(ref owner_stmt) = self.owner {
+            if !result.is_empty() {
+                result.push_str("\n\n");
             }
+            result.push_str(owner_stmt);
         }
 
         // Add ACL statements
@@ -330,10 +328,7 @@ impl ImportOrchestrator {
         if let Some(h) = handler {
             let config = h.default_config();
             if config.skip {
-                log::debug!(
-                    "Skipping {} (config.skip=true)",
-                    obj.qualified_name()
-                );
+                log::debug!("Skipping {} (config.skip=true)", obj.qualified_name());
                 return;
             }
         }
@@ -403,14 +398,6 @@ impl ImportOrchestrator {
                         "Object {} has configured parent types: {:?}",
                         obj.qualified_name(),
                         config.parent_types
-                    );
-                }
-                // Log subdirectory for debugging
-                if let Some(ref subdir) = config.subdirectory {
-                    log::debug!(
-                        "Object {} has custom subdirectory: {}",
-                        obj.qualified_name(),
-                        subdir
                     );
                 }
                 // Try first parent type from config
@@ -599,15 +586,14 @@ impl ImportOrchestrator {
         };
 
         for try_type in types_to_try {
-            if let Some(schema_map) = self.objects.get_mut(&try_type) {
-                if let Some(name_map) = schema_map.get_mut(schema) {
-                    if let Some(collected) = name_map.get_mut(name) {
-                        // Skip if the object is empty (has no primary content)
-                        if !collected.is_empty() {
-                            collected.acl.push(content.to_string());
-                            return;
-                        }
-                    }
+            if let Some(schema_map) = self.objects.get_mut(&try_type)
+                && let Some(name_map) = schema_map.get_mut(schema)
+                && let Some(collected) = name_map.get_mut(name)
+            {
+                // Skip if the object is empty (has no primary content)
+                if !collected.is_empty() {
+                    collected.acl.push(content.to_string());
+                    return;
                 }
             }
         }
@@ -631,13 +617,12 @@ impl ImportOrchestrator {
         };
 
         for try_type in types_to_try {
-            if let Some(schema_map) = self.objects.get_mut(&try_type) {
-                if let Some(name_map) = schema_map.get_mut(schema) {
-                    if let Some(collected) = name_map.get_mut(name) {
-                        collected.owner = Some(content.to_string());
-                        return;
-                    }
-                }
+            if let Some(schema_map) = self.objects.get_mut(&try_type)
+                && let Some(name_map) = schema_map.get_mut(schema)
+                && let Some(collected) = name_map.get_mut(name)
+            {
+                collected.owner = Some(content.to_string());
+                return;
             }
         }
     }
@@ -790,20 +775,19 @@ impl ImportOrchestrator {
                                 .unwrap_or_default();
 
                             // Add handler pattern-based dependencies
-                            if let Some(obj_type) = primary_type {
-                                if let Some(handler) = self.handler_registry.get(&obj_type) {
-                                    // Log handler object type for debugging
-                                    let _ = handler.object_type();
+                            if let Some(obj_type) = primary_type
+                                && let Some(handler) = self.handler_registry.get(&obj_type)
+                            {
+                                // Log handler object type for debugging
+                                let _ = handler.object_type();
 
-                                    // Get implicit dependency types for this handler
-                                    let implicit_types = handler.implicit_dep_types();
-                                    let _ = implicit_types; // Available for future filtering
+                                // Get implicit dependency types for this handler
+                                let implicit_types = handler.implicit_dep_types();
+                                let _ = implicit_types; // Available for future filtering
 
-                                    let pattern_deps =
-                                        handler.extract_pattern_deps(&rendered_content);
-                                    for (dep_name, _dep_type) in pattern_deps {
-                                        deps.insert(dep_name);
-                                    }
+                                let pattern_deps = handler.extract_pattern_deps(&rendered_content);
+                                for (dep_name, _dep_type) in pattern_deps {
+                                    deps.insert(dep_name);
                                 }
                             }
 
@@ -899,12 +883,12 @@ impl ImportOrchestrator {
                                 .unwrap_or_default();
 
                             // Add handler pattern-based dependencies if handler exists
-                            if has_handler {
-                                if let Some(handler) = self.handler_registry.get(&obj.obj_type) {
-                                    let pattern_deps = handler.extract_pattern_deps(&obj.content);
-                                    for (dep_name, _dep_type) in pattern_deps {
-                                        deps.insert(dep_name);
-                                    }
+                            if has_handler
+                                && let Some(handler) = self.handler_registry.get(&obj.obj_type)
+                            {
+                                let pattern_deps = handler.extract_pattern_deps(&obj.content);
+                                for (dep_name, _dep_type) in pattern_deps {
+                                    deps.insert(dep_name);
                                 }
                             }
 

@@ -26,11 +26,11 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
     let mut header = String::new();
 
     // Preserve original manual headers if manual flag is set
-    if file_node.manual {
-        if let Some(ref original_headers) = file_node.original_headers {
-            header.push_str(original_headers);
-            header.push_str("\n\n");
-        }
+    if file_node.manual
+        && let Some(ref original_headers) = file_node.original_headers
+    {
+        header.push_str(original_headers);
+        header.push_str("\n\n");
     }
 
     // Determine comment prefix based on manual flag
@@ -58,10 +58,10 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
     // Add schema dependency first (if it exists in deps)
     // This matches Python behavior: schema always comes before other deps
     // Schema dependency is always "requires" (never converted to exists)
-    if let Some(schema) = schema_name {
-        if file_node.deps.contains(schema) {
-            header.push_str(&format!("{cmt} requires: {schema}\n"));
-        }
+    if let Some(schema) = schema_name
+        && file_node.deps.contains(schema)
+    {
+        header.push_str(&format!("{cmt} requires: {schema}\n"));
     }
 
     // Add remaining dependencies (sorted, excluding schema which we already added)
@@ -70,10 +70,10 @@ pub fn generate_header(file_node: &FileNode, comment_str: &str) -> String {
     deps.sort();
     for dep in deps {
         // Skip schema dependency as we already wrote it
-        if let Some(schema) = schema_name {
-            if dep == schema {
-                continue;
-            }
+        if let Some(schema) = schema_name
+            && dep == schema
+        {
+            continue;
         }
 
         // Determine dependency type:
