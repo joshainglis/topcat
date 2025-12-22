@@ -44,7 +44,7 @@ impl DependencyExtractor for CommentHandler {
 
             if let Some(name) = tgt_name {
                 let qualified = match tgt_schema {
-                    Some(schema) => format!("{}.{}", schema, name),
+                    Some(schema) => format!("{schema}.{name}"),
                     None => name.to_string(),
                 };
 

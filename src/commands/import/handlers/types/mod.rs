@@ -5,6 +5,9 @@
 //! - [`DomainHandler`]: Domain types (constrained base types)
 //! - [`CollationHandler`]: Collation definitions
 
+// Allow unused - scaffolded for future phases
+#![allow(unused_imports)]
+
 mod collation;
 mod domain;
 mod type_handler;

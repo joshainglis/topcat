@@ -5,6 +5,9 @@
 //! - [`ProcedureHandler`]: Stored procedures (PostgreSQL 11+)
 //! - [`AggregateHandler`]: User-defined aggregate functions
 
+// Allow unused - scaffolded for future phases
+#![allow(unused_imports)]
+
 mod aggregate;
 mod function;
 mod procedure;

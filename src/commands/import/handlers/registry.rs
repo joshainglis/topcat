@@ -49,6 +49,7 @@ pub struct RegisteredHandler {
 
     /// Optional custom pattern dependency extractor.
     /// If None, returns empty vec.
+    #[allow(clippy::type_complexity)]
     extract_pattern_deps: Option<fn(&str) -> Vec<(String, ObjectType)>>,
 }
 
@@ -253,6 +254,7 @@ pub struct AttachmentRule {
     ///
     /// This function analyzes the attachment's content and returns the
     /// identity of its parent object, if determinable.
+    #[allow(clippy::type_complexity)]
     pub extract_parent: Arc<dyn Fn(&RawObject) -> Option<ParentIdentity> + Send + Sync>,
 }
 
@@ -327,36 +329,48 @@ impl AttachmentRegistry {
     /// Register default attachment rules.
     ///
     /// These rules define the standard PostgreSQL attachment relationships.
+    /// Rules use `extracted_deps` populated by the parser during parsing,
+    /// making them source-agnostic.
     fn register_default_rules(&mut self) {
-        // TODO: Implement default rules using patterns from patterns.rs
-        // For now, rules are empty and will be populated as handlers are migrated.
+        // Helper: create a rule that uses extracted_deps to find the parent
+        fn deps_rule(parent_type: ObjectType) -> AttachmentRule {
+            AttachmentRule {
+                parent_types: vec![parent_type],
+                extract_parent: Arc::new(move |obj| {
+                    obj.extracted_deps.first().map(|dep| {
+                        let parts: Vec<&str> = dep.name.split('.').collect();
+                        let (schema, name) = if parts.len() == 2 {
+                            (Some(parts[0].to_string()), parts[1].to_string())
+                        } else {
+                            (obj.schema.clone(), dep.name.clone())
+                        };
+                        ParentIdentity::new(schema, name, dep.dep_type)
+                    })
+                }),
+            }
+        }
 
-        // Index → Table
-        self.rules.insert(ObjectType::Index, vec![]);
+        // Table attachments - use extracted_deps
+        self.rules
+            .insert(ObjectType::Index, vec![deps_rule(ObjectType::Table)]);
+        self.rules
+            .insert(ObjectType::Constraint, vec![deps_rule(ObjectType::Table)]);
+        self.rules
+            .insert(ObjectType::FkConstraint, vec![deps_rule(ObjectType::Table)]);
+        self.rules
+            .insert(ObjectType::Policy, vec![deps_rule(ObjectType::Table)]);
+        self.rules
+            .insert(ObjectType::RowSecurity, vec![deps_rule(ObjectType::Table)]);
+        self.rules
+            .insert(ObjectType::Default, vec![deps_rule(ObjectType::Table)]);
+        self.rules
+            .insert(ObjectType::Statistics, vec![deps_rule(ObjectType::Table)]);
+        self.rules
+            .insert(ObjectType::Rule, vec![deps_rule(ObjectType::Table)]);
 
-        // Constraint → Table
-        self.rules.insert(ObjectType::Constraint, vec![]);
-
-        // FK Constraint → Table
-        self.rules.insert(ObjectType::FkConstraint, vec![]);
-
-        // Trigger → Function
-        self.rules.insert(ObjectType::Trigger, vec![]);
-
-        // Policy → Table
-        self.rules.insert(ObjectType::Policy, vec![]);
-
-        // Row Security → Table
-        self.rules.insert(ObjectType::RowSecurity, vec![]);
-
-        // Default → Table
-        self.rules.insert(ObjectType::Default, vec![]);
-
-        // Statistics → Table
-        self.rules.insert(ObjectType::Statistics, vec![]);
-
-        // Rule → Table/View
-        self.rules.insert(ObjectType::Rule, vec![]);
+        // Trigger → Function (primary parent)
+        self.rules
+            .insert(ObjectType::Trigger, vec![deps_rule(ObjectType::Function)]);
     }
 
     /// Check if a type is an attachment type.

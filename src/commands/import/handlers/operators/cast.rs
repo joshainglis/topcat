@@ -69,7 +69,7 @@ impl Categorizer for CastHandler {
         base_dir
             .join("_global")
             .join("cast")
-            .join(format!("{}.sql", safe_name))
+            .join(format!("{safe_name}.sql"))
     }
 }
 

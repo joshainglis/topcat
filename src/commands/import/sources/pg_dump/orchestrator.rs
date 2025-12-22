@@ -11,9 +11,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use regex::Regex;
-
 use crate::commands::import::dependencies::DependencyAnalyzer;
+use crate::commands::import::handlers::HandlerRegistry;
 use crate::commands::import::object_types::{Layer, ObjectType, TypeSubcategory};
 use crate::commands::import::output::header_builder::{build_global_header, build_header};
 use crate::commands::import::sources::{RawObject, SecurityKind, SecurityStatement};
@@ -173,6 +172,7 @@ pub struct ImportOrchestrator {
     config: OrchestratorConfig,
     logger: Logger,
     dep_analyzer: Option<DependencyAnalyzer>,
+    handler_registry: HandlerRegistry,
 
     /// schema -> category -> name -> list of keys
     schemas: HashMap<String, HashMap<String, HashMap<String, Vec<ObjectKey>>>>,
@@ -199,6 +199,7 @@ impl ImportOrchestrator {
             config,
             logger,
             dep_analyzer,
+            handler_registry: HandlerRegistry::new(),
             schemas: HashMap::new(),
             objects: HashMap::new(),
             global_objects: Vec::new(),
@@ -242,10 +243,27 @@ impl ImportOrchestrator {
 
         let schema = obj.schema.clone().unwrap_or_else(|| "public".to_string());
 
-        // Check if this is an attachment with a parent reference
-        if let Some(parent_ref) = self.find_parent_from_deps(&obj) {
-            self.attach_to_parent(&parent_ref.0, &parent_ref.1, &parent_ref.2, obj);
-            return;
+        // Check if this is an attachment - use AttachmentRegistry to find parent
+        if self
+            .handler_registry
+            .attachment_registry()
+            .is_attachment(&obj.obj_type)
+        {
+            if let Some(parent) = self
+                .handler_registry
+                .attachment_registry()
+                .find_parent(&obj)
+            {
+                let parent_schema = parent.schema.unwrap_or_else(|| schema.clone());
+                self.attach_to_parent(&parent.obj_type, &parent_schema, &parent.name, obj);
+                return;
+            }
+            // Fallback: try to attach using target_type if no parent found
+            if obj.target_type.is_some() {
+                let name = obj.name.clone();
+                self.attach_to_parent(&ObjectType::Table, &schema, &name, obj);
+                return;
+            }
         }
 
         // Primary objects
@@ -255,38 +273,7 @@ impl ImportOrchestrator {
 
             // Register object
             self.register_object(&schema, &category, &name, obj);
-        } else if obj.obj_type.is_table_attachment() {
-            // Table attachments without extracted_deps - try to attach using target_type
-            if obj.target_type.is_some() {
-                // Try to find matching table
-                let name = obj.name.clone();
-                self.attach_to_parent(&ObjectType::Table, &schema, &name, obj);
-            }
         }
-    }
-
-    /// Find parent from extracted_deps.
-    fn find_parent_from_deps(&self, obj: &RawObject) -> Option<(ObjectType, String, String)> {
-        if obj.extracted_deps.is_empty() {
-            return None;
-        }
-
-        // Use first extracted_dep as parent reference
-        let dep = &obj.extracted_deps[0];
-
-        // Parse qualified name
-        let parts: Vec<&str> = dep.name.split('.').collect();
-        let (schema, name) = if parts.len() == 2 {
-            (parts[0].to_string(), parts[1].to_string())
-        } else {
-            // Unqualified name - use object's schema
-            (
-                obj.schema.clone().unwrap_or_else(|| "public".to_string()),
-                dep.name.clone(),
-            )
-        };
-
-        Some((dep.dep_type, schema, name))
     }
 
     /// Attach an object to its parent.
@@ -325,25 +312,10 @@ impl ImportOrchestrator {
     }
 
     /// Handle global objects.
+    ///
+    /// Uses ObjectType::global_category() to determine output organization.
     fn handle_global_object(&mut self, obj: RawObject) {
-        let (category, subcategory) = match obj.obj_type {
-            ObjectType::ForeignDataWrapper => ("fdw".to_string(), Some("wrapper".to_string())),
-            ObjectType::Server => ("fdw".to_string(), Some("server".to_string())),
-            ObjectType::UserMapping => ("fdw".to_string(), Some("user_mapping".to_string())),
-            ObjectType::Language => ("language".to_string(), None),
-            ObjectType::EventTrigger => ("event_trigger".to_string(), None),
-            ObjectType::Publication => ("replication".to_string(), Some("publication".to_string())),
-            ObjectType::Subscription => {
-                ("replication".to_string(), Some("subscription".to_string()))
-            }
-            ObjectType::AccessMethod => ("access_method".to_string(), None),
-            ObjectType::OperatorClass => ("operator".to_string(), Some("class".to_string())),
-            ObjectType::OperatorFamily => ("operator".to_string(), Some("family".to_string())),
-            ObjectType::Transform => ("transform".to_string(), None),
-            ObjectType::Cast => ("cast".to_string(), None),
-            ObjectType::Operator => ("operator".to_string(), None),
-            _ => ("other".to_string(), None),
-        };
+        let (category, subcategory) = obj.obj_type.global_category();
 
         self.global_objects.push(GlobalObject {
             obj_type: obj.obj_type,
@@ -373,62 +345,32 @@ impl ImportOrchestrator {
     }
 
     /// Categorize an object for file organization.
+    ///
+    /// Uses ObjectType::category_dir() for most types. Special handling:
+    /// - Type: Uses TypeSubcategory for enum/composite/range subcategories
+    /// - Function/Procedure: Uses FunctionHandler::subcategory() for naming-based organization
     fn categorize_object(&self, obj: &RawObject) -> String {
+        use crate::commands::import::handlers::Categorizer;
+        use crate::commands::import::handlers::routines::FunctionHandler;
+
         match obj.obj_type {
+            // Types need content analysis for subcategory (enum, composite, range)
             ObjectType::Type => {
                 let subcat = TypeSubcategory::from_content(&obj.content);
                 format!("type/{}", subcat.subdirectory())
             }
-            ObjectType::Domain => "type/domain".to_string(),
-            ObjectType::Function | ObjectType::Procedure => self.categorize_function(&obj.name),
-            ObjectType::Aggregate => "functions/aggregate".to_string(),
-            ObjectType::MaterializedView => "materialized_view".to_string(),
-            ObjectType::ForeignTable => "foreign_table".to_string(),
-            ObjectType::Collation => "collation".to_string(),
-            ObjectType::Conversion => "conversion".to_string(),
-            ObjectType::TextSearchConfiguration => "fts/configuration".to_string(),
-            ObjectType::TextSearchDictionary => "fts/dictionary".to_string(),
-            ObjectType::TextSearchParser => "fts/parser".to_string(),
-            ObjectType::TextSearchTemplate => "fts/template".to_string(),
-            ObjectType::Sequence => "sequence".to_string(),
-            ObjectType::Schema => "schema".to_string(),
-            ObjectType::Table => "table".to_string(),
-            ObjectType::View => "view".to_string(),
-            ObjectType::Extension => "extension".to_string(),
-            _ => {
-                let pg_type = obj
-                    .get_metadata("pg_dump_type")
-                    .unwrap_or("unknown")
-                    .to_lowercase()
-                    .replace(' ', "_");
-                pg_type
+
+            // Functions and procedures use handler-based subcategorization
+            ObjectType::Function | ObjectType::Procedure => {
+                let base = obj.obj_type.category_dir(); // "functions"
+                match FunctionHandler::subcategory(&obj.name) {
+                    Some(subcat) => format!("{base}/{subcat}"),
+                    None => base,
+                }
             }
-        }
-    }
 
-    /// Categorize a function based on naming conventions.
-    fn categorize_function(&self, name: &str) -> String {
-        let api_re = Regex::new(
-            r"^api_(?P<name>[\w_]+)_(?P<method>create|delete|list|update|get)_(?P<version>v\d+)",
-        )
-        .expect("Invalid API function regex");
-
-        if let Some(caps) = api_re.captures(name) {
-            let api_name = caps.name("name").map(|m| m.as_str()).unwrap_or("");
-            let version = caps.name("version").map(|m| m.as_str()).unwrap_or("");
-            return format!("functions/api/{api_name}/{version}");
-        }
-
-        if name.starts_with("cast_") {
-            "functions/casting".to_string()
-        } else if name.starts_with("new_") {
-            "functions/builder".to_string()
-        } else if name.starts_with("util_") {
-            "functions/utility".to_string()
-        } else if name.starts_with("trigger_") || name.ends_with("_trigger") {
-            "functions/trigger".to_string()
-        } else {
-            "functions".to_string()
+            // All other types use the category_dir from ObjectType
+            _ => obj.obj_type.category_dir(),
         }
     }
 
@@ -588,14 +530,33 @@ impl ImportOrchestrator {
                         // Analyze dependencies
                         let primary_type = key_list.first().map(|(t, _, _)| *t);
                         let requires = if self.config.generate_deps {
-                            self.dep_analyzer.as_ref().map(|analyzer| {
-                                if let Some(obj_type) = primary_type {
-                                    analyzer
-                                        .analyze_dependencies_for_type(&rendered_content, obj_type)
-                                } else {
-                                    analyzer.analyze_dependencies(&rendered_content)
+                            let mut deps = self
+                                .dep_analyzer
+                                .as_ref()
+                                .map(|analyzer| {
+                                    if let Some(obj_type) = primary_type {
+                                        analyzer.analyze_dependencies_for_type(
+                                            &rendered_content,
+                                            obj_type,
+                                        )
+                                    } else {
+                                        analyzer.analyze_dependencies(&rendered_content)
+                                    }
+                                })
+                                .unwrap_or_default();
+
+                            // Add handler pattern-based dependencies
+                            if let Some(obj_type) = primary_type {
+                                if let Some(handler) = self.handler_registry.get(&obj_type) {
+                                    let pattern_deps =
+                                        handler.extract_pattern_deps(&rendered_content);
+                                    for (dep_name, _dep_type) in pattern_deps {
+                                        deps.insert(dep_name);
+                                    }
                                 }
-                            })
+                            }
+
+                            if deps.is_empty() { None } else { Some(deps) }
                         } else {
                             None
                         };
@@ -666,9 +627,24 @@ impl ImportOrchestrator {
 
                         // Analyze dependencies
                         let requires = if self.config.generate_deps {
-                            self.dep_analyzer.as_ref().map(|analyzer| {
-                                analyzer.analyze_dependencies_for_type(&obj.content, obj.obj_type)
-                            })
+                            let mut deps = self
+                                .dep_analyzer
+                                .as_ref()
+                                .map(|analyzer| {
+                                    analyzer
+                                        .analyze_dependencies_for_type(&obj.content, obj.obj_type)
+                                })
+                                .unwrap_or_default();
+
+                            // Add handler pattern-based dependencies
+                            if let Some(handler) = self.handler_registry.get(&obj.obj_type) {
+                                let pattern_deps = handler.extract_pattern_deps(&obj.content);
+                                for (dep_name, _dep_type) in pattern_deps {
+                                    deps.insert(dep_name);
+                                }
+                            }
+
+                            if deps.is_empty() { None } else { Some(deps) }
                         } else {
                             None
                         };
@@ -756,24 +732,35 @@ mod tests {
     }
 
     #[test]
-    fn test_categorize_function() {
-        let logger = Logger::new(true, false);
-        let config = OrchestratorConfig::new(PathBuf::from("/tmp/test"));
-        let orch = ImportOrchestrator::new(config, logger);
+    fn test_function_subcategory() {
+        use crate::commands::import::handlers::Categorizer;
+        use crate::commands::import::handlers::routines::FunctionHandler;
 
-        assert_eq!(orch.categorize_function("my_function"), "functions");
+        // Regular functions have no subcategory
+        assert_eq!(FunctionHandler::subcategory("my_function"), None);
+
+        // Casting functions
         assert_eq!(
-            orch.categorize_function("cast_to_text"),
-            "functions/casting"
+            FunctionHandler::subcategory("cast_to_text"),
+            Some("casting".to_string())
         );
-        assert_eq!(orch.categorize_function("new_user"), "functions/builder");
+
+        // Builder functions
         assert_eq!(
-            orch.categorize_function("trigger_audit"),
-            "functions/trigger"
+            FunctionHandler::subcategory("new_user"),
+            Some("builder".to_string())
         );
+
+        // Trigger functions
         assert_eq!(
-            orch.categorize_function("api_users_get_v1"),
-            "functions/api/users/v1"
+            FunctionHandler::subcategory("trigger_audit"),
+            Some("trigger".to_string())
+        );
+
+        // API functions
+        assert_eq!(
+            FunctionHandler::subcategory("api_users_get_v1"),
+            Some("api/users/v1".to_string())
         );
     }
 }

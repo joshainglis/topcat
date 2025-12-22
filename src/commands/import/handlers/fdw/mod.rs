@@ -11,6 +11,9 @@
 //! - `attach_to_parent` is `false` in their config
 //! - Output path uses `_global/fdw/` structure (global objects, no schema)
 
+// Allow unused - scaffolded for future phases
+#![allow(unused_imports)]
+
 mod server;
 mod user_mapping;
 mod wrapper;

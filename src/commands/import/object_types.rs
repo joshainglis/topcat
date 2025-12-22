@@ -394,6 +394,56 @@ impl ObjectType {
             | Self::Unknown => Layer::Append,
         }
     }
+
+    /// Get the category directory name for file organization.
+    ///
+    /// Returns the subdirectory name within a schema directory where
+    /// objects of this type should be placed.
+    pub fn category_dir(&self) -> String {
+        match self {
+            Self::Table => "table",
+            Self::View => "view",
+            Self::MaterializedView => "materialized_view",
+            Self::ForeignTable => "foreign_table",
+            Self::Sequence => "sequence",
+            Self::Schema => "schema",
+            Self::Extension => "extension",
+            Self::Domain => "type/domain",
+            Self::Collation => "collation",
+            Self::Conversion => "conversion",
+            Self::Function | Self::Procedure => "functions",
+            Self::Aggregate => "functions/aggregate",
+            Self::TextSearchConfiguration => "fts/configuration",
+            Self::TextSearchDictionary => "fts/dictionary",
+            Self::TextSearchParser => "fts/parser",
+            Self::TextSearchTemplate => "fts/template",
+            _ => "unknown",
+        }
+        .to_string()
+    }
+
+    /// Get category and subcategory for global objects (no schema).
+    ///
+    /// Returns a tuple of (category, optional subcategory) used for
+    /// organizing global objects in the `_global/` directory.
+    pub fn global_category(&self) -> (String, Option<String>) {
+        match self {
+            Self::ForeignDataWrapper => ("fdw".into(), Some("wrapper".into())),
+            Self::Server => ("fdw".into(), Some("server".into())),
+            Self::UserMapping => ("fdw".into(), Some("user_mapping".into())),
+            Self::Language => ("language".into(), None),
+            Self::EventTrigger => ("event_trigger".into(), None),
+            Self::Publication => ("replication".into(), Some("publication".into())),
+            Self::Subscription => ("replication".into(), Some("subscription".into())),
+            Self::AccessMethod => ("access_method".into(), None),
+            Self::OperatorClass => ("operator".into(), Some("class".into())),
+            Self::OperatorFamily => ("operator".into(), Some("family".into())),
+            Self::Transform => ("transform".into(), None),
+            Self::Cast => ("cast".into(), None),
+            Self::Operator => ("operator".into(), None),
+            _ => ("other".into(), None),
+        }
+    }
 }
 
 impl fmt::Display for ObjectType {

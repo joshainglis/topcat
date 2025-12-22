@@ -6,13 +6,16 @@
 //!
 //! # Object Types
 //!
-//! - [`SchemaHandler`]: Schema namespaces
-//! - [`ExtensionHandler`]: PostgreSQL extensions
-//! - [`TableHandler`]: Regular tables
-//! - [`ViewHandler`]: Views
-//! - [`MaterializedViewHandler`]: Materialized views
-//! - [`ForeignTableHandler`]: Foreign tables (FDW)
-//! - [`SequenceHandler`]: Sequences
+//! - `SchemaHandler` - Schema namespaces
+//! - `ExtensionHandler` - PostgreSQL extensions
+//! - `TableHandler` - Regular tables
+//! - `ViewHandler` - Views
+//! - `MaterializedViewHandler` - Materialized views
+//! - `ForeignTableHandler` - Foreign tables (FDW)
+//! - `SequenceHandler` - Sequences
+
+// Allow unused - scaffolded for future phases
+#![allow(unused_imports)]
 
 mod extension;
 mod foreign_table;
@@ -21,12 +24,6 @@ mod schema;
 mod sequence;
 mod table;
 mod view;
-
-pub use extension::ExtensionHandler;
-pub use foreign_table::ForeignTableHandler;
-pub use materialized_view::MaterializedViewHandler;
-pub use schema::SchemaHandler;
-pub use table::TableHandler;
 
 use super::registry::HandlerRegistry;
 use crate::commands::import::object_types::ObjectType;

@@ -79,7 +79,7 @@ fn extract_target_dependency(caps: &regex::Captures) -> Option<(String, ObjectTy
     let obj_type_str = caps.name("obj_type").map(|m| m.as_str().trim());
 
     let qualified = match obj_schema {
-        Some(schema) => format!("{}.{}", schema, obj_name),
+        Some(schema) => format!("{schema}.{obj_name}"),
         None => obj_name.to_string(),
     };
 

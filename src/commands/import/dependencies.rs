@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use topcat::sql_config::SqlDiscoveryConfig;
 use topcat::sql_parser::SqlAnalyzer;
 
-use super::object_types::{Layer, ObjectType};
+use super::object_types::ObjectType;
 use super::sources::pg_dump::{
     EVENT_TRIGGER_PATTERN, FOREIGN_TABLE_PATTERN, SERVER_PATTERN, SUBSCRIPTION_PATTERN,
     TRANSFORM_PATTERN, USER_MAPPING_PATTERN,
@@ -219,61 +219,6 @@ impl DependencyAnalyzer {
     }
 }
 
-/// Build a topcat-compatible header with name, layer, and dependencies.
-pub fn build_header(
-    schema: &str,
-    name: &str,
-    layer: Option<Layer>,
-    requires: Option<&HashSet<String>>,
-    generate_layers: bool,
-) -> String {
-    let mut header = format!("-- name: {schema}.{name}\n");
-
-    if generate_layers {
-        if let Some(l) = layer {
-            header.push_str(&format!("-- layer: {}\n", l.as_str()));
-        }
-    }
-
-    if let Some(deps) = requires {
-        if !deps.is_empty() {
-            let mut sorted_deps: Vec<_> = deps.iter().cloned().collect();
-            sorted_deps.sort();
-            header.push_str(&format!("-- requires: {}\n", sorted_deps.join(", ")));
-        }
-    }
-
-    header.push('\n');
-    header
-}
-
-/// Build a topcat-compatible header for global objects (no schema prefix).
-pub fn build_global_header(
-    name: &str,
-    layer: Option<Layer>,
-    requires: Option<&HashSet<String>>,
-    generate_layers: bool,
-) -> String {
-    let mut header = format!("-- name: {name}\n");
-
-    if generate_layers {
-        if let Some(l) = layer {
-            header.push_str(&format!("-- layer: {}\n", l.as_str()));
-        }
-    }
-
-    if let Some(deps) = requires {
-        if !deps.is_empty() {
-            let mut sorted_deps: Vec<_> = deps.iter().cloned().collect();
-            sorted_deps.sort();
-            header.push_str(&format!("-- requires: {}\n", sorted_deps.join(", ")));
-        }
-    }
-
-    header.push('\n');
-    header
-}
-
 /// Determine implicit dependencies based on object type.
 ///
 /// Some object types have inherent dependencies:
@@ -321,50 +266,6 @@ pub fn implicit_dependencies_for_type(obj_type: ObjectType) -> Vec<ObjectType> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_build_header_full() {
-        let mut deps = HashSet::new();
-        deps.insert("public.users".to_string());
-        deps.insert("auth.roles".to_string());
-
-        let header = build_header("public", "orders", Some(Layer::Normal), Some(&deps), true);
-
-        assert!(header.contains("-- name: public.orders"));
-        assert!(header.contains("-- layer: normal"));
-        assert!(header.contains("-- requires:"));
-        assert!(header.contains("auth.roles"));
-        assert!(header.contains("public.users"));
-    }
-
-    #[test]
-    fn test_build_header_no_deps() {
-        let header = build_header("public", "users", Some(Layer::Normal), None, true);
-
-        assert!(header.contains("-- name: public.users"));
-        assert!(header.contains("-- layer: normal"));
-        assert!(!header.contains("-- requires:"));
-    }
-
-    #[test]
-    fn test_build_header_no_layer() {
-        let header = build_header("public", "users", Some(Layer::Normal), None, false);
-
-        assert!(header.contains("-- name: public.users"));
-        assert!(!header.contains("-- layer:"));
-    }
-
-    #[test]
-    fn test_build_global_header() {
-        let mut deps = HashSet::new();
-        deps.insert("pg_catalog".to_string());
-
-        let header = build_global_header("plpgsql", Some(Layer::Prepend), Some(&deps), true);
-
-        assert!(header.contains("-- name: plpgsql"));
-        assert!(header.contains("-- layer: prepend"));
-        assert!(header.contains("-- requires: pg_catalog"));
-    }
 
     #[test]
     fn test_implicit_dependencies() {

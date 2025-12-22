@@ -16,7 +16,7 @@ use super::patterns::{
 };
 use super::{DEFAULT_SCHEMA_PATTERN, build_cast_pattern, build_operator_pattern};
 use crate::commands::import::object_types::ObjectType;
-use crate::commands::import::sources::{ImportSource, RawObject, SecurityKind, SecurityStatement};
+use crate::commands::import::sources::{ImportSource, RawObject, SecurityStatement};
 use topcat::exceptions::TopCatError;
 
 /// Parser for PostgreSQL pg_dump output files.
@@ -283,7 +283,7 @@ impl PgDumpParser {
 
                     if let Some(name) = fn_name {
                         let qualified = match fn_schema {
-                            Some(schema) => format!("{}.{}", schema, name),
+                            Some(schema) => format!("{schema}.{name}"),
                             None => name.to_string(),
                         };
                         obj.add_extracted_dep(qualified, ObjectType::Function);
@@ -302,7 +302,7 @@ impl PgDumpParser {
 
                     if let Some(name) = tbl_name {
                         let qualified = match tbl_schema {
-                            Some(schema) => format!("{}.{}", schema, name),
+                            Some(schema) => format!("{schema}.{name}"),
                             None => name.to_string(),
                         };
                         obj.add_extracted_dep(qualified, ObjectType::Table);
@@ -321,7 +321,7 @@ impl PgDumpParser {
 
                     if let Some(name) = tbl_name {
                         let qualified = match tbl_schema {
-                            Some(schema) => format!("{}.{}", schema, name),
+                            Some(schema) => format!("{schema}.{name}"),
                             None => name.to_string(),
                         };
                         obj.add_extracted_dep(qualified, ObjectType::Table);
@@ -491,6 +491,7 @@ struct ParsedMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::import::sources::SecurityKind;
 
     #[test]
     fn test_parse_simple_table() {

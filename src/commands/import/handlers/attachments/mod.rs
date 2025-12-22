@@ -16,6 +16,9 @@
 //! - `layer()` returns `Layer::Append`
 //! - `attach_to_parent` is `true` in their config
 
+// Allow unused - scaffolded for future phases
+#![allow(unused_imports)]
+
 mod constraint;
 mod default;
 mod fk_constraint;

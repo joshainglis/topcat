@@ -44,7 +44,7 @@ impl DependencyExtractor for SecurityLabelHandler {
 
             if let Some(name) = obj_name {
                 let qualified = match obj_schema {
-                    Some(schema) => format!("{}.{}", schema, name),
+                    Some(schema) => format!("{schema}.{name}"),
                     None => name.to_string(),
                 };
 

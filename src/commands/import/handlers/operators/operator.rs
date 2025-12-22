@@ -74,7 +74,7 @@ impl Categorizer for OperatorHandler {
             .join("_global")
             .join("operator")
             .join(schema)
-            .join(format!("{}.sql", safe_name))
+            .join(format!("{safe_name}.sql"))
     }
 }
 

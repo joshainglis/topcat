@@ -28,9 +28,13 @@
 //! let deps = handler.extract_pattern_dependencies(&raw_object.content);
 //! ```
 
-mod registry;
+// Allow unused imports - these are scaffolded for future phases
+#![allow(unused_imports)]
+
+pub mod registry;
 mod traits;
 
+pub use registry::{HandlerRegistry, ParentIdentity};
 pub use traits::{
     Categorizer, Configurable, DependencyExtractor, ObjectHandler, PatternProvider, Renderer,
 };
