@@ -476,8 +476,8 @@ fn discover_files_without_graph(config: &config::Config) -> Result<Vec<FileNode>
                 && let Some(ref mapper) = layer_mapper
                 && let Some(mapped_layer) = mapper.map_node_to_layer(&file_node.name)
             {
-                file_node.layer = mapped_layer;
-                file_node.layer_is_fallback = false;
+                file_node.layer = mapped_layer.clone();
+                file_node.layer_is_fallback = mapped_layer.eq(&config.fallback_layer);
             }
 
             // Clean up discovered dependencies: remove self-references and subobjects

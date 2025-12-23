@@ -206,7 +206,7 @@ pub fn from_file(
         && let Some(mapped_layer) = mapper.map_node_to_layer(&name)
     {
         layer = mapped_layer;
-        layer_is_fallback = false;
+        layer_is_fallback = layer.eq(fallback_layer);
     }
 
     // Validate that the declared layer exists in the configured layers
