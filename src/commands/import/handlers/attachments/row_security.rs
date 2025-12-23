@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::ROW_SECURITY_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::ROW_SECURITY_PATTERN;
 
 /// Handler for PostgreSQL ROW SECURITY objects.
 ///
@@ -21,6 +21,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Row security belongs to the Append layer and attaches to the parent table.
 /// It must be enabled before policies can be applied.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct RowSecurityHandler;
 
 impl PatternProvider for RowSecurityHandler {
@@ -30,6 +31,19 @@ impl PatternProvider for RowSecurityHandler {
 }
 
 impl DependencyExtractor for RowSecurityHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        let mut deps = Vec::new();
+        if let Some(caps) = ROW_SECURITY_PATTERN.captures(content)
+            && let (Some(schema), Some(table)) = (caps.name("schema"), caps.name("table"))
+        {
+            deps.push((
+                format!("{}.{}", schema.as_str(), table.as_str()),
+                ObjectType::Table,
+            ));
+        }
+        deps
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         vec![ObjectType::Table]
     }
@@ -72,7 +86,10 @@ impl Renderer for RowSecurityHandler {
 
 /// Create a registered handler for RowSecurity objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::RowSecurity)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::RowSecurity,
+        RowSecurityHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

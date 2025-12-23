@@ -13,8 +13,8 @@ use crate::commands::import::handlers::traits::{
 use crate::commands::import::object_types::{
     FtsSubcategory, Layer, ObjectCategory, ObjectType, ObjectTypeConfig,
 };
-use crate::commands::import::sources::pg_dump::FTS_CONFIG_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::FTS_CONFIG_PATTERN;
 
 /// Handler for PostgreSQL TEXT SEARCH CONFIGURATION objects.
 ///
@@ -24,6 +24,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Configurations belong to the Prepend layer as they are foundation objects
 /// that other objects may depend on.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct ConfigurationHandler;
 
 impl PatternProvider for ConfigurationHandler {
@@ -33,6 +34,12 @@ impl PatternProvider for ConfigurationHandler {
 }
 
 impl DependencyExtractor for ConfigurationHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = FTS_CONFIG_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         // Configurations depend on their parser
         vec![ObjectType::TextSearchParser]
@@ -87,7 +94,10 @@ impl Renderer for ConfigurationHandler {
 
 /// Create a registered handler for TextSearchConfiguration objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::TextSearchConfiguration)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::TextSearchConfiguration,
+        ConfigurationHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

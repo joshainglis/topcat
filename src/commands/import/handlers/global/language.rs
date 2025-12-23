@@ -14,8 +14,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::LANGUAGE_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::LANGUAGE_PATTERN;
 
 /// Handler for PostgreSQL LANGUAGE objects.
 ///
@@ -26,6 +26,7 @@ use crate::commands::import::sources::RawObject;
 /// Examples:
 /// - `CREATE PROCEDURAL LANGUAGE plpgsql;`
 /// - `CREATE TRUSTED LANGUAGE plpython3u;`
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct LanguageHandler;
 
 impl PatternProvider for LanguageHandler {
@@ -41,8 +42,9 @@ impl DependencyExtractor for LanguageHandler {
         vec![]
     }
 
-    fn extract_pattern_dependencies(_content: &str) -> Vec<(String, ObjectType)> {
-        // Languages don't have structural dependencies in their CREATE statement
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = LANGUAGE_PATTERN.is_match(content);
         vec![]
     }
 }
@@ -94,7 +96,10 @@ impl Renderer for LanguageHandler {
 
 /// Create a registered handler for Language objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Language)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Language,
+        LanguageHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

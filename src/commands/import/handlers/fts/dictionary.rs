@@ -13,8 +13,8 @@ use crate::commands::import::handlers::traits::{
 use crate::commands::import::object_types::{
     FtsSubcategory, Layer, ObjectCategory, ObjectType, ObjectTypeConfig,
 };
-use crate::commands::import::sources::pg_dump::FTS_DICTIONARY_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::FTS_DICTIONARY_PATTERN;
 
 /// Handler for PostgreSQL TEXT SEARCH DICTIONARY objects.
 ///
@@ -23,6 +23,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Dictionaries belong to the Prepend layer as they are foundation objects
 /// that configurations depend on.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct DictionaryHandler;
 
 impl PatternProvider for DictionaryHandler {
@@ -32,6 +33,12 @@ impl PatternProvider for DictionaryHandler {
 }
 
 impl DependencyExtractor for DictionaryHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = FTS_DICTIONARY_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         // Dictionaries depend on their template
         vec![ObjectType::TextSearchTemplate]
@@ -86,7 +93,10 @@ impl Renderer for DictionaryHandler {
 
 /// Create a registered handler for TextSearchDictionary objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::TextSearchDictionary)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::TextSearchDictionary,
+        DictionaryHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

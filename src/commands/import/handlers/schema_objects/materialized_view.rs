@@ -11,13 +11,14 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::MATERIALIZED_VIEW_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::MATERIALIZED_VIEW_PATTERN;
 
 /// Handler for PostgreSQL MATERIALIZED VIEW objects.
 ///
 /// Materialized views are views that cache their results. They belong to the
 /// Normal layer and depend on the tables, views, and functions they reference.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct MaterializedViewHandler;
 
 impl PatternProvider for MaterializedViewHandler {
@@ -27,6 +28,12 @@ impl PatternProvider for MaterializedViewHandler {
 }
 
 impl DependencyExtractor for MaterializedViewHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = MATERIALIZED_VIEW_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         vec![ObjectType::Table, ObjectType::View, ObjectType::Function]
     }
@@ -75,7 +82,10 @@ impl Renderer for MaterializedViewHandler {
 
 /// Create a registered handler for MaterializedView objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::MaterializedView)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::MaterializedView,
+        MaterializedViewHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

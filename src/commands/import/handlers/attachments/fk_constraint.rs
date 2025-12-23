@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::FK_CONSTRAINT_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::FK_CONSTRAINT_PATTERN;
 
 /// Handler for PostgreSQL FK CONSTRAINT objects.
 ///
@@ -21,6 +21,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// FK constraints belong to the Append layer and attach to their parent table.
 /// They are created after regular constraints to ensure referenced tables exist.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct FkConstraintHandler;
 
 impl PatternProvider for FkConstraintHandler {
@@ -30,6 +31,29 @@ impl PatternProvider for FkConstraintHandler {
 }
 
 impl DependencyExtractor for FkConstraintHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        let mut deps = Vec::new();
+        if let Some(caps) = FK_CONSTRAINT_PATTERN.captures(content) {
+            // Source table dependency
+            if let (Some(schema), Some(table)) = (caps.name("schema"), caps.name("table")) {
+                deps.push((
+                    format!("{}.{}", schema.as_str(), table.as_str()),
+                    ObjectType::Table,
+                ));
+            }
+            // Referenced table dependency
+            if let (Some(ref_schema), Some(ref_table)) =
+                (caps.name("ref_schema"), caps.name("ref_table"))
+            {
+                deps.push((
+                    format!("{}.{}", ref_schema.as_str(), ref_table.as_str()),
+                    ObjectType::Table,
+                ));
+            }
+        }
+        deps
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         vec![ObjectType::Table]
     }
@@ -72,7 +96,10 @@ impl Renderer for FkConstraintHandler {
 
 /// Create a registered handler for FkConstraint objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::FkConstraint)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::FkConstraint,
+        FkConstraintHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

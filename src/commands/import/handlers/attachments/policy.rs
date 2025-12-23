@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::POLICY_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::POLICY_PATTERN;
 
 /// Handler for PostgreSQL POLICY objects.
 ///
@@ -21,6 +21,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Policies belong to the Append layer and attach to their parent table.
 /// They are created after row security is enabled on the table.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct PolicyHandler;
 
 impl PatternProvider for PolicyHandler {
@@ -30,6 +31,19 @@ impl PatternProvider for PolicyHandler {
 }
 
 impl DependencyExtractor for PolicyHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        let mut deps = Vec::new();
+        if let Some(caps) = POLICY_PATTERN.captures(content)
+            && let (Some(schema), Some(table)) = (caps.name("schema"), caps.name("table"))
+        {
+            deps.push((
+                format!("{}.{}", schema.as_str(), table.as_str()),
+                ObjectType::Table,
+            ));
+        }
+        deps
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         vec![ObjectType::Table, ObjectType::Function]
     }
@@ -72,7 +86,10 @@ impl Renderer for PolicyHandler {
 
 /// Create a registered handler for Policy objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Policy)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Policy,
+        PolicyHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

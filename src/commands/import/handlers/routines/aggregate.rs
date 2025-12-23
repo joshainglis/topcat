@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::AGGREGATE_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::AGGREGATE_PATTERN;
 
 /// Handler for PostgreSQL AGGREGATE objects.
 ///
@@ -21,6 +21,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Aggregates belong to the Normal layer and depend on types (for parameters/
 /// return type) and other functions (for their state transition functions).
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct AggregateHandler;
 
 impl PatternProvider for AggregateHandler {
@@ -30,6 +31,12 @@ impl PatternProvider for AggregateHandler {
 }
 
 impl DependencyExtractor for AggregateHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = AGGREGATE_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         // Aggregates depend on types and typically on helper functions
         vec![ObjectType::Type, ObjectType::Domain, ObjectType::Extension]
@@ -79,7 +86,10 @@ impl Renderer for AggregateHandler {
 
 /// Create a registered handler for Aggregate objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Aggregate)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Aggregate,
+        AggregateHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

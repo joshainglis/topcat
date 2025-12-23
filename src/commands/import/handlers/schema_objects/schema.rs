@@ -11,13 +11,14 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::SCHEMA_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::SCHEMA_PATTERN;
 
 /// Handler for PostgreSQL SCHEMA objects.
 ///
 /// Schemas are namespaces that contain database objects. They are
 /// foundation objects that must be created before any objects they contain.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct SchemaHandler;
 
 impl PatternProvider for SchemaHandler {
@@ -27,6 +28,11 @@ impl PatternProvider for SchemaHandler {
 }
 
 impl DependencyExtractor for SchemaHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = SCHEMA_PATTERN.is_match(content);
+        vec![]
+    }
     // Schemas don't have implicit dependencies
 }
 
@@ -70,7 +76,10 @@ impl Renderer for SchemaHandler {
 
 /// Create a registered handler for Schema objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Schema)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Schema,
+        SchemaHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

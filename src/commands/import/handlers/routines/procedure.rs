@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::PROCEDURE_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::PROCEDURE_PATTERN;
 
 /// Handler for PostgreSQL PROCEDURE objects.
 ///
@@ -22,6 +22,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Procedures belong to the Normal layer and share the same dependencies as
 /// functions.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct ProcedureHandler;
 
 impl PatternProvider for ProcedureHandler {
@@ -31,6 +32,12 @@ impl PatternProvider for ProcedureHandler {
 }
 
 impl DependencyExtractor for ProcedureHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = PROCEDURE_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         // Same as functions: depend on types for parameters and may use extensions
         vec![ObjectType::Type, ObjectType::Domain, ObjectType::Extension]
@@ -80,7 +87,10 @@ impl Renderer for ProcedureHandler {
 
 /// Create a registered handler for Procedure objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Procedure)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Procedure,
+        ProcedureHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

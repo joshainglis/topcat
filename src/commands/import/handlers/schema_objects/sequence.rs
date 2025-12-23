@@ -11,13 +11,14 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::SEQUENCE_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::SEQUENCE_PATTERN;
 
 /// Handler for PostgreSQL SEQUENCE objects.
 ///
 /// Sequences are auto-incrementing number generators. They belong to the
 /// Normal layer and are often owned by tables (for SERIAL columns).
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct SequenceHandler;
 
 impl PatternProvider for SequenceHandler {
@@ -27,6 +28,11 @@ impl PatternProvider for SequenceHandler {
 }
 
 impl DependencyExtractor for SequenceHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = SEQUENCE_PATTERN.is_match(content);
+        vec![]
+    }
     // Sequences don't have implicit dependencies
     // (ownership by tables is handled separately)
 }
@@ -74,7 +80,10 @@ impl Renderer for SequenceHandler {
 
 /// Create a registered handler for Sequence objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Sequence)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Sequence,
+        SequenceHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

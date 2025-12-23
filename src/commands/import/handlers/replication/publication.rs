@@ -11,14 +11,15 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::PUBLICATION_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::PUBLICATION_PATTERN;
 
 /// Handler for PostgreSQL PUBLICATION objects.
 ///
 /// Publications define which tables are available for logical replication.
 /// They are global objects (no schema) that belong to the Normal layer.
 /// Publications don't have dependencies on other objects.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct PublicationHandler;
 
 impl PatternProvider for PublicationHandler {
@@ -34,8 +35,9 @@ impl DependencyExtractor for PublicationHandler {
         vec![]
     }
 
-    fn extract_pattern_dependencies(_content: &str) -> Vec<(String, ObjectType)> {
-        // Publications reference tables but don't have structural dependencies
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = PUBLICATION_PATTERN.is_match(content);
         vec![]
     }
 }
@@ -88,7 +90,10 @@ impl Renderer for PublicationHandler {
 
 /// Create a registered handler for Publication objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Publication)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Publication,
+        PublicationHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

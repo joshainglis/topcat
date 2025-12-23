@@ -11,14 +11,15 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::FDW_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::FDW_PATTERN;
 
 /// Handler for PostgreSQL FOREIGN DATA WRAPPER objects.
 ///
 /// Foreign data wrappers provide the mechanism for accessing external data sources.
 /// They are global objects (no schema) and belong to the Prepend layer as they are
 /// foundation objects that servers and foreign tables depend on.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct WrapperHandler;
 
 impl PatternProvider for WrapperHandler {
@@ -28,6 +29,12 @@ impl PatternProvider for WrapperHandler {
 }
 
 impl DependencyExtractor for WrapperHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = FDW_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         // FDW is a foundation type with no implicit dependencies
         vec![]
@@ -81,7 +88,10 @@ impl Renderer for WrapperHandler {
 
 /// Create a registered handler for ForeignDataWrapper objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::ForeignDataWrapper)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::ForeignDataWrapper,
+        WrapperHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

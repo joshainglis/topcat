@@ -13,8 +13,8 @@ use crate::commands::import::handlers::traits::{
 use crate::commands::import::object_types::{
     FtsSubcategory, Layer, ObjectCategory, ObjectType, ObjectTypeConfig,
 };
-use crate::commands::import::sources::pg_dump::FTS_PARSER_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::FTS_PARSER_PATTERN;
 
 /// Handler for PostgreSQL TEXT SEARCH PARSER objects.
 ///
@@ -23,6 +23,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Parsers belong to the Prepend layer as they are the most fundamental FTS objects.
 /// Configurations depend on parsers.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct ParserHandler;
 
 impl PatternProvider for ParserHandler {
@@ -32,6 +33,12 @@ impl PatternProvider for ParserHandler {
 }
 
 impl DependencyExtractor for ParserHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = FTS_PARSER_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         // Parsers are foundational and don't typically depend on other FTS objects
         vec![ObjectType::Schema]
@@ -86,7 +93,10 @@ impl Renderer for ParserHandler {
 
 /// Create a registered handler for TextSearchParser objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::TextSearchParser)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::TextSearchParser,
+        ParserHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::INDEX_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::INDEX_PATTERN;
 
 /// Handler for PostgreSQL INDEX objects.
 ///
@@ -20,6 +20,7 @@ use crate::commands::import::sources::RawObject;
 /// after the table and provide optimized access paths for queries.
 ///
 /// Indexes belong to the Append layer and attach to their parent table.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct IndexHandler;
 
 impl PatternProvider for IndexHandler {
@@ -29,6 +30,19 @@ impl PatternProvider for IndexHandler {
 }
 
 impl DependencyExtractor for IndexHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        let mut deps = Vec::new();
+        if let Some(caps) = INDEX_PATTERN.captures(content)
+            && let (Some(schema), Some(table)) = (caps.name("schema"), caps.name("table"))
+        {
+            deps.push((
+                format!("{}.{}", schema.as_str(), table.as_str()),
+                ObjectType::Table,
+            ));
+        }
+        deps
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         vec![ObjectType::Table, ObjectType::OperatorClass]
     }
@@ -71,7 +85,10 @@ impl Renderer for IndexHandler {
 
 /// Create a registered handler for Index objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Index)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Index,
+        IndexHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

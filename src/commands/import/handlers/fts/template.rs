@@ -13,8 +13,8 @@ use crate::commands::import::handlers::traits::{
 use crate::commands::import::object_types::{
     FtsSubcategory, Layer, ObjectCategory, ObjectType, ObjectTypeConfig,
 };
-use crate::commands::import::sources::pg_dump::FTS_TEMPLATE_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::FTS_TEMPLATE_PATTERN;
 
 /// Handler for PostgreSQL TEXT SEARCH TEMPLATE objects.
 ///
@@ -23,6 +23,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Templates belong to the Prepend layer as they are the most fundamental FTS objects.
 /// Dictionaries depend on templates.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct TemplateHandler;
 
 impl PatternProvider for TemplateHandler {
@@ -32,6 +33,12 @@ impl PatternProvider for TemplateHandler {
 }
 
 impl DependencyExtractor for TemplateHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = FTS_TEMPLATE_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         // Templates are foundational and don't typically depend on other FTS objects
         // They may depend on functions for init/lexize
@@ -87,7 +94,10 @@ impl Renderer for TemplateHandler {
 
 /// Create a registered handler for TextSearchTemplate objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::TextSearchTemplate)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::TextSearchTemplate,
+        TemplateHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

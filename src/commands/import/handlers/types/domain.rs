@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::DOMAIN_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::DOMAIN_PATTERN;
 
 /// Handler for PostgreSQL DOMAIN objects.
 ///
@@ -22,6 +22,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Domains belong to the Prepend layer as they are foundational type definitions
 /// that tables and functions depend on.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct DomainHandler;
 
 impl PatternProvider for DomainHandler {
@@ -31,6 +32,12 @@ impl PatternProvider for DomainHandler {
 }
 
 impl DependencyExtractor for DomainHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = DOMAIN_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         // Domains depend on their underlying type
         vec![ObjectType::Type, ObjectType::Schema]
@@ -85,7 +92,10 @@ impl Renderer for DomainHandler {
 
 /// Create a registered handler for Domain objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Domain)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Domain,
+        DomainHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

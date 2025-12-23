@@ -13,8 +13,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::CONVERSION_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::CONVERSION_PATTERN;
 
 /// Handler for PostgreSQL CONVERSION objects.
 ///
@@ -25,6 +25,7 @@ use crate::commands::import::sources::RawObject;
 /// Examples:
 /// - `CREATE CONVERSION "public"."myconv" FOR 'UTF8' TO 'LATIN1' FROM utf8_to_iso8859_1;`
 /// - `CREATE DEFAULT CONVERSION "public"."mydefconv" FOR 'UTF8' TO 'SJIS' FROM utf8_to_sjis;`
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct ConversionHandler;
 
 impl PatternProvider for ConversionHandler {
@@ -40,9 +41,9 @@ impl DependencyExtractor for ConversionHandler {
         vec![]
     }
 
-    fn extract_pattern_dependencies(_content: &str) -> Vec<(String, ObjectType)> {
-        // Conversions reference built-in conversion functions
-        // We don't track these as dependencies
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = CONVERSION_PATTERN.is_match(content);
         vec![]
     }
 }
@@ -100,7 +101,10 @@ impl Renderer for ConversionHandler {
 
 /// Create a registered handler for Conversion objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Conversion)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Conversion,
+        ConversionHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

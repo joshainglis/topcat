@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::COLLATION_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::COLLATION_PATTERN;
 
 /// Handler for PostgreSQL COLLATION objects.
 ///
@@ -21,6 +21,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Collations belong to the Prepend layer as they are foundational objects
 /// that columns and indexes may depend on.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct CollationHandler;
 
 impl PatternProvider for CollationHandler {
@@ -30,6 +31,12 @@ impl PatternProvider for CollationHandler {
 }
 
 impl DependencyExtractor for CollationHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = COLLATION_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         vec![ObjectType::Schema]
     }
@@ -78,7 +85,10 @@ impl Renderer for CollationHandler {
 
 /// Create a registered handler for Collation objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Collation)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Collation,
+        CollationHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

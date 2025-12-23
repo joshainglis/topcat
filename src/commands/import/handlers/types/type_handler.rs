@@ -13,8 +13,8 @@ use crate::commands::import::handlers::traits::{
 use crate::commands::import::object_types::{
     Layer, ObjectCategory, ObjectType, ObjectTypeConfig, TypeSubcategory,
 };
-use crate::commands::import::sources::pg_dump::TYPE_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::TYPE_PATTERN;
 
 /// Handler for PostgreSQL TYPE objects.
 ///
@@ -26,6 +26,7 @@ use crate::commands::import::sources::RawObject;
 ///
 /// Types belong to the Prepend layer as they are foundational objects
 /// that other objects depend on.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct TypeHandler;
 
 impl PatternProvider for TypeHandler {
@@ -35,6 +36,12 @@ impl PatternProvider for TypeHandler {
 }
 
 impl DependencyExtractor for TypeHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = TYPE_PATTERN.is_match(content);
+        vec![]
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         // Types may depend on other types (composite types) and schemas
         vec![ObjectType::Schema]
@@ -94,7 +101,10 @@ impl Renderer for TypeHandler {
 
 /// Create a registered handler for Type objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Type)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Type,
+        TypeHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

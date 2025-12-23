@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::DEFAULT_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::DEFAULT_PATTERN;
 
 /// Handler for PostgreSQL DEFAULT objects.
 ///
@@ -21,6 +21,7 @@ use crate::commands::import::sources::RawObject;
 /// appear separately in pg_dump output.
 ///
 /// Defaults belong to the Append layer and attach to their parent table.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct DefaultHandler;
 
 impl PatternProvider for DefaultHandler {
@@ -30,6 +31,19 @@ impl PatternProvider for DefaultHandler {
 }
 
 impl DependencyExtractor for DefaultHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        let mut deps = Vec::new();
+        if let Some(caps) = DEFAULT_PATTERN.captures(content)
+            && let (Some(schema), Some(table)) = (caps.name("schema"), caps.name("table"))
+        {
+            deps.push((
+                format!("{}.{}", schema.as_str(), table.as_str()),
+                ObjectType::Table,
+            ));
+        }
+        deps
+    }
+
     fn implicit_dependency_types() -> Vec<ObjectType> {
         vec![ObjectType::Table, ObjectType::Sequence]
     }
@@ -72,7 +86,10 @@ impl Renderer for DefaultHandler {
 
 /// Create a registered handler for Default objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Default)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Default,
+        DefaultHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]

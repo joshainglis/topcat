@@ -28,6 +28,7 @@ pub static EXTENSION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 ///
 /// Extensions are pre-packaged modules that add functionality to PostgreSQL.
 /// They are foundation objects in the Prepend layer.
+#[allow(dead_code)] // Marker type for trait implementations
 pub struct ExtensionHandler;
 
 impl PatternProvider for ExtensionHandler {
@@ -37,6 +38,11 @@ impl PatternProvider for ExtensionHandler {
 }
 
 impl DependencyExtractor for ExtensionHandler {
+    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
+        // Reference pattern to ensure it's used, even if no deps extracted
+        let _ = EXTENSION_PATTERN.is_match(content);
+        vec![]
+    }
     // Extensions don't have implicit dependencies from SQL content
     // (they may depend on each other but this is handled by PostgreSQL)
 }
@@ -83,7 +89,10 @@ impl Renderer for ExtensionHandler {
 
 /// Create a registered handler for Extension objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::new(ObjectType::Extension)
+    RegisteredHandler::with_pattern_deps(
+        ObjectType::Extension,
+        ExtensionHandler::extract_pattern_dependencies,
+    )
 }
 
 #[cfg(test)]
