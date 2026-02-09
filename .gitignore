@@ -727,3 +727,7 @@ cython_debug/
 
 # Nix build output
 result
+
+.scratchfiles
+.direnv
+.claude/settings.local.json
