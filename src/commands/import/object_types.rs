@@ -127,7 +127,7 @@ impl ObjectType {
 
             // Foreign Data Wrapper
             "FOREIGN DATA WRAPPER" => Self::ForeignDataWrapper,
-            "SERVER" => Self::Server,
+            "SERVER" | "FOREIGN SERVER" => Self::Server,
             "USER MAPPING" => Self::UserMapping,
 
             // Operators and Access Methods

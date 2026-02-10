@@ -182,6 +182,7 @@ struct GlobalObject {
     name: String,
     content: String,
     layer: Layer,
+    owner: Option<String>,
     acl: Vec<String>,
 }
 
@@ -335,9 +336,10 @@ impl ImportOrchestrator {
 
         // Handle global objects (no schema)
         // Use handler.is_global() when available, then RawObject helper, then ObjectType
-        let is_global = handler
-            .map(|h| h.is_global())
-            .unwrap_or_else(|| obj.is_global() || obj.obj_type.is_global());
+        let is_global = obj.is_global()
+            || handler
+                .map(|h| h.is_global())
+                .unwrap_or_else(|| obj.obj_type.is_global());
 
         if is_global {
             self.handle_global_object(obj);
@@ -484,6 +486,7 @@ impl ImportOrchestrator {
             name: obj.name.clone(),
             content: obj.content,
             layer,
+            owner: None,
             acl: Vec::new(),
         });
     }
@@ -543,17 +546,22 @@ impl ImportOrchestrator {
                 stmt.qualified_target()
             );
 
-            let schema = stmt
-                .target_schema
-                .clone()
-                .unwrap_or_else(|| "public".to_string());
-
             match stmt.kind {
                 SecurityKind::Grant | SecurityKind::Revoke => {
-                    self.attach_acl(&stmt.target_type, &schema, &stmt.target_name, &stmt.content);
+                    self.attach_acl(
+                        &stmt.target_type,
+                        stmt.target_schema.as_deref(),
+                        &stmt.target_name,
+                        &stmt.content,
+                    );
                 }
                 SecurityKind::Owner => {
-                    self.attach_owner(&stmt.target_type, &schema, &stmt.target_name, &stmt.content);
+                    self.attach_owner(
+                        &stmt.target_type,
+                        stmt.target_schema.as_deref(),
+                        &stmt.target_name,
+                        &stmt.content,
+                    );
                 }
             }
         }
@@ -563,10 +571,19 @@ impl ImportOrchestrator {
     fn attach_acl(
         &mut self,
         target_type: &Option<ObjectType>,
-        schema: &str,
+        schema: Option<&str>,
         name: &str,
         content: &str,
     ) {
+        if self.attach_acl_global(target_type, name, content) {
+            return;
+        }
+
+        let candidate_schemas = match schema {
+            Some(s) => vec![s],
+            None => vec!["public"],
+        };
+
         let types_to_try = match target_type {
             Some(ObjectType::Table) => vec![ObjectType::Table],
             Some(ObjectType::Sequence) => vec![ObjectType::Sequence],
@@ -585,15 +602,17 @@ impl ImportOrchestrator {
             ],
         };
 
-        for try_type in types_to_try {
-            if let Some(schema_map) = self.objects.get_mut(&try_type)
-                && let Some(name_map) = schema_map.get_mut(schema)
-                && let Some(collected) = name_map.get_mut(name)
-            {
-                // Skip if the object is empty (has no primary content)
-                if !collected.is_empty() {
-                    collected.acl.push(content.to_string());
-                    return;
+        for candidate_schema in candidate_schemas {
+            for try_type in &types_to_try {
+                if let Some(schema_map) = self.objects.get_mut(try_type)
+                    && let Some(name_map) = schema_map.get_mut(candidate_schema)
+                    && let Some(collected) = name_map.get_mut(name)
+                {
+                    // Skip if the object is empty (has no primary content)
+                    if !collected.is_empty() {
+                        collected.acl.push(content.to_string());
+                        return;
+                    }
                 }
             }
         }
@@ -603,10 +622,19 @@ impl ImportOrchestrator {
     fn attach_owner(
         &mut self,
         target_type: &Option<ObjectType>,
-        schema: &str,
+        schema: Option<&str>,
         name: &str,
         content: &str,
     ) {
+        if self.attach_owner_global(target_type, name, content) {
+            return;
+        }
+
+        let candidate_schemas = match schema {
+            Some(s) => vec![s],
+            None => vec!["public"],
+        };
+
         let types_to_try = match target_type {
             Some(ObjectType::Table) => vec![ObjectType::Table],
             Some(ObjectType::View) => vec![ObjectType::View],
@@ -616,15 +644,73 @@ impl ImportOrchestrator {
             _ => vec![ObjectType::Table, ObjectType::View, ObjectType::Function],
         };
 
-        for try_type in types_to_try {
-            if let Some(schema_map) = self.objects.get_mut(&try_type)
-                && let Some(name_map) = schema_map.get_mut(schema)
-                && let Some(collected) = name_map.get_mut(name)
-            {
-                collected.owner = Some(content.to_string());
-                return;
+        for candidate_schema in candidate_schemas {
+            for try_type in &types_to_try {
+                if let Some(schema_map) = self.objects.get_mut(try_type)
+                    && let Some(name_map) = schema_map.get_mut(candidate_schema)
+                    && let Some(collected) = name_map.get_mut(name)
+                {
+                    collected.owner = Some(content.to_string());
+                    return;
+                }
             }
         }
+    }
+
+    /// Try attaching ACL content to a global object.
+    fn attach_acl_global(
+        &mut self,
+        target_type: &Option<ObjectType>,
+        name: &str,
+        content: &str,
+    ) -> bool {
+        let candidate_types = match target_type {
+            Some(t) => vec![*t],
+            None => vec![],
+        };
+
+        for obj in &mut self.global_objects {
+            let type_matches = if candidate_types.is_empty() {
+                true
+            } else {
+                candidate_types.contains(&obj.obj_type)
+            };
+
+            if type_matches && obj.name == name {
+                obj.acl.push(content.to_string());
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Try attaching OWNER content to a global object.
+    fn attach_owner_global(
+        &mut self,
+        target_type: &Option<ObjectType>,
+        name: &str,
+        content: &str,
+    ) -> bool {
+        let candidate_types = match target_type {
+            Some(t) => vec![*t],
+            None => vec![],
+        };
+
+        for obj in &mut self.global_objects {
+            let type_matches = if candidate_types.is_empty() {
+                true
+            } else {
+                candidate_types.contains(&obj.obj_type)
+            };
+
+            if type_matches && obj.name == name {
+                obj.owner = Some(content.to_string());
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Write all files.
@@ -911,6 +997,14 @@ impl ImportOrchestrator {
 
                         let header = builder.build();
                         let mut full_content = format!("{header}{}", obj.content);
+
+                        // Add owner if present
+                        if output_config.include_owner
+                            && let Some(owner_stmt) = &obj.owner
+                        {
+                            full_content.push_str("\n\n");
+                            full_content.push_str(owner_stmt);
+                        }
 
                         // Add ACL if present
                         if output_config.include_acl && !obj.acl.is_empty() {

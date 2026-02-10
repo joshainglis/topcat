@@ -3,6 +3,10 @@
 //! Removes specific files by pattern, with dependency checking to ensure safety.
 
 use std::collections::HashSet;
+use std::ffi::OsStr;
+use std::path::Path;
+
+use glob::Pattern;
 
 use topcat::analysis::root_matcher::RootNodeMatcher;
 use topcat::exceptions::TopCatError;
@@ -10,6 +14,12 @@ use topcat::file_dag::TCGraph;
 use topcat::logging::Logger;
 
 use super::common;
+
+fn has_glob_meta(pattern: &str) -> bool {
+    pattern
+        .chars()
+        .any(|ch| matches!(ch, '*' | '?' | '[' | ']'))
+}
 
 /// Remove specific target files (with dependency checking).
 ///
@@ -51,9 +61,23 @@ pub fn clean(
     // Match target patterns to actual nodes
     for pattern in target_files {
         let mut found_match = false;
+        let pattern_path = Path::new(pattern);
+        let maybe_glob = if has_glob_meta(pattern) {
+            Pattern::new(pattern).ok()
+        } else {
+            None
+        };
+
         for (node_name, path) in &node_to_path {
-            // Check if the pattern matches the node name or file path
-            if node_name.contains(pattern) || path.to_string_lossy().contains(pattern) {
+            // Match exact node name, exact/suffix path, filename, or explicit glob pattern.
+            let path_matches = path == pattern_path
+                || path.ends_with(pattern_path)
+                || path.file_name() == Some(OsStr::new(pattern));
+            let glob_matches = maybe_glob
+                .as_ref()
+                .is_some_and(|glob_pattern| glob_pattern.matches_path(path));
+
+            if node_name == pattern || path_matches || glob_matches {
                 targets_to_delete.insert(node_name.clone());
                 found_match = true;
             }
@@ -108,7 +132,7 @@ pub fn clean(
     if actually_delete {
         common::perform_deletion(logger, graph, &targets_to_delete, force)?;
     } else {
-        logger.info("\n💡 Run with --no-dry-run to actually delete these files");
+        logger.info("\n💡 Run with --mode execute to actually delete these files");
     }
 
     Ok(())

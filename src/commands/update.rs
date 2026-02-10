@@ -156,7 +156,7 @@ impl UpdateArgs {
         let fallback_layer = settings.layers.fallback.clone();
 
         // For update command, we don't need an output file, so use a dummy path
-        let dummy_output = std::path::PathBuf::from("/dev/null");
+        let dummy_output = std::path::PathBuf::from(topcat::platform::null_device());
 
         // Create Config struct with borrowed slices from Settings
         let config = config::Config {

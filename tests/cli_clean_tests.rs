@@ -2,7 +2,9 @@
 
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::fs;
 use std::path::PathBuf;
+use tempfile::TempDir;
 
 /// Get a Command instance for the topcat binary
 fn topcat_cmd() -> Command {
@@ -179,4 +181,32 @@ fn test_clean_execute_mode_requires_confirmation() {
         ])
         .assert();
     // Command may fail due to missing directory, but flags should be recognized
+}
+
+#[test]
+fn test_clean_targets_matches_exact_node_name() {
+    let temp_dir = TempDir::new().unwrap();
+    let sql_dir = temp_dir.path().join("sql");
+    fs::create_dir_all(&sql_dir).unwrap();
+
+    fs::write(sql_dir.join("a.sql"), "-- name: foo\nSELECT 1;\n").unwrap();
+    fs::write(sql_dir.join("b.sql"), "-- name: foobar\nSELECT 2;\n").unwrap();
+
+    topcat_cmd()
+        .args([
+            "clean",
+            "-i",
+            sql_dir.to_str().unwrap(),
+            "-e",
+            "sql",
+            "targets",
+            "foo",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Target Files to be deleted (1 files)",
+        ))
+        .stdout(predicate::str::contains("foo"))
+        .stdout(predicate::str::contains("foobar").not());
 }

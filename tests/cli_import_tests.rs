@@ -328,3 +328,95 @@ fn test_import_pg_dump_sequence() {
         assert!(content.contains("CREATE SEQUENCE"));
     }
 }
+
+#[test]
+fn test_import_pg_dump_schema_less_cast_and_operator_are_global() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = temp_dir.path().join("database.sql");
+    let output_dir = temp_dir.path().join("output");
+
+    let content = r#"
+-- Name: my_cast; Type: CAST; Schema: -; Owner: postgres
+
+CREATE CAST ("public"."src_type" AS "public"."dst_type")
+    WITH FUNCTION "public"."cast_src_to_dst"("public"."src_type");
+
+-- Name: my_op; Type: OPERATOR; Schema: -; Owner: postgres
+
+CREATE OPERATOR "my_op" (
+    LEFTARG = integer,
+    RIGHTARG = integer,
+    PROCEDURE = "public"."my_proc"
+);
+"#;
+    fs::write(&dump_file, content).unwrap();
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    assert!(output_dir.join("_global/cast/my_cast.sql").exists());
+    assert!(output_dir.join("_global/operator/my_op.sql").exists());
+    assert!(!output_dir.join("public/unknown/my_cast.sql").exists());
+    assert!(!output_dir.join("public/unknown/my_op.sql").exists());
+}
+
+#[test]
+fn test_import_pg_dump_attaches_global_acl_and_owner_statements() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = temp_dir.path().join("database.sql");
+    let output_dir = temp_dir.path().join("output");
+
+    let content = r#"
+-- Name: postgres_fdw; Type: FOREIGN DATA WRAPPER; Schema: -; Owner: postgres
+
+CREATE FOREIGN DATA WRAPPER "postgres_fdw";
+
+-- Name: remote_server; Type: SERVER; Schema: -; Owner: postgres
+
+CREATE SERVER "remote_server" FOREIGN DATA WRAPPER "postgres_fdw";
+
+-- Name: remote_server; Type: ACL; Schema: -; Owner: postgres
+
+GRANT USAGE ON FOREIGN SERVER "remote_server" TO "reader";
+
+-- Name: ddl_notify; Type: EVENT TRIGGER; Schema: -; Owner: postgres
+
+CREATE EVENT TRIGGER "ddl_notify"
+    ON ddl_command_end
+    EXECUTE FUNCTION "public"."notify_ddl"();
+
+-- Name: ddl_notify; Type: ACL; Schema: -; Owner: postgres
+
+ALTER EVENT TRIGGER "ddl_notify" OWNER TO "admin";
+"#;
+    fs::write(&dump_file, content).unwrap();
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    let server_file = output_dir.join("_global/fdw/server/remote_server.sql");
+    let server_content = fs::read_to_string(&server_file).unwrap();
+    assert!(
+        server_content.contains(r#"GRANT USAGE ON FOREIGN SERVER "remote_server" TO "reader";"#)
+    );
+
+    let event_trigger_file = output_dir.join("_global/event_trigger/ddl_notify.sql");
+    let event_trigger_content = fs::read_to_string(&event_trigger_file).unwrap();
+    assert!(
+        event_trigger_content.contains(r#"ALTER EVENT TRIGGER "ddl_notify" OWNER TO "admin";"#)
+    );
+}

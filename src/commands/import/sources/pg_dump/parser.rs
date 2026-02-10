@@ -382,9 +382,10 @@ impl PgDumpParser {
         for line in self.content.lines() {
             // Check for GRANT statements
             if let Some(caps) = GRANT_PATTERN.captures(line) {
-                let obj_type = caps
-                    .name("obj_type")
-                    .map(|m| ObjectType::from_pg_dump_type(&m.as_str().to_uppercase()));
+                let obj_type = caps.name("obj_type").and_then(|m| {
+                    let parsed = ObjectType::from_pg_dump_type(&m.as_str().to_uppercase());
+                    (parsed != ObjectType::Unknown).then_some(parsed)
+                });
 
                 statements.push(SecurityStatement::grant(
                     caps.name("obj_schema").map(|m| m.as_str().to_string()),
@@ -398,9 +399,10 @@ impl PgDumpParser {
 
             // Check for REVOKE statements
             if let Some(caps) = REVOKE_PATTERN.captures(line) {
-                let obj_type = caps
-                    .name("obj_type")
-                    .map(|m| ObjectType::from_pg_dump_type(&m.as_str().to_uppercase()));
+                let obj_type = caps.name("obj_type").and_then(|m| {
+                    let parsed = ObjectType::from_pg_dump_type(&m.as_str().to_uppercase());
+                    (parsed != ObjectType::Unknown).then_some(parsed)
+                });
 
                 statements.push(SecurityStatement::revoke(
                     caps.name("obj_schema").map(|m| m.as_str().to_string()),
@@ -414,9 +416,10 @@ impl PgDumpParser {
 
             // Check for OWNER statements
             if let Some(caps) = OWNER_PATTERN.captures(line) {
-                let obj_type = caps
-                    .name("obj_type")
-                    .map(|m| ObjectType::from_pg_dump_type(&m.as_str().to_uppercase()));
+                let obj_type = caps.name("obj_type").and_then(|m| {
+                    let parsed = ObjectType::from_pg_dump_type(&m.as_str().to_uppercase());
+                    (parsed != ObjectType::Unknown).then_some(parsed)
+                });
 
                 statements.push(SecurityStatement::owner(
                     caps.name("obj_schema").map(|m| m.as_str().to_string()),

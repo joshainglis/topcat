@@ -58,7 +58,7 @@ pub fn clean(
     if actually_delete {
         common::perform_deletion(logger, graph, &dead_branches, force)?;
     } else {
-        logger.info("\n💡 Run with --no-dry-run to actually delete these files");
+        logger.info("\n💡 Run with --mode execute to actually delete these files");
     }
 
     Ok(())

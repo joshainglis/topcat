@@ -66,7 +66,7 @@ pub fn clean(
     if actually_delete {
         common::perform_deletion(logger, graph, &orphans, force)?;
     } else {
-        logger.info("\n💡 Run with --no-dry-run to actually delete these files");
+        logger.info("\n💡 Run with --mode execute to actually delete these files");
     }
 
     Ok(())
