@@ -168,18 +168,19 @@ fn test_import_pg_dump_with_layers() {
         .success();
 
     // Check that a file contains layer header
-    let schema_file = output_dir.join("public/schema/public.sql");
-    if schema_file.exists() {
-        let content = fs::read_to_string(&schema_file).unwrap();
-        assert!(content.contains("-- layer: prepend"));
-    }
+    let schema_file = output_dir.join("public/public.sql");
+    assert!(
+        schema_file.exists(),
+        "expected schema file at {schema_file:?}"
+    );
+    let content = fs::read_to_string(&schema_file).unwrap();
+    assert!(content.contains("-- layer: prepend"));
 
     // Check a table file for normal layer
     let table_file = output_dir.join("public/table/users.sql");
-    if table_file.exists() {
-        let content = fs::read_to_string(&table_file).unwrap();
-        assert!(content.contains("-- layer: normal"));
-    }
+    assert!(table_file.exists(), "expected table file at {table_file:?}");
+    let content = fs::read_to_string(&table_file).unwrap();
+    assert!(content.contains("-- layer: normal"));
 }
 
 #[test]
@@ -203,10 +204,9 @@ fn test_import_pg_dump_no_layers() {
 
     // Check that a file does NOT contain layer header
     let table_file = output_dir.join("public/table/users.sql");
-    if table_file.exists() {
-        let content = fs::read_to_string(&table_file).unwrap();
-        assert!(!content.contains("-- layer:"));
-    }
+    assert!(table_file.exists(), "expected table file at {table_file:?}");
+    let content = fs::read_to_string(&table_file).unwrap();
+    assert!(!content.contains("-- layer:"));
 }
 
 #[test]
@@ -245,16 +245,17 @@ fn test_import_pg_dump_file_headers() {
 
     // Check that files have proper name headers
     let table_file = output_dir.join("public/table/users.sql");
-    if table_file.exists() {
-        let content = fs::read_to_string(&table_file).unwrap();
-        assert!(content.starts_with("-- name: public.users"));
-    }
+    assert!(table_file.exists(), "expected table file at {table_file:?}");
+    let content = fs::read_to_string(&table_file).unwrap();
+    assert!(content.starts_with("-- name: public.users"));
 
     let func_file = output_dir.join("public/functions/get_user.sql");
-    if func_file.exists() {
-        let content = fs::read_to_string(&func_file).unwrap();
-        assert!(content.starts_with("-- name: public.get_user"));
-    }
+    assert!(
+        func_file.exists(),
+        "expected function file at {func_file:?}"
+    );
+    let content = fs::read_to_string(&func_file).unwrap();
+    assert!(content.starts_with("-- name: public.get_user"));
 }
 
 #[test]
@@ -275,10 +276,12 @@ fn test_import_pg_dump_materialized_view() {
 
     // Check that materialized view was created in the right location
     let mv_file = output_dir.join("public/materialized_view/report_summary.sql");
-    if mv_file.exists() {
-        let content = fs::read_to_string(&mv_file).unwrap();
-        assert!(content.contains("CREATE MATERIALIZED VIEW"));
-    }
+    assert!(
+        mv_file.exists(),
+        "expected materialized view file at {mv_file:?}"
+    );
+    let content = fs::read_to_string(&mv_file).unwrap();
+    assert!(content.contains("CREATE MATERIALIZED VIEW"));
 }
 
 #[test]
@@ -299,10 +302,9 @@ fn test_import_pg_dump_view() {
 
     // Check that view was created
     let view_file = output_dir.join("public/view/user_view.sql");
-    if view_file.exists() {
-        let content = fs::read_to_string(&view_file).unwrap();
-        assert!(content.contains("CREATE VIEW"));
-    }
+    assert!(view_file.exists(), "expected view file at {view_file:?}");
+    let content = fs::read_to_string(&view_file).unwrap();
+    assert!(content.contains("CREATE VIEW"));
 }
 
 #[test]
@@ -323,10 +325,9 @@ fn test_import_pg_dump_sequence() {
 
     // Check that sequence was created in the right location
     let seq_file = output_dir.join("public/sequence/user_seq.sql");
-    if seq_file.exists() {
-        let content = fs::read_to_string(&seq_file).unwrap();
-        assert!(content.contains("CREATE SEQUENCE"));
-    }
+    assert!(seq_file.exists(), "expected sequence file at {seq_file:?}");
+    let content = fs::read_to_string(&seq_file).unwrap();
+    assert!(content.contains("CREATE SEQUENCE"));
 }
 
 #[test]
@@ -419,4 +420,152 @@ ALTER EVENT TRIGGER "ddl_notify" OWNER TO "admin";
     assert!(
         event_trigger_content.contains(r#"ALTER EVENT TRIGGER "ddl_notify" OWNER TO "admin";"#)
     );
+}
+
+#[test]
+fn test_import_pg_dump_multi_word_name_prefixes_are_stripped() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = temp_dir.path().join("database.sql");
+    let output_dir = temp_dir.path().join("output");
+
+    let content = r#"
+-- Name: MATERIALIZED VIEW report_summary; Type: MATERIALIZED VIEW; Schema: public; Owner: postgres
+
+CREATE MATERIALIZED VIEW "public"."report_summary" AS SELECT 1;
+
+-- Name: FOREIGN TABLE remote_data; Type: FOREIGN TABLE; Schema: public; Owner: postgres
+
+CREATE FOREIGN TABLE "public"."remote_data" (id integer) SERVER "remote_server";
+
+-- Name: EVENT TRIGGER ddl_notify; Type: EVENT TRIGGER; Schema: -; Owner: postgres
+
+CREATE EVENT TRIGGER "ddl_notify"
+    ON ddl_command_end
+    EXECUTE FUNCTION "public"."notify_ddl"();
+"#;
+    fs::write(&dump_file, content).unwrap();
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    assert!(
+        output_dir
+            .join("public/materialized_view/report_summary.sql")
+            .exists()
+    );
+    assert!(
+        output_dir
+            .join("public/foreign_table/remote_data.sql")
+            .exists()
+    );
+    assert!(
+        output_dir
+            .join("_global/event_trigger/ddl_notify.sql")
+            .exists()
+    );
+}
+
+#[test]
+fn test_import_pg_dump_deduplicates_acl_and_owner_from_acl_objects() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = temp_dir.path().join("database.sql");
+    let output_dir = temp_dir.path().join("output");
+
+    let grant_stmt = r#"GRANT SELECT ON TABLE "public"."users" TO "reader";"#;
+    let owner_stmt = r#"ALTER TABLE "public"."users" OWNER TO "admin";"#;
+    let content = format!(
+        r#"
+-- Name: users; Type: TABLE; Schema: public; Owner: postgres
+
+CREATE TABLE "public"."users" (id integer);
+
+-- Name: TABLE users; Type: ACL; Schema: public; Owner: postgres
+
+{grant_stmt}
+
+-- Name: TABLE users; Type: ACL; Schema: public; Owner: postgres
+
+{owner_stmt}
+"#
+    );
+    fs::write(&dump_file, content).unwrap();
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    let table_file = output_dir.join("public/table/users.sql");
+    assert!(table_file.exists(), "expected table file at {table_file:?}");
+    let table_content = fs::read_to_string(table_file).unwrap();
+    assert_eq!(table_content.matches(grant_stmt).count(), 1);
+    assert_eq!(table_content.matches(owner_stmt).count(), 1);
+}
+
+#[test]
+fn test_import_pg_dump_rejects_path_traversal_in_object_name() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = temp_dir.path().join("database.sql");
+    let output_dir = temp_dir.path().join("output");
+    let escaped_target = temp_dir.path().join("outside.sql");
+
+    let content = r#"
+-- Name: ../../../../outside; Type: TABLE; Schema: public; Owner: postgres
+
+CREATE TABLE "public"."outside" (id integer);
+"#;
+    fs::write(&dump_file, content).unwrap();
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unsafe object name"));
+
+    assert!(
+        !escaped_target.exists(),
+        "import should not create files outside output dir"
+    );
+}
+
+#[test]
+fn test_import_pg_dump_rejects_path_traversal_in_schema_name() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump_file = temp_dir.path().join("database.sql");
+    let output_dir = temp_dir.path().join("output");
+
+    let content = r#"
+-- Name: users; Type: TABLE; Schema: ../../../../tmp; Owner: postgres
+
+CREATE TABLE users (id integer);
+"#;
+    fs::write(&dump_file, content).unwrap();
+
+    topcat_cmd()
+        .args([
+            "import",
+            "pg-dump",
+            dump_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unsafe schema name"));
 }

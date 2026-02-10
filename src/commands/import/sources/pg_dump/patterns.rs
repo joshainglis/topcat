@@ -18,7 +18,7 @@ use regex::Regex;
 pub static METADATA_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?x)
-        ^--\s+Name:\s+(?P<tgt_type>[A-Z]+\s+)?(?P<identity>"?(?P<name>[^(";]+)"?[^;]*);
+        ^--\s+Name:\s+(?P<tgt_type>[A-Z]+(?:\s+[A-Z]+)*\s+)?(?P<identity>"?(?P<name>[^(";]+)"?[^;]*);
         \s+Type:\s+(?P<type>[^;]+);\s+Schema:\s+(?P<schema>[^;]+);
         (?:\s+Owner:\s+(?P<owner>[^;]+))?
         "#,
@@ -864,6 +864,18 @@ mod tests {
         let input = "-- Name: COLUMN id; Type: DEFAULT; Schema: public;";
         let caps = METADATA_PATTERN.captures(input).unwrap();
         assert_eq!(caps.name("tgt_type").unwrap().as_str().trim(), "COLUMN");
+    }
+
+    #[test]
+    fn test_metadata_pattern_with_multi_word_target_type() {
+        let input =
+            "-- Name: MATERIALIZED VIEW report_summary; Type: MATERIALIZED VIEW; Schema: public;";
+        let caps = METADATA_PATTERN.captures(input).unwrap();
+        assert_eq!(
+            caps.name("tgt_type").unwrap().as_str().trim(),
+            "MATERIALIZED VIEW"
+        );
+        assert_eq!(caps.name("name").unwrap().as_str(), "report_summary");
     }
 
     #[test]

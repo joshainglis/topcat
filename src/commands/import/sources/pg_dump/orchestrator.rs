@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 use crate::commands::import::dependencies::DependencyAnalyzer;
 use crate::commands::import::handlers::{
@@ -136,6 +136,26 @@ impl CollectedObject {
             .filter(|obj| !obj.identity.is_empty())
             .map(|obj| obj.identity.as_str())
             .collect()
+    }
+
+    fn statement_in_primary_or_attachments(&self, statement: &str) -> bool {
+        let statement = statement.trim();
+        self.primary
+            .iter()
+            .chain(self.attachments.iter())
+            .any(|obj| obj.content.trim() == statement)
+    }
+
+    fn has_acl_statement(&self, statement: &str) -> bool {
+        let statement = statement.trim();
+        self.acl.iter().any(|acl| acl.trim() == statement)
+    }
+
+    fn owner_matches(&self, statement: &str) -> bool {
+        let statement = statement.trim();
+        self.owner
+            .as_deref()
+            .is_some_and(|owner| owner.trim() == statement)
     }
 
     fn render(&self, include_acl: bool, include_owner: bool) -> String {
@@ -610,7 +630,11 @@ impl ImportOrchestrator {
                 {
                     // Skip if the object is empty (has no primary content)
                     if !collected.is_empty() {
-                        collected.acl.push(content.to_string());
+                        if !collected.statement_in_primary_or_attachments(content)
+                            && !collected.has_acl_statement(content)
+                        {
+                            collected.acl.push(content.to_string());
+                        }
                         return;
                     }
                 }
@@ -650,6 +674,11 @@ impl ImportOrchestrator {
                     && let Some(name_map) = schema_map.get_mut(candidate_schema)
                     && let Some(collected) = name_map.get_mut(name)
                 {
+                    if collected.statement_in_primary_or_attachments(content)
+                        || collected.owner_matches(content)
+                    {
+                        return;
+                    }
                     collected.owner = Some(content.to_string());
                     return;
                 }
@@ -677,7 +706,12 @@ impl ImportOrchestrator {
             };
 
             if type_matches && obj.name == name {
-                obj.acl.push(content.to_string());
+                let statement = content.trim();
+                if obj.content.trim() != statement
+                    && !obj.acl.iter().any(|acl| acl.trim() == statement)
+                {
+                    obj.acl.push(content.to_string());
+                }
                 return true;
             }
         }
@@ -705,6 +739,17 @@ impl ImportOrchestrator {
             };
 
             if type_matches && obj.name == name {
+                let statement = content.trim();
+                if obj.content.trim() == statement {
+                    return true;
+                }
+                if obj
+                    .owner
+                    .as_deref()
+                    .is_some_and(|owner| owner.trim() == statement)
+                {
+                    return true;
+                }
                 obj.owner = Some(content.to_string());
                 return true;
             }
@@ -715,6 +760,8 @@ impl ImportOrchestrator {
 
     /// Write all files.
     fn write_files(&self) -> Result<(), TopCatError> {
+        self.validate_output_paths()?;
+
         // Convert to OutputConfig for rendering decisions
         let output_config = self.config.to_output_config();
 
@@ -1056,6 +1103,89 @@ impl ImportOrchestrator {
                 "Created {file_count} files in {}",
                 self.config.output_dir.display()
             ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_output_paths(&self) -> Result<(), TopCatError> {
+        for (schema_name, categories) in &self.schemas {
+            Self::validate_file_stem(schema_name, "schema name")?;
+            for (category, items) in categories {
+                Self::validate_relative_path(category, "category path")?;
+                for name in items.keys() {
+                    Self::validate_file_stem(name, "object name")?;
+                }
+            }
+        }
+
+        for obj in &self.global_objects {
+            Self::validate_relative_path(&obj.category, "global category path")?;
+            if let Some(subcategory) = &obj.subcategory {
+                Self::validate_relative_path(subcategory, "global subcategory path")?;
+            }
+            Self::validate_file_stem(&obj.name, "global object name")?;
+        }
+
+        Ok(())
+    }
+
+    fn validate_file_stem(value: &str, field: &str) -> Result<(), TopCatError> {
+        if value.is_empty() || value.contains('\0') || value.contains('/') || value.contains('\\') {
+            return Err(TopCatError::config_error(format!(
+                "Unsafe {field} '{value}' in import metadata"
+            )));
+        }
+
+        let mut components = Path::new(value).components();
+        match (components.next(), components.next()) {
+            (Some(Component::Normal(part)), None) => {
+                let part = part.to_string_lossy();
+                if part == "." || part == ".." {
+                    Err(TopCatError::config_error(format!(
+                        "Unsafe {field} '{value}' in import metadata"
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
+            _ => Err(TopCatError::config_error(format!(
+                "Unsafe {field} '{value}' in import metadata"
+            ))),
+        }
+    }
+
+    fn validate_relative_path(value: &str, field: &str) -> Result<(), TopCatError> {
+        if value.is_empty() || value.contains('\0') || value.contains('\\') {
+            return Err(TopCatError::config_error(format!(
+                "Unsafe {field} '{value}' in import metadata"
+            )));
+        }
+
+        let mut has_component = false;
+        for component in Path::new(value).components() {
+            match component {
+                Component::Normal(part) => {
+                    has_component = true;
+                    let part = part.to_string_lossy();
+                    if part == "." || part == ".." {
+                        return Err(TopCatError::config_error(format!(
+                            "Unsafe {field} '{value}' in import metadata"
+                        )));
+                    }
+                }
+                _ => {
+                    return Err(TopCatError::config_error(format!(
+                        "Unsafe {field} '{value}' in import metadata"
+                    )));
+                }
+            }
+        }
+
+        if !has_component {
+            return Err(TopCatError::config_error(format!(
+                "Unsafe {field} '{value}' in import metadata"
+            )));
         }
 
         Ok(())
