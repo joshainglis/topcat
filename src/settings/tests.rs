@@ -152,8 +152,8 @@ quiet = false
     )
     .unwrap();
 
-    let settings = Settings::load(Some(temp_file.path().to_str().unwrap()))
-        .expect("Failed to load settings");
+    let settings =
+        Settings::load(Some(temp_file.path().to_str().unwrap())).expect("Failed to load settings");
 
     assert_eq!(settings.layers.names, vec!["first", "second", "third"]);
     assert_eq!(settings.layers.fallback, "second".to_string());
@@ -178,8 +178,8 @@ fallback = "beta"
     )
     .unwrap();
 
-    let settings = Settings::load(Some(temp_file.path().to_str().unwrap()))
-        .expect("Failed to load settings");
+    let settings =
+        Settings::load(Some(temp_file.path().to_str().unwrap())).expect("Failed to load settings");
 
     assert!(settings.validate().is_ok());
 
@@ -195,8 +195,8 @@ fallback = "gamma"
     )
     .unwrap();
 
-    let settings2 = Settings::load(Some(temp_file2.path().to_str().unwrap()))
-        .expect("Failed to load settings");
+    let settings2 =
+        Settings::load(Some(temp_file2.path().to_str().unwrap())).expect("Failed to load settings");
 
     assert!(settings2.validate().is_err());
 }
@@ -218,8 +218,8 @@ merge_strategy = "union"
     )
     .unwrap();
 
-    let settings = Settings::load(Some(temp_file.path().to_str().unwrap()))
-        .expect("Failed to load settings");
+    let settings =
+        Settings::load(Some(temp_file.path().to_str().unwrap())).expect("Failed to load settings");
 
     assert!(settings.sql_discovery.enabled);
     assert_eq!(
@@ -246,8 +246,8 @@ external_check_patterns = ["*.py", "*.ts", "*.js"]
     )
     .unwrap();
 
-    let settings = Settings::load(Some(temp_file.path().to_str().unwrap()))
-        .expect("Failed to load settings");
+    let settings =
+        Settings::load(Some(temp_file.path().to_str().unwrap())).expect("Failed to load settings");
 
     assert_eq!(
         settings.analysis.root_patterns,
@@ -282,8 +282,8 @@ include_hidden = true
     )
     .unwrap();
 
-    let settings = Settings::load(Some(temp_file.path().to_str().unwrap()))
-        .expect("Failed to load settings");
+    let settings =
+        Settings::load(Some(temp_file.path().to_str().unwrap())).expect("Failed to load settings");
 
     assert_eq!(
         settings.filters.include_extensions,

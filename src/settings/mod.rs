@@ -23,7 +23,10 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 // Re-export config structs
-pub use configs::{BehaviorConfig, ExportConfig, ExportMode, FormattingConfig, NodeFilteringConfig, SchemaFilteringConfig};
+pub use configs::{
+    BehaviorConfig, ExportConfig, ExportMode, FormattingConfig, NodeFilteringConfig,
+    SchemaFilteringConfig,
+};
 
 // Re-export types from sql_config for convenience
 pub use crate::sql_config::{

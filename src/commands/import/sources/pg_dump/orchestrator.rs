@@ -1195,6 +1195,12 @@ impl ImportOrchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn quiet_logger() -> Logger {
+        Logger::new(true, false)
+    }
 
     #[test]
     fn test_orchestrator_config_builder() {
@@ -1239,6 +1245,195 @@ mod tests {
         assert_eq!(
             FunctionHandler::subcategory("api_users_get_v1"),
             Some("api/users/v1".to_string())
+        );
+    }
+
+    #[test]
+    fn test_process_attaches_index_to_table_via_extracted_deps() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().join("output");
+
+        let table = RawObject::new(
+            ObjectType::Table,
+            Some("public".to_string()),
+            "users".to_string(),
+            r#"CREATE TABLE "public"."users" (id integer);"#.to_string(),
+        );
+
+        let mut index = RawObject::new(
+            ObjectType::Index,
+            Some("public".to_string()),
+            "users_id_idx".to_string(),
+            r#"CREATE INDEX "users_id_idx" ON "public"."users" (id);"#.to_string(),
+        );
+        index.add_extracted_dep("public.users", ObjectType::Table);
+
+        let mut orchestrator =
+            ImportOrchestrator::new(OrchestratorConfig::new(output_dir.clone()), quiet_logger());
+
+        orchestrator
+            .process(vec![table, index], vec![], vec![])
+            .unwrap();
+
+        let table_file = output_dir.join("public/table/users.sql");
+        assert!(table_file.exists(), "expected table file at {table_file:?}");
+
+        let content = fs::read_to_string(table_file).unwrap();
+        assert!(content.contains(r#"CREATE TABLE "public"."users""#));
+        assert!(content.contains(r#"CREATE INDEX "users_id_idx""#));
+    }
+
+    #[test]
+    fn test_process_routes_schema_and_global_acl_owner_statements() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().join("output");
+
+        let table = RawObject::new(
+            ObjectType::Table,
+            Some("public".to_string()),
+            "users".to_string(),
+            r#"CREATE TABLE "public"."users" (id integer);"#.to_string(),
+        );
+        let server = RawObject::new(
+            ObjectType::Server,
+            None,
+            "remote_server".to_string(),
+            r#"CREATE SERVER "remote_server" FOREIGN DATA WRAPPER "postgres_fdw";"#.to_string(),
+        );
+
+        let table_grant = r#"GRANT SELECT ON TABLE "public"."users" TO "reader";"#.to_string();
+        let table_owner = r#"ALTER TABLE "public"."users" OWNER TO "admin";"#.to_string();
+        let server_grant =
+            r#"GRANT USAGE ON FOREIGN SERVER "remote_server" TO "reader";"#.to_string();
+        let server_owner = r#"ALTER SERVER "remote_server" OWNER TO "admin";"#.to_string();
+
+        let security = vec![
+            SecurityStatement::grant(
+                Some("public".to_string()),
+                "users".to_string(),
+                Some(ObjectType::Table),
+                table_grant.clone(),
+            ),
+            SecurityStatement::owner(
+                Some("public".to_string()),
+                "users".to_string(),
+                Some(ObjectType::Table),
+                table_owner.clone(),
+            ),
+            SecurityStatement::grant(
+                None,
+                "remote_server".to_string(),
+                Some(ObjectType::Server),
+                server_grant.clone(),
+            ),
+            SecurityStatement::owner(
+                None,
+                "remote_server".to_string(),
+                Some(ObjectType::Server),
+                server_owner.clone(),
+            ),
+        ];
+
+        let mut orchestrator =
+            ImportOrchestrator::new(OrchestratorConfig::new(output_dir.clone()), quiet_logger());
+
+        orchestrator
+            .process(vec![table, server], security, vec![])
+            .unwrap();
+
+        let table_file = output_dir.join("public/table/users.sql");
+        let table_content = fs::read_to_string(table_file).unwrap();
+        assert!(table_content.contains(&table_grant));
+        assert!(table_content.contains(&table_owner));
+
+        let server_file = output_dir.join("_global/fdw/server/remote_server.sql");
+        let server_content = fs::read_to_string(server_file).unwrap();
+        assert!(server_content.contains(&server_grant));
+        assert!(server_content.contains(&server_owner));
+    }
+
+    #[test]
+    fn test_process_generates_requires_header_from_handler_pattern_deps() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().join("output");
+
+        let foreign_table = RawObject::new(
+            ObjectType::ForeignTable,
+            Some("public".to_string()),
+            "remote_users".to_string(),
+            r#"CREATE FOREIGN TABLE "public"."remote_users" (id integer) SERVER "remote_server";"#
+                .to_string(),
+        );
+
+        let mut orchestrator =
+            ImportOrchestrator::new(OrchestratorConfig::new(output_dir.clone()), quiet_logger());
+
+        orchestrator
+            .process(vec![foreign_table], vec![], vec![])
+            .unwrap();
+
+        let file = output_dir.join("public/foreign_table/remote_users.sql");
+        let content = fs::read_to_string(file).unwrap();
+        assert!(content.contains("-- requires:"));
+        assert!(content.contains("remote_server"));
+    }
+
+    #[test]
+    fn test_process_rejects_unsafe_schema_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().join("output");
+
+        let table = RawObject::new(
+            ObjectType::Table,
+            Some("../escape".to_string()),
+            "users".to_string(),
+            r#"CREATE TABLE "users" (id integer);"#.to_string(),
+        );
+
+        let mut orchestrator =
+            ImportOrchestrator::new(OrchestratorConfig::new(output_dir.clone()), quiet_logger());
+
+        let result = orchestrator.process(vec![table], vec![], vec![]);
+        match result {
+            Err(TopCatError::ConfigError(msg)) => {
+                assert!(msg.contains("Unsafe schema name"), "got message: {msg}");
+            }
+            other => panic!("expected ConfigError for unsafe schema, got {other:?}"),
+        }
+        assert!(
+            !output_dir.exists(),
+            "output dir should not be created on validation failure"
+        );
+    }
+
+    #[test]
+    fn test_process_rejects_unsafe_global_object_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().join("output");
+
+        let server = RawObject::new(
+            ObjectType::Server,
+            None,
+            "../remote_server".to_string(),
+            r#"CREATE SERVER "remote_server" FOREIGN DATA WRAPPER "postgres_fdw";"#.to_string(),
+        );
+
+        let mut orchestrator =
+            ImportOrchestrator::new(OrchestratorConfig::new(output_dir.clone()), quiet_logger());
+
+        let result = orchestrator.process(vec![server], vec![], vec![]);
+        match result {
+            Err(TopCatError::ConfigError(msg)) => {
+                assert!(
+                    msg.contains("Unsafe global object name"),
+                    "got message: {msg}"
+                );
+            }
+            other => panic!("expected ConfigError for unsafe global object, got {other:?}"),
+        }
+        assert!(
+            !output_dir.exists(),
+            "output dir should not be created on validation failure"
         );
     }
 }

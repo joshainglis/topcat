@@ -40,11 +40,9 @@ impl Settings {
 
         // Validate rename_files requires header updates
         if self.rename_files && self.header_update_mode == HeaderUpdateMode::Never {
-            return Err(
-                "Cannot rename files without header updates. \
+            return Err("Cannot rename files without header updates. \
                  Use --update-headers or --generate-headers with --rename-files"
-                    .to_string(),
-            );
+                .to_string());
         }
 
         // Validate SQL discovery regex patterns
@@ -60,10 +58,12 @@ impl Settings {
 
         // Validate soft_deps_mappings patterns
         for (node_pattern, dep_pattern) in &self.sql_discovery.soft_deps_mappings {
-            regex::Regex::new(node_pattern)
-                .map_err(|e| format!("Invalid soft_deps_mapping node pattern '{node_pattern}': {e}"))?;
-            regex::Regex::new(dep_pattern)
-                .map_err(|e| format!("Invalid soft_deps_mapping dep pattern '{dep_pattern}': {e}"))?;
+            regex::Regex::new(node_pattern).map_err(|e| {
+                format!("Invalid soft_deps_mapping node pattern '{node_pattern}': {e}")
+            })?;
+            regex::Regex::new(dep_pattern).map_err(|e| {
+                format!("Invalid soft_deps_mapping dep pattern '{dep_pattern}': {e}")
+            })?;
         }
 
         // Validate root_regex patterns

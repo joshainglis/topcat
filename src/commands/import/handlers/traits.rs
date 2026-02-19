@@ -465,7 +465,10 @@ pub fn get_implicit_deps<T: DependencyExtractor>() -> Vec<ObjectType> {
 /// Get category and output path from a handler type.
 ///
 /// This helper provides a generic interface to Categorizer.
-pub fn get_category_info<T: Categorizer>(obj: &RawObject, base_dir: &Path) -> (ObjectCategory, PathBuf) {
+pub fn get_category_info<T: Categorizer>(
+    obj: &RawObject,
+    base_dir: &Path,
+) -> (ObjectCategory, PathBuf) {
     (T::category(), T::output_path(obj, base_dir))
 }
 
@@ -578,7 +581,8 @@ mod tests {
         );
         let related = RelatedObjects::new();
         let config = OutputConfig::new();
-        let (path, output, layer) = process_object::<TriggerHandler>(&obj, &related, &config, Path::new("/output"));
+        let (path, output, layer) =
+            process_object::<TriggerHandler>(&obj, &related, &config, Path::new("/output"));
         assert!(path.to_string_lossy().contains("trigger"));
         assert!(output.contains("CREATE TRIGGER"));
         assert_eq!(layer, Layer::Append);

@@ -4,7 +4,7 @@ use log::{debug, warn};
 use regex::{Regex, RegexBuilder};
 use std::collections::{HashMap, HashSet};
 
-use super::{validate_regex_pattern, SqlAnalysisResult};
+use super::{SqlAnalysisResult, validate_regex_pattern};
 use crate::sql_config::SqlDiscoveryConfig;
 
 /// SQL content analyzer

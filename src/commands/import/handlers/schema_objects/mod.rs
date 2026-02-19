@@ -14,7 +14,6 @@
 //! - `ForeignTableHandler` - Foreign tables (FDW)
 //! - `SequenceHandler` - Sequences
 
-
 mod extension;
 mod foreign_table;
 mod materialized_view;

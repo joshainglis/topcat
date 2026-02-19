@@ -33,10 +33,17 @@ pub mod traits;
 
 pub use registry::HandlerRegistry;
 pub use traits::{
-    extract_dependencies, get_category_info, get_handler_config,
+    Categorizer,
+    OutputConfig,
+    RelatedObjects,
+    extract_dependencies,
+    get_category_info,
+    get_handler_config,
     // Helper functions that use traits as bounds
-    get_implicit_deps, get_patterns, process_object, render_object, Categorizer,
-    OutputConfig, RelatedObjects,
+    get_implicit_deps,
+    get_patterns,
+    process_object,
+    render_object,
 };
 
 // Category modules - migrated handlers organized by type

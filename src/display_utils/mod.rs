@@ -22,7 +22,7 @@ use comfy_table::{Attribute, Cell, ContentArrangement, Table};
 
 // Re-export tree types and functions
 pub use render::{render_forest, render_forest_unified, render_tree, render_tree_minimal};
-pub use tree::{build_tree_forest, TreeNode};
+pub use tree::{TreeNode, build_tree_forest};
 
 /// Create a standard table with consistent formatting.
 ///

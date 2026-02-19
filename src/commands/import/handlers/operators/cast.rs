@@ -11,8 +11,10 @@ use crate::commands::import::handlers::traits::{
     Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::{build_cast_pattern, CAST_PATTERN, DEFAULT_SCHEMA_PATTERN};
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::{
+    CAST_PATTERN, DEFAULT_SCHEMA_PATTERN, build_cast_pattern,
+};
 
 /// Handler for PostgreSQL CAST objects.
 ///

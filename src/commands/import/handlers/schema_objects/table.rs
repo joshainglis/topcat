@@ -11,8 +11,8 @@ use crate::commands::import::handlers::traits::{
     RelatedObjects, Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
-use crate::commands::import::sources::pg_dump::TABLE_PATTERN;
 use crate::commands::import::sources::RawObject;
+use crate::commands::import::sources::pg_dump::TABLE_PATTERN;
 
 /// Handler for PostgreSQL TABLE objects.
 ///
