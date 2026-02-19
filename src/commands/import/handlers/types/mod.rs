@@ -9,6 +9,8 @@ mod collation;
 mod domain;
 mod type_handler;
 
+pub use type_handler::TypeHandler;
+
 use super::registry::HandlerRegistry;
 
 /// Register all type handlers with the registry.

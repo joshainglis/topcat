@@ -31,6 +31,9 @@
 pub mod registry;
 pub mod traits;
 
+use crate::commands::import::object_types::ObjectType;
+use crate::commands::import::sources::RawObject;
+
 pub use registry::HandlerRegistry;
 pub use traits::{
     Categorizer,
@@ -57,3 +60,42 @@ pub mod routines;
 pub mod schema_objects;
 pub mod security;
 pub mod types;
+
+/// Resolve the category path for a primary object using handler categorization.
+pub fn categorize_primary_object(obj: &RawObject) -> String {
+    match obj.obj_type {
+        ObjectType::Type => match types::TypeHandler::subcategory(&obj.content) {
+            Some(subcat) => format!("type/{subcat}"),
+            None => "type".to_string(),
+        },
+        ObjectType::Function | ObjectType::Procedure => {
+            let base = obj.obj_type.category_dir();
+            match routines::FunctionHandler::subcategory(&obj.name) {
+                Some(subcat) => format!("{base}/{subcat}"),
+                None => base,
+            }
+        }
+        _ => obj.obj_type.category_dir(),
+    }
+}
+
+/// Render a primary object using the registered handler rendering strategy.
+pub fn render_primary_object(
+    obj: &RawObject,
+    related: &RelatedObjects,
+    config: &OutputConfig,
+) -> String {
+    match obj.obj_type {
+        ObjectType::Table => render_object::<schema_objects::TableHandler>(obj, related, config),
+        ObjectType::Function => render_object::<routines::FunctionHandler>(obj, related, config),
+        ObjectType::Type => render_object::<types::TypeHandler>(obj, related, config),
+        _ => {
+            let mut parts = vec![obj.content.clone()];
+            let related_content = related.render_all(config);
+            if !related_content.is_empty() {
+                parts.push(related_content);
+            }
+            parts.join("\n\n")
+        }
+    }
+}

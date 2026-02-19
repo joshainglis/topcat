@@ -12,8 +12,10 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use crate::commands::import::dependencies::DependencyAnalyzer;
-use crate::commands::import::handlers::{HandlerRegistry, OutputConfig, RelatedObjects};
-use crate::commands::import::object_types::{Layer, ObjectType, TypeSubcategory};
+use crate::commands::import::handlers::{
+    HandlerRegistry, OutputConfig, RelatedObjects, categorize_primary_object, render_primary_object,
+};
+use crate::commands::import::object_types::{Layer, ObjectType};
 use crate::commands::import::output::header_builder::HeaderBuilder;
 use crate::commands::import::sources::{RawObject, SecurityKind, SecurityStatement};
 use topcat::exceptions::TopCatError;
@@ -457,33 +459,8 @@ impl ImportOrchestrator {
     }
 
     /// Categorize an object for file organization.
-    ///
-    /// Uses ObjectType::category_dir() for most types. Special handling:
-    /// - Type: Uses TypeSubcategory for enum/composite/range subcategories
-    /// - Function/Procedure: Uses FunctionHandler::subcategory() for naming-based organization
     fn categorize_object(&self, obj: &RawObject) -> String {
-        use crate::commands::import::handlers::Categorizer;
-        use crate::commands::import::handlers::routines::FunctionHandler;
-
-        match obj.obj_type {
-            // Types need content analysis for subcategory (enum, composite, range)
-            ObjectType::Type => {
-                let subcat = TypeSubcategory::from_content(&obj.content);
-                format!("type/{}", subcat.subdirectory())
-            }
-
-            // Functions and procedures use handler-based subcategorization
-            ObjectType::Function | ObjectType::Procedure => {
-                let base = obj.obj_type.category_dir(); // "functions"
-                match FunctionHandler::subcategory(&obj.name) {
-                    Some(subcat) => format!("{base}/{subcat}"),
-                    None => base,
-                }
-            }
-
-            // All other types use the category_dir from ObjectType
-            _ => obj.obj_type.category_dir(),
-        }
+        categorize_primary_object(obj)
     }
 
     /// Attach security statements to objects.
@@ -789,6 +766,11 @@ impl ImportOrchestrator {
                                                 ObjectType::Comment => {
                                                     related.comments.push(attachment.clone())
                                                 }
+                                                ObjectType::Acl
+                                                | ObjectType::DefaultAcl
+                                                | ObjectType::SecurityLabel => {
+                                                    related.acl.push(attachment.content.clone())
+                                                }
                                                 _ => {} // Other attachment types
                                             }
                                         }
@@ -798,10 +780,18 @@ impl ImportOrchestrator {
                                             related.owner = collected.owner.clone();
                                         }
 
-                                        collected.render(
-                                            output_config.include_acl,
-                                            output_config.include_owner,
-                                        )
+                                        if collected.primary.len() == 1 {
+                                            render_primary_object(
+                                                &collected.primary[0],
+                                                &related,
+                                                &output_config,
+                                            )
+                                        } else {
+                                            collected.render(
+                                                output_config.include_acl,
+                                                output_config.include_owner,
+                                            )
+                                        }
                                     })
                             })
                             .collect();
