@@ -38,12 +38,7 @@ use crate::commands::import::sources::RawObject;
 
 pub use registry::HandlerRegistry;
 pub use traits::{
-    Categorizer,
-    OutputConfig,
-    RelatedObjects,
-    DependencyExtractor,
-    PatternProvider,
-    render_object,
+    Categorizer, DependencyExtractor, OutputConfig, PatternProvider, RelatedObjects, render_object,
 };
 
 // Category modules - migrated handlers organized by type

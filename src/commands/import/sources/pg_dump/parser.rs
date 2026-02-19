@@ -10,9 +10,9 @@ use regex::Regex;
 
 use super::patterns::{
     ALTER_TABLE_PATTERN, DEFAULT_ACL_PATTERN, EVENT_TRIGGER_PATTERN, EXTENSION_PATTERN,
-    FOREIGN_TABLE_PATTERN, GRANT_PATTERN, METADATA_PATTERN, OWNER_PATTERN, REVOKE_PATTERN,
-    RULE_PATTERN, SERVER_PATTERN, STATISTICS_PATTERN, SUBSCRIPTION_PATTERN, TRIGGER_PATTERN,
-    USER_MAPPING_PATTERN,
+    FOREIGN_TABLE_PATTERN, FUNCTION_PATTERN, GRANT_PATTERN, INDEX_PATTERN, METADATA_PATTERN,
+    OWNER_PATTERN, POLICY_PATTERN, REVOKE_PATTERN, RULE_PATTERN, SERVER_PATTERN,
+    STATISTICS_PATTERN, SUBSCRIPTION_PATTERN, TABLE_PATTERN, TRIGGER_PATTERN, USER_MAPPING_PATTERN,
 };
 use super::{DEFAULT_SCHEMA_PATTERN, build_cast_pattern, build_operator_pattern};
 use crate::commands::import::object_types::ObjectType;
@@ -189,6 +189,21 @@ impl PgDumpParser {
         } else {
             meta.name.clone()
         };
+        let name = if name.is_empty() {
+            match meta.obj_type {
+                ObjectType::Table => TABLE_PATTERN
+                    .captures(&content)
+                    .and_then(|caps| caps.name("name").map(|m| m.as_str().to_string()))
+                    .unwrap_or(name),
+                ObjectType::Function => FUNCTION_PATTERN
+                    .captures(&content)
+                    .and_then(|caps| caps.name("name").map(|m| m.as_str().to_string()))
+                    .unwrap_or(name),
+                _ => name,
+            }
+        } else {
+            name
+        };
 
         let mut obj = RawObject::new(meta.obj_type, schema, name, content.clone());
 
@@ -322,8 +337,30 @@ impl PgDumpParser {
                 }
             }
 
-            // Index, Constraint, Policy → Table (from ALTER TABLE pattern)
-            ObjectType::Index | ObjectType::Constraint | ObjectType::FkConstraint => {
+            // Index → Table
+            ObjectType::Index => {
+                if let Some(caps) = INDEX_PATTERN.captures(content) {
+                    let tbl_name = caps.name("table").map(|m| m.as_str());
+                    let tbl_schema = caps
+                        .name("schema")
+                        .map(|m| m.as_str())
+                        .or(obj.schema.as_deref());
+
+                    if let Some(name) = tbl_name {
+                        let qualified = match tbl_schema {
+                            Some(schema) => format!("{schema}.{name}"),
+                            None => name.to_string(),
+                        };
+                        obj.add_extracted_dep(qualified, ObjectType::Table);
+                    }
+                }
+            }
+
+            // Constraint/FK/Default/RowSecurity → Table
+            ObjectType::Constraint
+            | ObjectType::FkConstraint
+            | ObjectType::Default
+            | ObjectType::RowSecurity => {
                 if let Some(caps) = ALTER_TABLE_PATTERN.captures(content)
                     && let (Some(tbl_schema), Some(tbl_name)) =
                         (caps.name("tbl_schema"), caps.name("tbl_name"))
@@ -335,30 +372,45 @@ impl PgDumpParser {
                 }
             }
 
-            // Policy → Table
-            ObjectType::Policy | ObjectType::RowSecurity => {
-                if let Some(caps) = ALTER_TABLE_PATTERN.captures(content)
-                    && let (Some(tbl_schema), Some(tbl_name)) =
-                        (caps.name("tbl_schema"), caps.name("tbl_name"))
-                {
-                    obj.add_extracted_dep(
-                        format!("{}.{}", tbl_schema.as_str(), tbl_name.as_str()),
-                        ObjectType::Table,
-                    );
+            // Policy → Table (from ON table)
+            ObjectType::Policy => {
+                if let Some(caps) = POLICY_PATTERN.captures(content) {
+                    let tbl_name = caps.name("table").map(|m| m.as_str());
+                    let tbl_schema = caps
+                        .name("schema")
+                        .map(|m| m.as_str())
+                        .or(obj.schema.as_deref());
+
+                    if let Some(name) = tbl_name {
+                        let qualified = match tbl_schema {
+                            Some(schema) => format!("{schema}.{name}"),
+                            None => name.to_string(),
+                        };
+                        obj.add_extracted_dep(qualified, ObjectType::Table);
+                    }
                 }
             }
 
             // Cast → Type (try to attach to type)
             ObjectType::Cast => {
-                if let Some(caps) = self.cast_pattern.captures(content)
-                    && let Some(to_name) = caps.name("to_name")
-                {
-                    let to_schema = caps.name("to_schema").map(|m| m.as_str());
-                    let qualified = match to_schema {
-                        Some(schema) => format!("{}.{}", schema, to_name.as_str()),
-                        None => to_name.as_str().to_string(),
-                    };
-                    obj.add_extracted_dep(qualified, ObjectType::Type);
+                if let Some(caps) = self.cast_pattern.captures(content) {
+                    if let Some(from_name) = caps.name("from_name") {
+                        let from_schema = caps.name("from_schema").map(|m| m.as_str());
+                        let qualified = match from_schema {
+                            Some(schema) => format!("{}.{}", schema, from_name.as_str()),
+                            None => from_name.as_str().to_string(),
+                        };
+                        obj.add_extracted_dep(qualified, ObjectType::Type);
+                    }
+
+                    if let Some(to_name) = caps.name("to_name") {
+                        let to_schema = caps.name("to_schema").map(|m| m.as_str());
+                        let qualified = match to_schema {
+                            Some(schema) => format!("{}.{}", schema, to_name.as_str()),
+                            None => to_name.as_str().to_string(),
+                        };
+                        obj.add_extracted_dep(qualified, ObjectType::Type);
+                    }
                 }
             }
 
@@ -549,6 +601,90 @@ CREATE FOREIGN TABLE "public"."remote_data" (
         assert_eq!(deps.len(), 1);
         assert_eq!(deps[0].name, "my_server");
         assert_eq!(deps[0].dep_type, ObjectType::Server);
+    }
+
+    #[test]
+    fn test_parse_index_with_table_dep() {
+        let content = r#"
+-- Name: users_id_idx; Type: INDEX; Schema: public;
+
+CREATE INDEX "users_id_idx" ON "public"."users" USING btree ("id");
+"#;
+
+        let mut parser = PgDumpParser::from_content(content.to_string(), None);
+        let objects = parser.extract_objects().unwrap();
+
+        assert_eq!(objects.len(), 1);
+        assert_eq!(objects[0].obj_type, ObjectType::Index);
+
+        let deps = objects[0].extracted_deps();
+        assert_eq!(deps.len(), 1);
+        assert_eq!(deps[0].name, "public.users");
+        assert_eq!(deps[0].dep_type, ObjectType::Table);
+    }
+
+    #[test]
+    fn test_parse_policy_with_table_dep() {
+        let content = r#"
+-- Name: users_select_policy; Type: POLICY; Schema: public;
+
+CREATE POLICY "users_select_policy" ON "public"."users"
+    FOR SELECT USING (true);
+"#;
+
+        let mut parser = PgDumpParser::from_content(content.to_string(), None);
+        let objects = parser.extract_objects().unwrap();
+
+        assert_eq!(objects.len(), 1);
+        assert_eq!(objects[0].obj_type, ObjectType::Policy);
+
+        let deps = objects[0].extracted_deps();
+        assert_eq!(deps.len(), 1);
+        assert_eq!(deps[0].name, "public.users");
+        assert_eq!(deps[0].dep_type, ObjectType::Table);
+    }
+
+    #[test]
+    fn test_parse_default_with_table_dep() {
+        let content = r#"
+-- Name: COLUMN id; Type: DEFAULT; Schema: public;
+
+ALTER TABLE ONLY "public"."users" ALTER COLUMN "id" SET DEFAULT nextval('"users_id_seq"'::regclass);
+"#;
+
+        let mut parser = PgDumpParser::from_content(content.to_string(), None);
+        let objects = parser.extract_objects().unwrap();
+
+        assert_eq!(objects.len(), 1);
+        assert_eq!(objects[0].obj_type, ObjectType::Default);
+
+        let deps = objects[0].extracted_deps();
+        assert_eq!(deps.len(), 1);
+        assert_eq!(deps[0].name, "public.users");
+        assert_eq!(deps[0].dep_type, ObjectType::Table);
+    }
+
+    #[test]
+    fn test_parse_cast_extracts_both_type_deps() {
+        let content = r#"
+-- Name: CAST (integer AS text); Type: CAST; Schema: -;
+
+CREATE CAST (integer AS text) WITH FUNCTION int4_to_text(integer);
+"#;
+
+        let mut parser = PgDumpParser::from_content(content.to_string(), None);
+        let objects = parser.extract_objects().unwrap();
+
+        assert_eq!(objects.len(), 1);
+        assert_eq!(objects[0].obj_type, ObjectType::Cast);
+
+        let dep_names: Vec<_> = objects[0]
+            .extracted_deps()
+            .iter()
+            .map(|dep| dep.name.as_str())
+            .collect();
+        assert!(dep_names.contains(&"integer"));
+        assert!(dep_names.contains(&"text"));
     }
 
     #[test]

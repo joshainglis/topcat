@@ -1,8 +1,8 @@
 # Import Module Refactoring Plan
 
 **Created:** 2025-11-27
-**Completed:** 2025-12-22
-**Status:** Complete
+**Completed:** 2026-02-19
+**Status:** Complete (with 2026 follow-up cleanup)
 **Scope:** Refactor `src/commands/import/` into per-type submodules with composable traits
 
 ## Goals
@@ -993,6 +993,23 @@ These represent API extensibility points that are designed for future use (e.g.,
 
 **Verification:** All tests pass, clippy clean, no `#![allow(...)]` directives.
 
+### Phase 6b: Follow-up Cleanup PR Series ✅
+
+**Goal:** Close remaining integration gaps in the refactored import pipeline with focused PRs.
+
+**Completed (2026-02-19):**
+- [x] PR1: Added orchestrator behavior coverage (attachment/security/deps/path safety cases)
+- [x] PR2: Removed runtime trait-wiring self-check path
+- [x] PR3: Routed primary categorization/rendering through handler dispatch helpers
+- [x] PR4: Derived `requires` headers from source-populated `extracted_deps`
+- [x] PR5: Removed dead handler helper APIs and tightened header generation usage
+- [x] PR6: Improved parser dependency extraction fidelity (index/policy/default/cast) and synced docs
+
+**Verification (2026-02-19):**
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo test --test cli_import_tests`
+- Targeted unit tests for import parser/orchestrator/header builder
+
 ## Testing Strategy
 
 ### Unit Tests
@@ -1122,3 +1139,8 @@ Use these to track progress across sessions:
   - All patterns verified as used (47 patterns)
   - 540 tests pass, clippy clean (0 warnings)
   - **Import refactoring complete!**
+- [x] **Checkpoint 8:** Phase 6b follow-up PR series complete (2026-02-19)
+  - PR1-PR6 executed in order with separate commits
+  - Handler pipeline now uses source-extracted deps as canonical requires input
+  - Parser now extracts table deps for INDEX/POLICY/DEFAULT objects and both CAST type deps
+  - Clippy warning-free with focused import regression coverage

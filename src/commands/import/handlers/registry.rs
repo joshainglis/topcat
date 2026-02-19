@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::commands::import::handlers::{
-    attachments, fdw, fts, global, operators, replication, routines, schema_objects, security,
-    types, link_trait_surface,
+    attachments, fdw, fts, global, link_trait_surface, operators, replication, routines,
+    schema_objects, security, types,
 };
 use crate::commands::import::object_types::{Layer, ObjectType, ObjectTypeConfig};
 use crate::commands::import::sources::RawObject;

@@ -1,64 +1,33 @@
-# Import Module Refactoring - Phase 6: Final Cleanup
+# Import Module Refactoring - Follow-up Cleanup (Completed)
 
-## Current State
+## Status
 
-**Warnings:** 5 remaining (extensibility APIs)
-**Tests:** All passing
-**Clippy:** Clean
-**PatternProvider:** All 25 handlers now have proper implementations
+**Completed on:** 2026-02-19  
+**Scope:** PR1-PR6 cleanup series on top of the refactored import pipeline
 
-## Remaining Warnings
+## What Landed
 
-These are extensibility APIs that may be addressed or documented:
+1. Added orchestrator behavior coverage for attachment/security/dependency/path handling.
+2. Removed runtime trait-wiring self-check logic.
+3. Routed primary categorization and rendering through handler dispatch helpers.
+4. Switched `requires:` header generation to source-populated `RawObject::extracted_deps`.
+5. Removed dead handler helper APIs and tightened header builder usage in orchestrator.
+6. Improved parser dependency extraction fidelity:
+   - `INDEX` now extracts parent table from `INDEX_PATTERN`.
+   - `POLICY` now extracts parent table from `POLICY_PATTERN`.
+   - `DEFAULT` now extracts parent table via `ALTER_TABLE_PATTERN`.
+   - `CAST` now extracts both source and target type dependencies.
 
-1. `build_default_configs()` - ObjectTypeConfig static method
-2. `attachment_registry_mut()` - HandlerRegistry method
-3. `parent_types` on AttachmentRule - field
-4. `register()` / `get_rules()` on AttachmentRegistry
-5. `with_metadata()` / `with_extracted_dep()` on RawObject
+## Verification Snapshot
 
-## Options
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo test --test cli_import_tests`
+- Targeted unit tests:
+  - `commands::import::sources::pg_dump::parser::tests::`
+  - `commands::import::sources::pg_dump::orchestrator::tests::`
+  - `commands::import::output::header_builder::tests::`
 
-### Option A: Document as Intentional API Surface
+## Follow-up Guidance
 
-Add doc comments explaining these are extensibility points for:
-- Custom handlers in the future
-- Dynamic attachment rules
-- RawObject builder patterns
-
-### Option B: Remove Unused Code
-
-If these truly won't be used:
-- Delete the dead code
-- Simplify the APIs
-
-### Option C: Wire Up Usage
-
-Find legitimate uses for these APIs:
-- Use `build_default_configs()` in orchestrator initialization
-- Use attachment registry methods in attachment processing
-- Use RawObject builder methods in parser
-
-## Success Criteria
-
-1. **Decide on remaining warnings**: Document, remove, or use them
-2. **All tests pass**: `cargo test --lib --tests`
-3. **Clippy clean**: `cargo clippy --all-targets`
-4. **No allow directives**: `grep -r "#![allow(" src/commands/import/`
-5. **Update docs**: Mark Phase 6 complete in import-refactoring-plan.md
-
-## Quick Reference
-
-```bash
-# Check current warnings
-cargo build 2>&1 | grep -E "never (used|read)"
-
-# Run tests
-cargo test --lib --tests
-
-# Run clippy
-cargo clippy --all-targets
-
-# Search for allow directives
-grep -r "#!\[allow(" src/commands/import/
-```
+- Keep new parser dependency extraction tests in sync when adding new attachment types.
+- Prefer source-level `extracted_deps` updates over reintroducing handler-driven fallback extraction.
