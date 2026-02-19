@@ -200,6 +200,7 @@ struct GlobalObject {
     subcategory: Option<String>,
     name: String,
     content: String,
+    extracted_dep_names: Vec<String>,
     layer: Layer,
     owner: Option<String>,
     acl: Vec<String>,
@@ -422,6 +423,11 @@ impl ImportOrchestrator {
     /// Uses handler or ObjectType::global_category() to determine output organization.
     fn handle_global_object(&mut self, obj: RawObject) {
         let (category, subcategory) = obj.obj_type.global_category();
+        let extracted_dep_names = obj
+            .extracted_deps()
+            .iter()
+            .map(|dep| dep.name.clone())
+            .collect();
 
         // Get layer from handler if available, otherwise from ObjectType
         let layer = self
@@ -436,6 +442,7 @@ impl ImportOrchestrator {
             subcategory,
             name: obj.name.clone(),
             content: obj.content,
+            extracted_dep_names,
             layer,
             owner: None,
             acl: Vec::new(),
@@ -826,20 +833,24 @@ impl ImportOrchestrator {
                                 })
                                 .unwrap_or_default();
 
-                            // Add handler pattern-based dependencies
-                            if let Some(obj_type) = primary_type
-                                && let Some(handler) = self.handler_registry.get(&obj_type)
-                            {
-                                // Log handler object type for debugging
-                                let _ = handler.object_type();
-
-                                // Get implicit dependency types for this handler
-                                let implicit_types = handler.implicit_dep_types();
-                                let _ = implicit_types; // Available for future filtering
-
-                                let pattern_deps = handler.extract_pattern_deps(&rendered_content);
-                                for (dep_name, _dep_type) in pattern_deps {
-                                    deps.insert(dep_name);
+                            // Use source-populated extracted dependencies as the
+                            // canonical structural dependency source.
+                            for (obj_type, schema, obj_name) in key_list {
+                                if let Some(collected) = self
+                                    .objects
+                                    .get(obj_type)
+                                    .and_then(|schemas| schemas.get(schema))
+                                    .and_then(|names| names.get(obj_name))
+                                {
+                                    for dep_name in collected
+                                        .primary
+                                        .iter()
+                                        .chain(collected.attachments.iter())
+                                        .flat_map(|obj| obj.extracted_deps().iter())
+                                        .map(|dep| dep.name.clone())
+                                    {
+                                        deps.insert(dep_name);
+                                    }
                                 }
                             }
 
@@ -920,9 +931,6 @@ impl ImportOrchestrator {
                     } else {
                         fs::create_dir_all(&category_dir)?;
 
-                        // Check if handler exists for this type (use has_handler)
-                        let has_handler = self.handler_registry.has_handler(&obj.obj_type);
-
                         // Analyze dependencies
                         let requires = if output_config.generate_deps {
                             let mut deps = self
@@ -934,15 +942,7 @@ impl ImportOrchestrator {
                                 })
                                 .unwrap_or_default();
 
-                            // Add handler pattern-based dependencies if handler exists
-                            if has_handler
-                                && let Some(handler) = self.handler_registry.get(&obj.obj_type)
-                            {
-                                let pattern_deps = handler.extract_pattern_deps(&obj.content);
-                                for (dep_name, _dep_type) in pattern_deps {
-                                    deps.insert(dep_name);
-                                }
-                            }
+                            deps.extend(obj.extracted_dep_names.iter().cloned());
 
                             if deps.is_empty() { None } else { Some(deps) }
                         } else {
@@ -1272,17 +1272,18 @@ mod tests {
     }
 
     #[test]
-    fn test_process_generates_requires_header_from_handler_pattern_deps() {
+    fn test_process_generates_requires_header_from_source_extracted_deps() {
         let temp_dir = TempDir::new().unwrap();
         let output_dir = temp_dir.path().join("output");
 
-        let foreign_table = RawObject::new(
+        let mut foreign_table = RawObject::new(
             ObjectType::ForeignTable,
             Some("public".to_string()),
             "remote_users".to_string(),
             r#"CREATE FOREIGN TABLE "public"."remote_users" (id integer) SERVER "remote_server";"#
                 .to_string(),
         );
+        foreign_table.add_extracted_dep("remote_server", ObjectType::Server);
 
         let mut orchestrator =
             ImportOrchestrator::new(OrchestratorConfig::new(output_dir.clone()), quiet_logger());
