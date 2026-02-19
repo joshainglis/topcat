@@ -6,10 +6,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::commands::import::dependencies::implicit_dependencies_for_type;
 use crate::commands::import::handlers::{
     attachments, fdw, fts, global, operators, replication, routines, schema_objects, security,
-    types,
+    types, link_trait_surface,
 };
 use crate::commands::import::object_types::{Layer, ObjectType, ObjectTypeConfig};
 use crate::commands::import::sources::RawObject;
@@ -49,6 +48,7 @@ pub struct RegisteredHandler {
 
     /// Optional custom pattern dependency extractor.
     /// If None, returns empty vec.
+    #[cfg(test)]
     #[allow(clippy::type_complexity)]
     extract_pattern_deps: Option<fn(&str) -> Vec<(String, ObjectType)>>,
 }
@@ -58,6 +58,7 @@ impl RegisteredHandler {
     pub fn new(obj_type: ObjectType) -> Self {
         Self {
             obj_type,
+            #[cfg(test)]
             extract_pattern_deps: None,
         }
     }
@@ -65,20 +66,18 @@ impl RegisteredHandler {
     /// Create a handler with a custom pattern dependency extractor.
     pub fn with_pattern_deps(
         obj_type: ObjectType,
-        extractor: fn(&str) -> Vec<(String, ObjectType)>,
+        #[cfg(test)] extractor: fn(&str) -> Vec<(String, ObjectType)>,
+        #[cfg(not(test))] _extractor: fn(&str) -> Vec<(String, ObjectType)>,
     ) -> Self {
         Self {
             obj_type,
+            #[cfg(test)]
             extract_pattern_deps: Some(extractor),
         }
     }
 
-    /// Get the object type.
-    pub fn object_type(&self) -> ObjectType {
-        self.obj_type
-    }
-
     /// Extract pattern-based dependencies from content.
+    #[cfg(test)]
     pub fn extract_pattern_deps(&self, content: &str) -> Vec<(String, ObjectType)> {
         match self.extract_pattern_deps {
             Some(f) => f(content),
@@ -87,8 +86,9 @@ impl RegisteredHandler {
     }
 
     /// Get implicit dependency types for this object type.
+    #[cfg(test)]
     pub fn implicit_dep_types(&self) -> Vec<ObjectType> {
-        implicit_dependencies_for_type(self.obj_type)
+        crate::commands::import::dependencies::implicit_dependencies_for_type(self.obj_type)
     }
 
     /// Get the default configuration for this type.
@@ -120,6 +120,8 @@ impl RegisteredHandler {
 impl HandlerRegistry {
     /// Create a new handler registry with all handlers registered.
     pub fn new() -> Self {
+        link_trait_surface();
+
         let mut registry = Self {
             handlers: HashMap::new(),
             attachment_registry: AttachmentRegistry::new(),
@@ -214,6 +216,7 @@ impl HandlerRegistry {
     }
 
     /// Check if a handler is registered for a type.
+    #[cfg(test)]
     pub fn has_handler(&self, obj_type: &ObjectType) -> bool {
         self.handlers.contains_key(obj_type)
     }

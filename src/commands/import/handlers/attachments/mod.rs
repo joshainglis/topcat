@@ -26,9 +26,6 @@ mod rule;
 mod statistics;
 mod trigger;
 
-// TriggerHandler is used by the orchestrator's validate_handler_traits
-pub use trigger::TriggerHandler;
-
 use super::registry::HandlerRegistry;
 
 /// Register all attachment handlers with the registry.

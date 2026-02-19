@@ -18,7 +18,6 @@ use crate::commands::import::sources::pg_dump::SCHEMA_PATTERN;
 ///
 /// Schemas are namespaces that contain database objects. They are
 /// foundation objects that must be created before any objects they contain.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct SchemaHandler;
 
 impl PatternProvider for SchemaHandler {

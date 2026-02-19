@@ -22,7 +22,6 @@ use crate::commands::import::sources::pg_dump::DOMAIN_PATTERN;
 ///
 /// Domains belong to the Prepend layer as they are foundational type definitions
 /// that tables and functions depend on.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct DomainHandler;
 
 impl PatternProvider for DomainHandler {

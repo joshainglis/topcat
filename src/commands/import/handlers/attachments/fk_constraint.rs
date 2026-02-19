@@ -21,7 +21,6 @@ use crate::commands::import::sources::pg_dump::FK_CONSTRAINT_PATTERN;
 ///
 /// FK constraints belong to the Append layer and attach to their parent table.
 /// They are created after regular constraints to ensure referenced tables exist.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct FkConstraintHandler;
 
 impl PatternProvider for FkConstraintHandler {

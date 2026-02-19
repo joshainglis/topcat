@@ -20,7 +20,6 @@ use crate::commands::import::sources::pg_dump::INDEX_PATTERN;
 /// after the table and provide optimized access paths for queries.
 ///
 /// Indexes belong to the Append layer and attach to their parent table.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct IndexHandler;
 
 impl PatternProvider for IndexHandler {

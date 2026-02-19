@@ -21,7 +21,6 @@ use crate::commands::import::sources::pg_dump::POLICY_PATTERN;
 ///
 /// Policies belong to the Append layer and attach to their parent table.
 /// They are created after row security is enabled on the table.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct PolicyHandler;
 
 impl PatternProvider for PolicyHandler {

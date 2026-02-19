@@ -25,7 +25,6 @@ use crate::commands::import::sources::pg_dump::CONVERSION_PATTERN;
 /// Examples:
 /// - `CREATE CONVERSION "public"."myconv" FOR 'UTF8' TO 'LATIN1' FROM utf8_to_iso8859_1;`
 /// - `CREATE DEFAULT CONVERSION "public"."mydefconv" FOR 'UTF8' TO 'SJIS' FROM utf8_to_sjis;`
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct ConversionHandler;
 
 impl PatternProvider for ConversionHandler {

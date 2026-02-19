@@ -11,7 +11,6 @@
 //! - [`Categorizer`]: Determine output organization
 //! - [`Renderer`]: Render objects to SQL output
 //! - [`Configurable`]: Default configuration for the type
-//! - [`ObjectHandler`]: Combined trait for full handling
 
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -160,24 +159,6 @@ pub trait Configurable {
     fn is_primary() -> bool {
         true
     }
-}
-
-/// Combined trait for full object handling.
-///
-/// This trait combines all the composable traits and adds the type identifier.
-/// Handlers that implement all the individual traits can derive this trait.
-///
-/// # Object-Safe Considerations
-///
-/// This trait is not object-safe due to the associated methods. Use the
-/// [`HandlerRegistry`] to work with handlers dynamically.
-pub trait ObjectHandler:
-    PatternProvider + DependencyExtractor + Categorizer + Renderer + Configurable + Send + Sync
-{
-    /// The PostgreSQL object type this handler handles.
-    fn object_type() -> ObjectType
-    where
-        Self: Sized;
 }
 
 /// Container for objects that attach to a primary object.
@@ -381,97 +362,6 @@ impl Default for OutputConfig {
     }
 }
 
-impl OutputConfig {
-    /// Create a new OutputConfig with all options enabled.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Create a config for dry-run mode.
-    pub fn dry_run() -> Self {
-        Self {
-            dry_run: true,
-            ..Self::default()
-        }
-    }
-}
-
-/// Helper function to extract dependencies from content using a pattern.
-///
-/// This is a utility for implementing `extract_pattern_dependencies`.
-///
-/// # Arguments
-///
-/// - `content`: SQL content to search
-/// - `pattern`: Regex pattern with named capture groups
-/// - `captures`: List of (capture_name, object_type) pairs to extract
-///
-/// # Returns
-///
-/// Vector of (qualified_name, object_type) pairs for dependencies found.
-pub fn extract_deps_with_pattern(
-    content: &str,
-    pattern: &Regex,
-    captures: &[(&str, Option<&str>, ObjectType)],
-) -> Vec<(String, ObjectType)> {
-    let mut deps = Vec::new();
-
-    if let Some(caps) = pattern.captures(content) {
-        for (name_capture, schema_capture, obj_type) in captures {
-            if let Some(name_match) = caps.name(name_capture) {
-                let name = name_match.as_str().to_string();
-                let qualified = if let Some(schema_cap) = schema_capture {
-                    if let Some(schema_match) = caps.name(schema_cap) {
-                        format!("{}.{}", schema_match.as_str(), name)
-                    } else {
-                        name
-                    }
-                } else {
-                    name
-                };
-                deps.push((qualified, *obj_type));
-            }
-        }
-    }
-
-    deps
-}
-
-// ============================================================================
-// Helper functions that use traits as bounds
-// ============================================================================
-
-/// Get content patterns from a handler type.
-///
-/// This helper provides a generic interface to PatternProvider.
-pub fn get_patterns<T: PatternProvider>() -> Vec<&'static LazyLock<Regex>> {
-    T::content_patterns()
-}
-
-/// Extract dependencies from content using a handler type.
-///
-/// This helper provides a generic interface to DependencyExtractor.
-pub fn extract_dependencies<T: DependencyExtractor>(content: &str) -> Vec<(String, ObjectType)> {
-    T::extract_pattern_dependencies(content)
-}
-
-/// Get implicit dependency types from a handler type.
-///
-/// This helper provides a generic interface to DependencyExtractor.
-pub fn get_implicit_deps<T: DependencyExtractor>() -> Vec<ObjectType> {
-    T::implicit_dependency_types()
-}
-
-/// Get category and output path from a handler type.
-///
-/// This helper provides a generic interface to Categorizer.
-pub fn get_category_info<T: Categorizer>(
-    obj: &RawObject,
-    base_dir: &Path,
-) -> (ObjectCategory, PathBuf) {
-    (T::category(), T::output_path(obj, base_dir))
-}
-
 /// Render an object using a handler type.
 ///
 /// This helper provides a generic interface to Renderer.
@@ -483,33 +373,10 @@ pub fn render_object<T: Renderer>(
     T::render(obj, related, config)
 }
 
-/// Get configuration from a handler type.
-///
-/// This helper provides a generic interface to Configurable.
-pub fn get_handler_config<T: Configurable>() -> (ObjectTypeConfig, Layer, bool) {
-    (T::default_config(), T::layer(), T::is_primary())
-}
-
-/// Full object handler interface combining all traits.
-///
-/// This helper uses the ObjectHandler supertrait.
-pub fn process_object<T: ObjectHandler>(
-    obj: &RawObject,
-    related: &RelatedObjects,
-    config: &OutputConfig,
-    base_dir: &Path,
-) -> (PathBuf, String, Layer) {
-    let path = T::output_path(obj, base_dir);
-    let output = T::render(obj, related, config);
-    let layer = T::layer();
-    (path, output, layer)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::import::handlers::attachments::TriggerHandler;
-    use std::path::Path;
+    use crate::commands::import::handlers::schema_objects::TableHandler;
 
     #[test]
     fn test_related_objects_is_empty() {
@@ -518,74 +385,17 @@ mod tests {
     }
 
     #[test]
-    fn test_helper_get_patterns() {
-        let patterns = get_patterns::<TriggerHandler>();
-        assert!(!patterns.is_empty());
-    }
-
-    #[test]
-    fn test_helper_extract_dependencies() {
-        let content = r#"CREATE TRIGGER my_trigger AFTER INSERT ON "public"."users" FOR EACH ROW EXECUTE FUNCTION "public"."notify"()"#;
-        let deps = extract_dependencies::<TriggerHandler>(content);
-        assert!(!deps.is_empty());
-    }
-
-    #[test]
-    fn test_helper_get_implicit_deps() {
-        let deps = get_implicit_deps::<TriggerHandler>();
-        assert!(deps.contains(&ObjectType::Function));
-    }
-
-    #[test]
-    fn test_helper_get_category_info() {
-        let obj = RawObject::new(
-            ObjectType::Trigger,
-            Some("public".to_string()),
-            "my_trigger".to_string(),
-            "CREATE TRIGGER...".to_string(),
-        );
-        let (category, path) = get_category_info::<TriggerHandler>(&obj, Path::new("/output"));
-        assert_eq!(category, ObjectCategory::TableAttachment);
-        assert!(path.to_string_lossy().contains("trigger"));
-    }
-
-    #[test]
     fn test_helper_render_object() {
         let obj = RawObject::new(
-            ObjectType::Trigger,
+            ObjectType::Table,
             Some("public".to_string()),
-            "my_trigger".to_string(),
-            "CREATE TRIGGER my_trigger...".to_string(),
+            "users".to_string(),
+            "CREATE TABLE users(id integer);".to_string(),
         );
         let related = RelatedObjects::new();
-        let config = OutputConfig::new();
-        let output = render_object::<TriggerHandler>(&obj, &related, &config);
-        assert!(output.contains("CREATE TRIGGER"));
-    }
-
-    #[test]
-    fn test_helper_get_handler_config() {
-        let (config, layer, is_primary) = get_handler_config::<TriggerHandler>();
-        assert!(!config.skip);
-        assert_eq!(layer, Layer::Append);
-        assert!(!is_primary);
-    }
-
-    #[test]
-    fn test_helper_process_object() {
-        let obj = RawObject::new(
-            ObjectType::Trigger,
-            Some("public".to_string()),
-            "my_trigger".to_string(),
-            "CREATE TRIGGER my_trigger...".to_string(),
-        );
-        let related = RelatedObjects::new();
-        let config = OutputConfig::new();
-        let (path, output, layer) =
-            process_object::<TriggerHandler>(&obj, &related, &config, Path::new("/output"));
-        assert!(path.to_string_lossy().contains("trigger"));
-        assert!(output.contains("CREATE TRIGGER"));
-        assert_eq!(layer, Layer::Append);
+        let config = OutputConfig::default();
+        let output = render_object::<TableHandler>(&obj, &related, &config);
+        assert!(output.contains("CREATE TABLE users"));
     }
 
     #[test]
@@ -610,8 +420,11 @@ mod tests {
     }
 
     #[test]
-    fn test_output_config_dry_run() {
-        let config = OutputConfig::dry_run();
+    fn test_output_config_manual_dry_run() {
+        let config = OutputConfig {
+            dry_run: true,
+            ..OutputConfig::default()
+        };
         assert!(config.dry_run);
         assert!(config.include_acl); // Other options still on
     }

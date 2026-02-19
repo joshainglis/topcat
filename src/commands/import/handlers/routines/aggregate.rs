@@ -21,7 +21,6 @@ use crate::commands::import::sources::pg_dump::AGGREGATE_PATTERN;
 ///
 /// Aggregates belong to the Normal layer and depend on types (for parameters/
 /// return type) and other functions (for their state transition functions).
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct AggregateHandler;
 
 impl PatternProvider for AggregateHandler {

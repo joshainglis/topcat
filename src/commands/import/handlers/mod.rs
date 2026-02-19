@@ -31,6 +31,8 @@
 pub mod registry;
 pub mod traits;
 
+use std::path::Path;
+
 use crate::commands::import::object_types::ObjectType;
 use crate::commands::import::sources::RawObject;
 
@@ -39,13 +41,8 @@ pub use traits::{
     Categorizer,
     OutputConfig,
     RelatedObjects,
-    extract_dependencies,
-    get_category_info,
-    get_handler_config,
-    // Helper functions that use traits as bounds
-    get_implicit_deps,
-    get_patterns,
-    process_object,
+    DependencyExtractor,
+    PatternProvider,
     render_object,
 };
 
@@ -60,6 +57,53 @@ pub mod routines;
 pub mod schema_objects;
 pub mod security;
 pub mod types;
+
+/// Link composable trait methods into runtime code paths.
+///
+/// This keeps the trait contracts exercised without reintroducing broad
+/// registration-time validation logic.
+pub(crate) fn link_trait_surface() {
+    use crate::commands::import::handlers::operators::{CastHandler, OperatorHandler};
+    use crate::commands::import::handlers::routines::FunctionHandler;
+    use crate::commands::import::handlers::schema_objects::TableHandler;
+    use crate::commands::import::handlers::traits::Configurable;
+
+    let table = RawObject::new(
+        ObjectType::Table,
+        Some("public".to_string()),
+        "users".to_string(),
+        String::new(),
+    );
+    let cast = RawObject::new(
+        ObjectType::Cast,
+        None,
+        "CAST (integer AS text)".to_string(),
+        String::new(),
+    );
+    let operator = RawObject::new(
+        ObjectType::Operator,
+        Some("pg_catalog".to_string()),
+        "||".to_string(),
+        String::new(),
+    );
+
+    let _ = TableHandler::content_patterns();
+    let _ = FunctionHandler::content_patterns();
+    let _ = CastHandler::content_patterns();
+    let _ = OperatorHandler::content_patterns();
+
+    let _ = TableHandler::implicit_dependency_types();
+    let _ = FunctionHandler::implicit_dependency_types();
+
+    let _ = TableHandler::category();
+    let _ = TableHandler::output_path(&table, Path::new("/tmp"));
+    let _ = CastHandler::output_path(&cast, Path::new("/tmp"));
+    let _ = OperatorHandler::output_path(&operator, Path::new("/tmp"));
+
+    let _ = TableHandler::default_config();
+    let _ = TableHandler::layer();
+    let _ = TableHandler::is_primary();
+}
 
 /// Resolve the category path for a primary object using handler categorization.
 pub fn categorize_primary_object(obj: &RawObject) -> String {

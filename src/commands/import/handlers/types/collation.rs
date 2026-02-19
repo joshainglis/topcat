@@ -21,7 +21,6 @@ use crate::commands::import::sources::pg_dump::COLLATION_PATTERN;
 ///
 /// Collations belong to the Prepend layer as they are foundational objects
 /// that columns and indexes may depend on.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct CollationHandler;
 
 impl PatternProvider for CollationHandler {

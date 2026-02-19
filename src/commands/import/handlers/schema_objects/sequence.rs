@@ -18,7 +18,6 @@ use crate::commands::import::sources::pg_dump::SEQUENCE_PATTERN;
 ///
 /// Sequences are auto-incrementing number generators. They belong to the
 /// Normal layer and are often owned by tables (for SERIAL columns).
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct SequenceHandler;
 
 impl PatternProvider for SequenceHandler {

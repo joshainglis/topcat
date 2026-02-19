@@ -21,7 +21,6 @@ use crate::commands::import::sources::pg_dump::CONSTRAINT_PATTERN;
 /// constraints are handled separately by [`FkConstraintHandler`].
 ///
 /// Constraints belong to the Append layer and attach to their parent table.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct ConstraintHandler;
 
 impl PatternProvider for ConstraintHandler {

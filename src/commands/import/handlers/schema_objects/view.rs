@@ -18,7 +18,6 @@ use crate::commands::import::sources::pg_dump::VIEW_PATTERN;
 ///
 /// Views are virtual tables defined by a query. They belong to the Normal
 /// layer and depend on the tables, views, and functions they reference.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct ViewHandler;
 
 impl PatternProvider for ViewHandler {

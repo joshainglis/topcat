@@ -18,7 +18,6 @@ use crate::commands::import::sources::pg_dump::MATERIALIZED_VIEW_PATTERN;
 ///
 /// Materialized views are views that cache their results. They belong to the
 /// Normal layer and depend on the tables, views, and functions they reference.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct MaterializedViewHandler;
 
 impl PatternProvider for MaterializedViewHandler {

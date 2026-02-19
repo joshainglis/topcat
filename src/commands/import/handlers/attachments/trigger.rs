@@ -7,8 +7,8 @@ use regex::Regex;
 
 use crate::commands::import::handlers::registry::RegisteredHandler;
 use crate::commands::import::handlers::traits::{
-    Categorizer, Configurable, DependencyExtractor, ObjectHandler, OutputConfig, PatternProvider,
-    RelatedObjects, Renderer,
+    Categorizer, Configurable, DependencyExtractor, OutputConfig, PatternProvider, RelatedObjects,
+    Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
 use crate::commands::import::sources::RawObject;
@@ -81,12 +81,6 @@ impl Configurable for TriggerHandler {
 impl Renderer for TriggerHandler {
     fn render(obj: &RawObject, _related: &RelatedObjects, _config: &OutputConfig) -> String {
         obj.content.clone()
-    }
-}
-
-impl ObjectHandler for TriggerHandler {
-    fn object_type() -> ObjectType {
-        ObjectType::Trigger
     }
 }
 

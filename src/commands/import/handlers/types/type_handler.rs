@@ -26,7 +26,6 @@ use crate::commands::import::sources::pg_dump::TYPE_PATTERN;
 ///
 /// Types belong to the Prepend layer as they are foundational objects
 /// that other objects depend on.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct TypeHandler;
 
 impl PatternProvider for TypeHandler {

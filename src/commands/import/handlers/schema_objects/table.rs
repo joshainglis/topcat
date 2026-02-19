@@ -7,8 +7,8 @@ use regex::Regex;
 
 use crate::commands::import::handlers::registry::RegisteredHandler;
 use crate::commands::import::handlers::traits::{
-    Categorizer, Configurable, DependencyExtractor, ObjectHandler, OutputConfig, PatternProvider,
-    RelatedObjects, Renderer,
+    Categorizer, Configurable, DependencyExtractor, OutputConfig, PatternProvider, RelatedObjects,
+    Renderer,
 };
 use crate::commands::import::object_types::{Layer, ObjectCategory, ObjectType, ObjectTypeConfig};
 use crate::commands::import::sources::RawObject;
@@ -71,12 +71,6 @@ impl Renderer for TableHandler {
         }
 
         parts.join("\n\n")
-    }
-}
-
-impl ObjectHandler for TableHandler {
-    fn object_type() -> ObjectType {
-        ObjectType::Table
     }
 }
 

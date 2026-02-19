@@ -19,7 +19,6 @@ use crate::commands::import::sources::pg_dump::FDW_PATTERN;
 /// Foreign data wrappers provide the mechanism for accessing external data sources.
 /// They are global objects (no schema) and belong to the Prepend layer as they are
 /// foundation objects that servers and foreign tables depend on.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct WrapperHandler;
 
 impl PatternProvider for WrapperHandler {

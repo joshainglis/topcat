@@ -19,6 +19,9 @@ mod operator;
 mod operator_class;
 mod operator_family;
 
+pub use cast::CastHandler;
+pub use operator::OperatorHandler;
+
 use super::registry::HandlerRegistry;
 
 /// Register all operator-related handlers with the registry.

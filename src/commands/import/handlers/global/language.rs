@@ -26,7 +26,6 @@ use crate::commands::import::sources::pg_dump::LANGUAGE_PATTERN;
 /// Examples:
 /// - `CREATE PROCEDURAL LANGUAGE plpgsql;`
 /// - `CREATE TRUSTED LANGUAGE plpython3u;`
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct LanguageHandler;
 
 impl PatternProvider for LanguageHandler {

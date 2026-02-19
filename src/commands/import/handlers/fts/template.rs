@@ -23,7 +23,6 @@ use crate::commands::import::sources::pg_dump::FTS_TEMPLATE_PATTERN;
 ///
 /// Templates belong to the Prepend layer as they are the most fundamental FTS objects.
 /// Dictionaries depend on templates.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct TemplateHandler;
 
 impl PatternProvider for TemplateHandler {

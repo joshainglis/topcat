@@ -21,7 +21,6 @@ use crate::commands::import::sources::pg_dump::DEFAULT_PATTERN;
 /// appear separately in pg_dump output.
 ///
 /// Defaults belong to the Append layer and attach to their parent table.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct DefaultHandler;
 
 impl PatternProvider for DefaultHandler {

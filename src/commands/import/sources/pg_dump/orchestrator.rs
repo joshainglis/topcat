@@ -16,7 +16,9 @@ use crate::commands::import::handlers::{
     HandlerRegistry, OutputConfig, RelatedObjects, categorize_primary_object, render_primary_object,
 };
 use crate::commands::import::object_types::{Layer, ObjectType};
-use crate::commands::import::output::header_builder::HeaderBuilder;
+use crate::commands::import::output::header_builder::{
+    HeaderBuilder, build_global_header, build_header,
+};
 use crate::commands::import::sources::{RawObject, SecurityKind, SecurityStatement};
 use topcat::exceptions::TopCatError;
 use topcat::logging::Logger;
@@ -859,21 +861,13 @@ impl ImportOrchestrator {
                             None
                         };
 
-                        // Build header using HeaderBuilder with chainable methods
-                        let mut builder = HeaderBuilder::new(schema_name, name)
-                            .with_layer_generation(output_config.generate_layers);
-
-                        // Add layer if available using chainable method
-                        if let Some(l) = layer {
-                            builder = builder.layer(l);
-                        }
-
-                        // Add dependencies using chainable method
-                        if let Some(ref deps) = requires {
-                            builder = builder.requires(deps.iter().cloned());
-                        }
-
-                        let mut header = builder.build();
+                        let mut header = build_header(
+                            schema_name,
+                            name,
+                            layer,
+                            requires.as_ref(),
+                            output_config.generate_layers,
+                        );
 
                         // Add identity comments for overloaded functions
                         if identities.len() > 1 {
@@ -949,19 +943,12 @@ impl ImportOrchestrator {
                             None
                         };
 
-                        // Build header using HeaderBuilder with chainable methods
-                        let mut builder = HeaderBuilder::global(&obj.name)
-                            .layer(obj.layer)
-                            .with_layer_generation(output_config.generate_layers);
-
-                        // Add each dependency using require() chainable method
-                        if let Some(ref deps) = requires {
-                            for dep in deps.iter() {
-                                builder = builder.require(dep.clone());
-                            }
-                        }
-
-                        let header = builder.build();
+                        let header = build_global_header(
+                            &obj.name,
+                            Some(obj.layer),
+                            requires.as_ref(),
+                            output_config.generate_layers,
+                        );
                         let mut full_content = format!("{header}{}", obj.content);
 
                         // Add owner if present

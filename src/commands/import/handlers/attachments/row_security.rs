@@ -21,7 +21,6 @@ use crate::commands::import::sources::pg_dump::ROW_SECURITY_PATTERN;
 ///
 /// Row security belongs to the Append layer and attaches to the parent table.
 /// It must be enabled before policies can be applied.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct RowSecurityHandler;
 
 impl PatternProvider for RowSecurityHandler {

@@ -19,7 +19,6 @@ use crate::commands::import::sources::pg_dump::PUBLICATION_PATTERN;
 /// Publications define which tables are available for logical replication.
 /// They are global objects (no schema) that belong to the Normal layer.
 /// Publications don't have dependencies on other objects.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct PublicationHandler;
 
 impl PatternProvider for PublicationHandler {

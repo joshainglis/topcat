@@ -23,7 +23,6 @@ use crate::commands::import::sources::pg_dump::FTS_DICTIONARY_PATTERN;
 ///
 /// Dictionaries belong to the Prepend layer as they are foundation objects
 /// that configurations depend on.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct DictionaryHandler;
 
 impl PatternProvider for DictionaryHandler {

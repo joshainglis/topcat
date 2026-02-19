@@ -72,21 +72,9 @@ impl HeaderBuilder {
         self
     }
 
-    /// Add a single dependency.
-    pub fn require(mut self, dep: impl Into<String>) -> Self {
-        self.requires.insert(dep.into());
-        self
-    }
-
     /// Add multiple dependencies.
     pub fn requires(mut self, deps: impl IntoIterator<Item = String>) -> Self {
         self.requires.extend(deps);
-        self
-    }
-
-    /// Add dependencies from a HashSet reference.
-    pub fn requires_from(mut self, deps: &HashSet<String>) -> Self {
-        self.requires.extend(deps.iter().cloned());
         self
     }
 
@@ -156,7 +144,7 @@ pub fn build_header(
         .maybe_layer(layer);
 
     if let Some(deps) = requires {
-        builder = builder.requires_from(deps);
+        builder = builder.requires(deps.iter().cloned());
     }
 
     builder.build()
@@ -191,7 +179,7 @@ pub fn build_global_header(
         .maybe_layer(layer);
 
     if let Some(deps) = requires {
-        builder = builder.requires_from(deps);
+        builder = builder.requires(deps.iter().cloned());
     }
 
     builder.build()
@@ -219,8 +207,7 @@ mod tests {
     #[test]
     fn test_header_builder_with_requires() {
         let header = HeaderBuilder::new("public", "orders")
-            .require("public.users")
-            .require("auth.roles")
+            .requires(vec!["public.users".to_string(), "auth.roles".to_string()])
             .build();
 
         assert!(header.contains("-- name: public.orders"));
@@ -254,9 +241,11 @@ mod tests {
     #[test]
     fn test_header_builder_sorted_deps() {
         let header = HeaderBuilder::new("public", "orders")
-            .require("z_table")
-            .require("a_table")
-            .require("m_table")
+            .requires(vec![
+                "z_table".to_string(),
+                "a_table".to_string(),
+                "m_table".to_string(),
+            ])
             .build();
 
         // Dependencies should be sorted

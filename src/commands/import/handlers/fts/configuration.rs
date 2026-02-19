@@ -24,7 +24,6 @@ use crate::commands::import::sources::pg_dump::FTS_CONFIG_PATTERN;
 ///
 /// Configurations belong to the Prepend layer as they are foundation objects
 /// that other objects may depend on.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct ConfigurationHandler;
 
 impl PatternProvider for ConfigurationHandler {

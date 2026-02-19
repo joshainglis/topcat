@@ -28,7 +28,6 @@ pub static EXTENSION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 ///
 /// Extensions are pre-packaged modules that add functionality to PostgreSQL.
 /// They are foundation objects in the Prepend layer.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct ExtensionHandler;
 
 impl PatternProvider for ExtensionHandler {

@@ -22,7 +22,6 @@ mod sequence;
 mod table;
 mod view;
 
-// TableHandler is used by the orchestrator's validate_handler_traits
 pub use table::TableHandler;
 
 use super::registry::HandlerRegistry;

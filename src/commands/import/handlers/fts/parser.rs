@@ -23,7 +23,6 @@ use crate::commands::import::sources::pg_dump::FTS_PARSER_PATTERN;
 ///
 /// Parsers belong to the Prepend layer as they are the most fundamental FTS objects.
 /// Configurations depend on parsers.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct ParserHandler;
 
 impl PatternProvider for ParserHandler {

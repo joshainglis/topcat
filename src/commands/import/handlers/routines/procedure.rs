@@ -22,7 +22,6 @@ use crate::commands::import::sources::pg_dump::PROCEDURE_PATTERN;
 ///
 /// Procedures belong to the Normal layer and share the same dependencies as
 /// functions.
-#[allow(dead_code)] // Marker type for trait implementations
 pub struct ProcedureHandler;
 
 impl PatternProvider for ProcedureHandler {
