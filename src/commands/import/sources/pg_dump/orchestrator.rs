@@ -12,10 +12,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use crate::commands::import::dependencies::DependencyAnalyzer;
-use crate::commands::import::handlers::{
-    HandlerRegistry, OutputConfig, RelatedObjects, extract_dependencies, get_category_info,
-    get_handler_config, get_implicit_deps, get_patterns, process_object, render_object,
-};
+use crate::commands::import::handlers::{HandlerRegistry, OutputConfig, RelatedObjects};
 use crate::commands::import::object_types::{Layer, ObjectType, TypeSubcategory};
 use crate::commands::import::output::header_builder::HeaderBuilder;
 use crate::commands::import::sources::{RawObject, SecurityKind, SecurityStatement};
@@ -234,9 +231,6 @@ impl ImportOrchestrator {
             None
         };
 
-        // Validate handler traits are properly wired (uses traits as bounds)
-        Self::validate_handler_traits();
-
         Self {
             config,
             logger,
@@ -247,71 +241,6 @@ impl ImportOrchestrator {
             global_objects: Vec::new(),
             default_acl: Vec::new(),
         }
-    }
-
-    /// Validate that handler traits are properly configured.
-    ///
-    /// This function uses the trait-bound helper functions to verify handlers
-    /// implement all required traits correctly. Called during initialization
-    /// to ensure the handler system is properly wired.
-    fn validate_handler_traits() {
-        use crate::commands::import::handlers::attachments::TriggerHandler;
-        use crate::commands::import::handlers::schema_objects::TableHandler;
-        use crate::commands::import::handlers::traits::ObjectHandler;
-        use std::path::Path;
-
-        // Validate PatternProvider trait via helper function
-        let _trigger_patterns = get_patterns::<TriggerHandler>();
-
-        // Validate ObjectHandler::object_type() method
-        let _table_type = TableHandler::object_type();
-        let _trigger_type = TriggerHandler::object_type();
-
-        // Validate DependencyExtractor trait via helper function
-        let _deps = extract_dependencies::<TriggerHandler>("");
-        let _implicit = get_implicit_deps::<TriggerHandler>();
-
-        // Validate extract_deps_with_pattern helper
-        use crate::commands::import::handlers::traits::extract_deps_with_pattern;
-        use crate::commands::import::sources::pg_dump::TRIGGER_PATTERN;
-        let _pattern_deps = extract_deps_with_pattern(
-            "CREATE TRIGGER test ON table EXECUTE FUNCTION func()",
-            &TRIGGER_PATTERN,
-            &[("fn_name", Some("fn_schema"), ObjectType::Function)],
-        );
-
-        // Validate Categorizer trait via helper function
-        let test_obj = RawObject::new(
-            ObjectType::Table,
-            Some("public".to_string()),
-            "test".to_string(),
-            "".to_string(),
-        );
-        let (_category, _path) = get_category_info::<TableHandler>(&test_obj, Path::new("/tmp"));
-
-        // Validate Renderer trait via helper function
-        let related = RelatedObjects::new();
-        let config = OutputConfig::new();
-        let dry_run_config = OutputConfig::dry_run();
-        let _rendered = render_object::<TriggerHandler>(&test_obj, &related, &config);
-        let _dry_rendered = render_object::<TriggerHandler>(&test_obj, &related, &dry_run_config);
-
-        // Validate Configurable trait via helper function
-        let (_type_config, _layer, _primary) = get_handler_config::<TriggerHandler>();
-
-        // Validate ObjectHandler composite trait via helper function
-        let (_path, _output, _layer) =
-            process_object::<TableHandler>(&test_obj, &related, &config, Path::new("/tmp"));
-
-        // Validate header builder convenience functions
-        use crate::commands::import::output::header_builder::{build_global_header, build_header};
-        use std::collections::HashSet;
-        let mut deps = HashSet::new();
-        deps.insert("dep1".to_string());
-        let _header = build_header("public", "test", Some(Layer::Normal), Some(&deps), true);
-        let _global_header = build_global_header("test", Some(Layer::Prepend), None, true);
-
-        log::debug!("Handler traits validated successfully");
     }
 
     /// Process objects and write files.

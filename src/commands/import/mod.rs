@@ -28,9 +28,6 @@
 //! topcat import pg-dump database.sql ./output/ --schema-pattern "app_\\w+"
 //! ```
 
-// TODO: Remove this allow once all handler infrastructure is wired up
-// #![allow(dead_code)]
-
 // Core modules (existing)
 mod dependencies;
 mod object_types;
