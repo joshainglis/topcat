@@ -82,133 +82,161 @@ pub enum ObjectType {
     Unknown,
 }
 
+struct ObjectTypeMetadata {
+    obj_type: ObjectType,
+    canonical: &'static str,
+    aliases: &'static [&'static str],
+}
+
+const fn object_type_metadata(
+    obj_type: ObjectType,
+    canonical: &'static str,
+    aliases: &'static [&'static str],
+) -> ObjectTypeMetadata {
+    ObjectTypeMetadata {
+        obj_type,
+        canonical,
+        aliases,
+    }
+}
+
+const OBJECT_TYPE_METADATA: [ObjectTypeMetadata; 45] = [
+    object_type_metadata(ObjectType::Schema, "SCHEMA", &["SCHEMA"]),
+    object_type_metadata(ObjectType::Extension, "EXTENSION", &["EXTENSION"]),
+    object_type_metadata(ObjectType::Table, "TABLE", &["TABLE"]),
+    object_type_metadata(ObjectType::View, "VIEW", &["VIEW"]),
+    object_type_metadata(
+        ObjectType::MaterializedView,
+        "MATERIALIZED VIEW",
+        &["MATERIALIZED VIEW"],
+    ),
+    object_type_metadata(
+        ObjectType::ForeignTable,
+        "FOREIGN TABLE",
+        &["FOREIGN TABLE"],
+    ),
+    object_type_metadata(
+        ObjectType::Sequence,
+        "SEQUENCE",
+        &["SEQUENCE", "SEQUENCE OWNED BY"],
+    ),
+    object_type_metadata(ObjectType::Type, "TYPE", &["TYPE"]),
+    object_type_metadata(ObjectType::Domain, "DOMAIN", &["DOMAIN"]),
+    object_type_metadata(ObjectType::Collation, "COLLATION", &["COLLATION"]),
+    object_type_metadata(ObjectType::Function, "FUNCTION", &["FUNCTION"]),
+    object_type_metadata(ObjectType::Procedure, "PROCEDURE", &["PROCEDURE"]),
+    object_type_metadata(ObjectType::Aggregate, "AGGREGATE", &["AGGREGATE"]),
+    object_type_metadata(ObjectType::Index, "INDEX", &["INDEX"]),
+    object_type_metadata(ObjectType::Constraint, "CONSTRAINT", &["CONSTRAINT"]),
+    object_type_metadata(
+        ObjectType::FkConstraint,
+        "FK CONSTRAINT",
+        &["FK CONSTRAINT"],
+    ),
+    object_type_metadata(ObjectType::Trigger, "TRIGGER", &["TRIGGER"]),
+    object_type_metadata(ObjectType::Policy, "POLICY", &["POLICY"]),
+    object_type_metadata(ObjectType::RowSecurity, "ROW SECURITY", &["ROW SECURITY"]),
+    object_type_metadata(ObjectType::Default, "DEFAULT", &["DEFAULT"]),
+    object_type_metadata(ObjectType::Statistics, "STATISTICS", &["STATISTICS"]),
+    object_type_metadata(ObjectType::Rule, "RULE", &["RULE"]),
+    object_type_metadata(
+        ObjectType::TextSearchConfiguration,
+        "TEXT SEARCH CONFIGURATION",
+        &["TEXT SEARCH CONFIGURATION"],
+    ),
+    object_type_metadata(
+        ObjectType::TextSearchDictionary,
+        "TEXT SEARCH DICTIONARY",
+        &["TEXT SEARCH DICTIONARY"],
+    ),
+    object_type_metadata(
+        ObjectType::TextSearchParser,
+        "TEXT SEARCH PARSER",
+        &["TEXT SEARCH PARSER"],
+    ),
+    object_type_metadata(
+        ObjectType::TextSearchTemplate,
+        "TEXT SEARCH TEMPLATE",
+        &["TEXT SEARCH TEMPLATE"],
+    ),
+    object_type_metadata(
+        ObjectType::ForeignDataWrapper,
+        "FOREIGN DATA WRAPPER",
+        &["FOREIGN DATA WRAPPER"],
+    ),
+    object_type_metadata(ObjectType::Server, "SERVER", &["SERVER", "FOREIGN SERVER"]),
+    object_type_metadata(ObjectType::UserMapping, "USER MAPPING", &["USER MAPPING"]),
+    object_type_metadata(ObjectType::Operator, "OPERATOR", &["OPERATOR"]),
+    object_type_metadata(
+        ObjectType::OperatorClass,
+        "OPERATOR CLASS",
+        &["OPERATOR CLASS"],
+    ),
+    object_type_metadata(
+        ObjectType::OperatorFamily,
+        "OPERATOR FAMILY",
+        &["OPERATOR FAMILY"],
+    ),
+    object_type_metadata(
+        ObjectType::AccessMethod,
+        "ACCESS METHOD",
+        &["ACCESS METHOD"],
+    ),
+    object_type_metadata(ObjectType::Cast, "CAST", &["CAST"]),
+    object_type_metadata(ObjectType::Publication, "PUBLICATION", &["PUBLICATION"]),
+    object_type_metadata(ObjectType::Subscription, "SUBSCRIPTION", &["SUBSCRIPTION"]),
+    object_type_metadata(
+        ObjectType::EventTrigger,
+        "EVENT TRIGGER",
+        &["EVENT TRIGGER"],
+    ),
+    object_type_metadata(
+        ObjectType::Language,
+        "PROCEDURAL LANGUAGE",
+        &["PROCEDURAL LANGUAGE", "LANGUAGE"],
+    ),
+    object_type_metadata(ObjectType::Transform, "TRANSFORM", &["TRANSFORM"]),
+    object_type_metadata(ObjectType::Conversion, "CONVERSION", &["CONVERSION"]),
+    object_type_metadata(ObjectType::Acl, "ACL", &["ACL"]),
+    object_type_metadata(ObjectType::DefaultAcl, "DEFAULT ACL", &["DEFAULT ACL"]),
+    object_type_metadata(
+        ObjectType::SecurityLabel,
+        "SECURITY LABEL",
+        &["SECURITY LABEL"],
+    ),
+    object_type_metadata(ObjectType::Comment, "COMMENT", &["COMMENT"]),
+    object_type_metadata(ObjectType::Unknown, "UNKNOWN", &["UNKNOWN"]),
+];
+
 impl ObjectType {
+    /// Return all object types known to the import system.
+    pub fn all() -> Vec<Self> {
+        OBJECT_TYPE_METADATA
+            .iter()
+            .map(|metadata| metadata.obj_type)
+            .collect()
+    }
+
     /// Parse an object type from pg_dump metadata comment.
     ///
     /// The type string comes from the `Type:` field in pg_dump comments like:
     /// `-- Name: users; Type: TABLE; Schema: public;`
     pub fn from_pg_dump_type(type_str: &str) -> Self {
-        match type_str.trim().to_uppercase().as_str() {
-            // Schema-level structural objects
-            "SCHEMA" => Self::Schema,
-            "EXTENSION" => Self::Extension,
-            "TABLE" => Self::Table,
-            "VIEW" => Self::View,
-            "MATERIALIZED VIEW" => Self::MaterializedView,
-            "FOREIGN TABLE" => Self::ForeignTable,
-            "SEQUENCE" | "SEQUENCE OWNED BY" => Self::Sequence,
-
-            // Types
-            "TYPE" => Self::Type,
-            "DOMAIN" => Self::Domain,
-            "COLLATION" => Self::Collation,
-
-            // Routines
-            "FUNCTION" => Self::Function,
-            "PROCEDURE" => Self::Procedure,
-            "AGGREGATE" => Self::Aggregate,
-
-            // Table attachments
-            "INDEX" => Self::Index,
-            "CONSTRAINT" => Self::Constraint,
-            "FK CONSTRAINT" => Self::FkConstraint,
-            "TRIGGER" => Self::Trigger,
-            "POLICY" => Self::Policy,
-            "ROW SECURITY" => Self::RowSecurity,
-            "DEFAULT" => Self::Default,
-            "STATISTICS" => Self::Statistics,
-            "RULE" => Self::Rule,
-
-            // Full Text Search
-            "TEXT SEARCH CONFIGURATION" => Self::TextSearchConfiguration,
-            "TEXT SEARCH DICTIONARY" => Self::TextSearchDictionary,
-            "TEXT SEARCH PARSER" => Self::TextSearchParser,
-            "TEXT SEARCH TEMPLATE" => Self::TextSearchTemplate,
-
-            // Foreign Data Wrapper
-            "FOREIGN DATA WRAPPER" => Self::ForeignDataWrapper,
-            "SERVER" | "FOREIGN SERVER" => Self::Server,
-            "USER MAPPING" => Self::UserMapping,
-
-            // Operators and Access Methods
-            "OPERATOR" => Self::Operator,
-            "OPERATOR CLASS" => Self::OperatorClass,
-            "OPERATOR FAMILY" => Self::OperatorFamily,
-            "ACCESS METHOD" => Self::AccessMethod,
-            "CAST" => Self::Cast,
-
-            // Replication
-            "PUBLICATION" => Self::Publication,
-            "SUBSCRIPTION" => Self::Subscription,
-
-            // Database-level
-            "EVENT TRIGGER" => Self::EventTrigger,
-            "PROCEDURAL LANGUAGE" | "LANGUAGE" => Self::Language,
-            "TRANSFORM" => Self::Transform,
-            "CONVERSION" => Self::Conversion,
-
-            // Security
-            "ACL" => Self::Acl,
-            "DEFAULT ACL" => Self::DefaultAcl,
-            "SECURITY LABEL" => Self::SecurityLabel,
-
-            // Comments
-            "COMMENT" => Self::Comment,
-
-            // Unknown
-            _ => Self::Unknown,
-        }
+        let normalized = type_str.trim().to_uppercase();
+        OBJECT_TYPE_METADATA
+            .iter()
+            .find(|metadata| metadata.aliases.contains(&normalized.as_str()))
+            .map(|metadata| metadata.obj_type)
+            .unwrap_or(Self::Unknown)
     }
 
     /// Get the pg_dump type string representation.
     pub fn as_pg_dump_type(&self) -> &'static str {
-        match self {
-            Self::Schema => "SCHEMA",
-            Self::Extension => "EXTENSION",
-            Self::Table => "TABLE",
-            Self::View => "VIEW",
-            Self::MaterializedView => "MATERIALIZED VIEW",
-            Self::ForeignTable => "FOREIGN TABLE",
-            Self::Sequence => "SEQUENCE",
-            Self::Type => "TYPE",
-            Self::Domain => "DOMAIN",
-            Self::Collation => "COLLATION",
-            Self::Function => "FUNCTION",
-            Self::Procedure => "PROCEDURE",
-            Self::Aggregate => "AGGREGATE",
-            Self::Index => "INDEX",
-            Self::Constraint => "CONSTRAINT",
-            Self::FkConstraint => "FK CONSTRAINT",
-            Self::Trigger => "TRIGGER",
-            Self::Policy => "POLICY",
-            Self::RowSecurity => "ROW SECURITY",
-            Self::Default => "DEFAULT",
-            Self::Statistics => "STATISTICS",
-            Self::Rule => "RULE",
-            Self::TextSearchConfiguration => "TEXT SEARCH CONFIGURATION",
-            Self::TextSearchDictionary => "TEXT SEARCH DICTIONARY",
-            Self::TextSearchParser => "TEXT SEARCH PARSER",
-            Self::TextSearchTemplate => "TEXT SEARCH TEMPLATE",
-            Self::ForeignDataWrapper => "FOREIGN DATA WRAPPER",
-            Self::Server => "SERVER",
-            Self::UserMapping => "USER MAPPING",
-            Self::Operator => "OPERATOR",
-            Self::OperatorClass => "OPERATOR CLASS",
-            Self::OperatorFamily => "OPERATOR FAMILY",
-            Self::AccessMethod => "ACCESS METHOD",
-            Self::Cast => "CAST",
-            Self::Publication => "PUBLICATION",
-            Self::Subscription => "SUBSCRIPTION",
-            Self::EventTrigger => "EVENT TRIGGER",
-            Self::Language => "PROCEDURAL LANGUAGE",
-            Self::Transform => "TRANSFORM",
-            Self::Conversion => "CONVERSION",
-            Self::Acl => "ACL",
-            Self::DefaultAcl => "DEFAULT ACL",
-            Self::SecurityLabel => "SECURITY LABEL",
-            Self::Comment => "COMMENT",
-            Self::Unknown => "UNKNOWN",
-        }
+        OBJECT_TYPE_METADATA
+            .iter()
+            .find(|metadata| metadata.obj_type == *self)
+            .map(|metadata| metadata.canonical)
+            .unwrap_or("UNKNOWN")
     }
 
     /// Check if this is a primary object type (not an attachment).
@@ -701,6 +729,21 @@ impl From<ObjectType> for Option<FtsSubcategory> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_object_type_all_round_trip() {
+        let all_types = ObjectType::all();
+        assert!(all_types.contains(&ObjectType::Unknown));
+
+        for object_type in all_types {
+            let as_text = object_type.as_pg_dump_type();
+            let parsed = ObjectType::from_pg_dump_type(as_text);
+            assert_eq!(
+                parsed, object_type,
+                "round-trip failed for canonical type string: {as_text}"
+            );
+        }
+    }
 
     #[test]
     fn test_object_type_parsing() {

@@ -60,6 +60,26 @@ fn test_concat_with_extension_filter() {
 }
 
 #[test]
+fn test_concat_with_uppercase_extension_filter() {
+    let temp_dir = TempDir::new().unwrap();
+    let output_file = temp_dir.path().join("output.sql");
+
+    topcat_cmd()
+        .args([
+            "concat",
+            "-i",
+            test_input_dir().to_str().unwrap(),
+            "-e",
+            "SQL",
+            output_file.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    assert!(output_file.exists());
+}
+
+#[test]
 fn test_concat_missing_input_directory() {
     let temp_dir = TempDir::new().unwrap();
     let output_file = temp_dir.path().join("output.sql");

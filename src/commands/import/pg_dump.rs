@@ -28,11 +28,10 @@ use clap::Args;
 
 use topcat::cli::GlobalArgs;
 use topcat::exceptions::TopCatError;
-use topcat::logging::{Logger, init_logging};
-use topcat::settings::Settings;
 
 use super::sources::ImportSource;
 use super::sources::pg_dump::{ImportOrchestrator, OrchestratorConfig, PgDumpParser};
+use crate::commands::common as cmd_common;
 
 /// Command-line arguments for the pg-dump import subcommand.
 #[derive(Debug, Args, Clone)]
@@ -76,19 +75,14 @@ pub struct PgDumpArgs {
 impl PgDumpArgs {
     /// Execute the pg-dump import command.
     pub fn execute(&self) -> Result<(), TopCatError> {
-        // Load settings
-        let config_path = self.global.config_path();
-        let mut settings = Settings::load(config_path)
-            .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
-
-        // Apply CLI overrides
-        self.global.apply_to_settings(&mut settings);
+        // Load settings and apply global CLI overrides
+        let settings =
+            cmd_common::load_settings_with_overrides(self.global.config_path(), |settings| {
+                self.global.apply_to_settings(settings);
+            })?;
 
         // Initialize logging
-        let quiet = settings.behavior.quiet;
-        let verbose = settings.behavior.verbose;
-        init_logging(verbose, quiet);
-        let logger = Logger::new(quiet, verbose);
+        let logger = cmd_common::init_logger_from_settings(&settings);
 
         // Validate input file
         if !self.dump_file.exists() {

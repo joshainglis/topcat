@@ -59,7 +59,9 @@ pub mod types;
 /// registration-time validation logic.
 pub(crate) fn link_trait_surface() {
     use crate::commands::import::handlers::operators::{CastHandler, OperatorHandler};
-    use crate::commands::import::handlers::routines::FunctionHandler;
+    use crate::commands::import::handlers::routines::{
+        AggregateHandler, FunctionHandler, ProcedureHandler,
+    };
     use crate::commands::import::handlers::schema_objects::TableHandler;
     use crate::commands::import::handlers::traits::Configurable;
 
@@ -84,11 +86,15 @@ pub(crate) fn link_trait_surface() {
 
     let _ = TableHandler::content_patterns();
     let _ = FunctionHandler::content_patterns();
+    let _ = ProcedureHandler::content_patterns();
+    let _ = AggregateHandler::content_patterns();
     let _ = CastHandler::content_patterns();
     let _ = OperatorHandler::content_patterns();
 
     let _ = TableHandler::implicit_dependency_types();
     let _ = FunctionHandler::implicit_dependency_types();
+    let _ = ProcedureHandler::implicit_dependency_types();
+    let _ = AggregateHandler::implicit_dependency_types();
 
     let _ = TableHandler::category();
     let _ = TableHandler::output_path(&table, Path::new("/tmp"));

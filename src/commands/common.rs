@@ -11,7 +11,9 @@ use topcat::analysis::external_usage::ExternalUsageChecker;
 use topcat::config;
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
+use topcat::logging::{Logger, init_logging};
 use topcat::schema_utils::SchemaFilter;
+use topcat::settings::Settings;
 use topcat::sql_config;
 
 // ============================================================================
@@ -55,6 +57,57 @@ pub fn null_device() -> &'static str {
 /// ```
 pub fn build_schema_filter(schema_filter: &[String]) -> SchemaFilter {
     SchemaFilter::from(schema_filter)
+}
+
+// ============================================================================
+// Command Bootstrap
+// ============================================================================
+
+const REQUIRED_INPUT_DIRS_MESSAGE: &str =
+    "At least one input directory must be specified via -i/--input-dirs or config file";
+
+/// Convert a slice into an Option<Vec<T>> where empty slices map to None.
+pub fn vec_to_option<T: Clone>(items: &[T]) -> Option<Vec<T>> {
+    if items.is_empty() {
+        None
+    } else {
+        Some(items.to_vec())
+    }
+}
+
+/// Load settings and apply command-specific CLI overrides.
+pub fn load_settings_with_overrides<F>(
+    config_path: Option<&str>,
+    apply_overrides: F,
+) -> Result<Settings, TopCatError>
+where
+    F: FnOnce(&mut Settings),
+{
+    let mut settings = Settings::load(config_path)
+        .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
+    apply_overrides(&mut settings);
+    Ok(settings)
+}
+
+/// Validate settings and optionally require at least one input directory.
+pub fn validate_settings(settings: &Settings, require_input_dirs: bool) -> Result<(), TopCatError> {
+    settings.validate().map_err(TopCatError::ConfigError)?;
+
+    if require_input_dirs && settings.input_dirs.is_empty() {
+        return Err(TopCatError::ConfigError(
+            REQUIRED_INPUT_DIRS_MESSAGE.to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+/// Initialize logging from settings and return a logger.
+pub fn init_logger_from_settings(settings: &Settings) -> Logger {
+    let quiet = settings.behavior.quiet;
+    let verbose = settings.behavior.verbose;
+    init_logging(verbose, quiet);
+    Logger::new(quiet, verbose)
 }
 
 // ============================================================================
@@ -223,37 +276,22 @@ pub fn build_graph_from_settings(
         .clone()
         .unwrap_or_else(|| settings.schema_filtering.schemas.clone());
 
-    let include_node_prefixes = if schema_filter.is_empty() {
-        None
-    } else {
-        build_schema_filter(&schema_filter).to_option()
-    };
+    let include_node_prefixes =
+        vec_to_option(&schema_filter).and_then(|filters| build_schema_filter(&filters).to_option());
 
     // Get fallback layer (required)
     let fallback_layer = settings.layers.fallback.clone();
 
     build_graph(
         settings.input_dirs.clone(),
-        if settings.filters.include_extensions.is_empty() {
-            None
-        } else {
-            Some(&settings.filters.include_extensions)
-        },
-        if settings.filters.exclude_extensions.is_empty() {
-            None
-        } else {
-            Some(&settings.filters.exclude_extensions)
-        },
-        if settings.filters.include_globs.is_empty() {
-            None
-        } else {
-            Some(&settings.filters.include_globs)
-        },
-        if settings.filters.exclude_globs.is_empty() {
-            None
-        } else {
-            Some(&settings.filters.exclude_globs)
-        },
+        (!settings.filters.include_extensions.is_empty())
+            .then_some(settings.filters.include_extensions.as_slice()),
+        (!settings.filters.exclude_extensions.is_empty())
+            .then_some(settings.filters.exclude_extensions.as_slice()),
+        (!settings.filters.include_globs.is_empty())
+            .then_some(settings.filters.include_globs.as_slice()),
+        (!settings.filters.exclude_globs.is_empty())
+            .then_some(settings.filters.exclude_globs.as_slice()),
         settings.filters.include_hidden,
         settings.behavior.verbose,
         settings.formatting.comment_str.clone(),
@@ -341,6 +379,7 @@ pub fn build_external_checker_from_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use topcat::settings::Settings;
 
     #[test]
     fn test_build_schema_filter_empty() {
@@ -378,5 +417,22 @@ mod tests {
         assert_eq!(device, "/dev/null");
         #[cfg(windows)]
         assert_eq!(device, "NUL");
+    }
+
+    #[test]
+    fn test_vec_to_option() {
+        let empty: Vec<String> = vec![];
+        assert_eq!(vec_to_option(&empty), None);
+
+        let filled = vec!["a".to_string(), "b".to_string()];
+        assert_eq!(vec_to_option(&filled), Some(filled));
+    }
+
+    #[test]
+    fn test_validate_settings_requires_input_dirs() {
+        let settings = Settings::default();
+        let result = validate_settings(&settings, true);
+
+        assert!(matches!(result, Err(TopCatError::ConfigError(_))));
     }
 }

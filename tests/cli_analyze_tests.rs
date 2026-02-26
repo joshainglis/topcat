@@ -35,6 +35,21 @@ fn test_analyze_cycles_success() {
 }
 
 #[test]
+fn test_analyze_cycles_uppercase_extension() {
+    topcat_cmd()
+        .args([
+            "analyze",
+            "-i",
+            test_input_dir().to_str().unwrap(),
+            "-e",
+            "SQL",
+            "cycles",
+        ])
+        .assert()
+        .success();
+}
+
+#[test]
 fn test_analyze_cycles_quiet_mode() {
     // Quiet mode should exit with code 0 if no cycles found
     topcat_cmd()

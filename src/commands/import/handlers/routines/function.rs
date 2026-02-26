@@ -5,6 +5,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+use super::{routine_implicit_dependency_types, routine_render};
 use crate::commands::import::handlers::registry::RegisteredHandler;
 use crate::commands::import::handlers::traits::{
     Categorizer, Configurable, DependencyExtractor, OutputConfig, PatternProvider, RelatedObjects,
@@ -39,8 +40,7 @@ impl PatternProvider for FunctionHandler {
 
 impl DependencyExtractor for FunctionHandler {
     fn implicit_dependency_types() -> Vec<ObjectType> {
-        // Functions depend on types for parameters/returns, and may use extensions
-        vec![ObjectType::Type, ObjectType::Domain, ObjectType::Extension]
+        routine_implicit_dependency_types()
     }
 }
 
@@ -112,14 +112,7 @@ impl Configurable for FunctionHandler {
 
 impl Renderer for FunctionHandler {
     fn render(obj: &RawObject, related: &RelatedObjects, config: &OutputConfig) -> String {
-        let mut parts = vec![obj.content.clone()];
-
-        let related_content = related.render_all(config);
-        if !related_content.is_empty() {
-            parts.push(related_content);
-        }
-
-        parts.join("\n\n")
+        routine_render(obj, related, config)
     }
 }
 

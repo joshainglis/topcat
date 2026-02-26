@@ -54,10 +54,16 @@ impl TCGraph {
         let exclude_globs = config
             .exclude_globs
             .map(|patterns| io_utils::glob_files(patterns).unwrap_or_default());
-        let include_extensions: Option<HashSet<String>> =
-            string_slice_to_array(config.include_extensions);
-        let exclude_extensions: Option<HashSet<String>> =
-            string_slice_to_array(config.exclude_extensions);
+        let include_extensions: Option<HashSet<String>> = config.include_extensions.map(|exts| {
+            exts.iter()
+                .map(|ext| ext.to_lowercase())
+                .collect::<HashSet<String>>()
+        });
+        let exclude_extensions: Option<HashSet<String>> = config.exclude_extensions.map(|exts| {
+            exts.iter()
+                .map(|ext| ext.to_lowercase())
+                .collect::<HashSet<String>>()
+        });
         let include_node_prefixes: Option<HashSet<String>> =
             string_slice_to_array(config.include_node_prefixes);
         let exclude_node_prefixes: Option<HashSet<String>> =
@@ -118,14 +124,7 @@ impl TCGraph {
         debug!("include extensions: {:?}", self.include_extensions);
         debug!("exclude extensions: {:?}", self.exclude_extensions);
 
-        let files = collect_files(&self.file_dirs, self.include_hidden)?;
-        let filtered_files = filter_files(
-            &files,
-            &self.include_globs,
-            &self.exclude_globs,
-            &self.include_extensions,
-            &self.exclude_extensions,
-        );
+        let filtered_files = self.collect_filtered_files()?;
 
         // Create SQL analyzer if discovery is enabled
         let sql_analyzer = if self.sql_discovery.enabled {
@@ -149,7 +148,7 @@ impl TCGraph {
             None
         };
 
-        for file in filtered_files {
+        for file in &filtered_files {
             let mut file_node = match FileNode::from_file(
                 &self.comment_str,
                 file,
@@ -200,6 +199,23 @@ impl TCGraph {
         }
 
         Ok(())
+    }
+
+    /// Collect files from input directories and apply include/exclude filters.
+    ///
+    /// This is shared by graph building and update-mode discovery to guarantee
+    /// consistent file selection behavior across commands.
+    pub fn collect_filtered_files(&self) -> Result<HashSet<PathBuf>, TopCatError> {
+        let files = collect_files(&self.file_dirs, self.include_hidden)?;
+        let filtered = filter_files(
+            &files,
+            &self.include_globs,
+            &self.exclude_globs,
+            &self.include_extensions,
+            &self.exclude_extensions,
+        );
+
+        Ok(filtered.cloned().collect())
     }
 
     /// Build the dependency graph from the configured files.
@@ -488,5 +504,60 @@ impl TCGraph {
     /// Returns a reference to all layer index maps.
     pub fn get_all_layer_index_maps(&self) -> &HashMap<String, HashMap<String, NodeIndex>> {
         &self.layer_index_maps
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sql_config::{HeaderUpdateMode, SqlDiscoveryConfig};
+    use indexmap::IndexMap;
+
+    #[test]
+    fn test_new_normalizes_extension_filters_to_lowercase() {
+        let include_extensions = vec!["SQL".to_string(), "Pg".to_string()];
+        let exclude_extensions = vec!["TMP".to_string()];
+        let auto_mapping = IndexMap::new();
+
+        let config = config::Config {
+            input_dirs: vec![],
+            include_globs: None,
+            exclude_globs: None,
+            include_extensions: Some(&include_extensions),
+            exclude_extensions: Some(&exclude_extensions),
+            output: PathBuf::from("out.sql"),
+            comment_str: "--".to_string(),
+            file_separator_str: String::new(),
+            file_end_str: String::new(),
+            verbose: false,
+            dry_run: false,
+            include_node_prefixes: None,
+            exclude_node_prefixes: None,
+            include_hidden: false,
+            subdir_filter: None,
+            layers: vec!["normal".to_string()],
+            fallback_layer: "normal".to_string(),
+            auto_mapping: &auto_mapping,
+            sql_discovery: SqlDiscoveryConfig::default(),
+            header_update_mode: HeaderUpdateMode::Never,
+            header_output_dir: None,
+        };
+
+        let graph = TCGraph::new(&config);
+
+        let include = graph
+            .include_extensions
+            .as_ref()
+            .expect("include_extensions should be set");
+        assert!(include.contains("sql"));
+        assert!(include.contains("pg"));
+        assert!(!include.contains("SQL"));
+
+        let exclude = graph
+            .exclude_extensions
+            .as_ref()
+            .expect("exclude_extensions should be set");
+        assert!(exclude.contains("tmp"));
+        assert!(!exclude.contains("TMP"));
     }
 }

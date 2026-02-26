@@ -5,6 +5,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+use super::{routine_implicit_dependency_types, routine_output_path, routine_render};
 use crate::commands::import::handlers::registry::RegisteredHandler;
 use crate::commands::import::handlers::traits::{
     Categorizer, Configurable, DependencyExtractor, OutputConfig, PatternProvider, RelatedObjects,
@@ -31,15 +32,8 @@ impl PatternProvider for ProcedureHandler {
 }
 
 impl DependencyExtractor for ProcedureHandler {
-    fn extract_pattern_dependencies(content: &str) -> Vec<(String, ObjectType)> {
-        // Reference pattern to ensure it's used, even if no deps extracted
-        let _ = PROCEDURE_PATTERN.is_match(content);
-        vec![]
-    }
-
     fn implicit_dependency_types() -> Vec<ObjectType> {
-        // Same as functions: depend on types for parameters and may use extensions
-        vec![ObjectType::Type, ObjectType::Domain, ObjectType::Extension]
+        routine_implicit_dependency_types()
     }
 }
 
@@ -49,11 +43,7 @@ impl Categorizer for ProcedureHandler {
     }
 
     fn output_path(obj: &RawObject, base_dir: &Path) -> PathBuf {
-        let schema = obj.schema.as_deref().unwrap_or("public");
-        base_dir
-            .join(schema)
-            .join("functions")
-            .join(format!("{}.sql", obj.name))
+        routine_output_path(obj, base_dir)
     }
 }
 
@@ -73,23 +63,13 @@ impl Configurable for ProcedureHandler {
 
 impl Renderer for ProcedureHandler {
     fn render(obj: &RawObject, related: &RelatedObjects, config: &OutputConfig) -> String {
-        let mut parts = vec![obj.content.clone()];
-
-        let related_content = related.render_all(config);
-        if !related_content.is_empty() {
-            parts.push(related_content);
-        }
-
-        parts.join("\n\n")
+        routine_render(obj, related, config)
     }
 }
 
 /// Create a registered handler for Procedure objects.
 pub fn create_handler() -> RegisteredHandler {
-    RegisteredHandler::with_pattern_deps(
-        ObjectType::Procedure,
-        ProcedureHandler::extract_pattern_dependencies,
-    )
+    RegisteredHandler::new(ObjectType::Procedure)
 }
 
 #[cfg(test)]

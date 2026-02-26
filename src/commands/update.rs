@@ -33,23 +33,23 @@
 //! ```
 
 use clap::Args;
-use std::collections::HashSet;
-use std::path::PathBuf;
 use std::rc::Rc;
 
 use topcat::{
     cli::{ExecutionArgs, GlobalArgs, GraphInputArgs, SqlDiscoveryArgs},
     config,
     exceptions::{FileNodeError, TopCatError},
+    file_dag::TCGraph,
     file_node::{FileNode, NameSource},
-    header_generator, io_utils,
+    header_generator,
     layer_mapper::LayerMapper,
-    logging::{Logger, init_logging},
-    settings::Settings,
+    logging::Logger,
     soft_deps_matcher::SoftDepsMapper,
     sql_config::{self, MergeStrategy},
     sql_parser::SqlAnalyzer,
 };
+
+use super::common as cmd_common;
 
 /// Command-line arguments for the update subcommand.
 ///
@@ -75,16 +75,14 @@ pub struct UpdateArgs {
 
 impl UpdateArgs {
     pub fn execute(&self) -> Result<(), TopCatError> {
-        // Load settings from config files and environment variables
-        let config_path = self.global.config_path();
-        let mut settings = Settings::load(config_path)
-            .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
-
-        // Apply CLI overrides
-        self.global.apply_to_settings(&mut settings);
-        self.input.apply_to_settings(&mut settings);
-        self.sql_discovery.apply_to_settings(&mut settings);
-        self.execution.apply_to_settings(&mut settings);
+        // Load settings and apply CLI overrides
+        let mut settings =
+            cmd_common::load_settings_with_overrides(self.global.config_path(), |settings| {
+                self.global.apply_to_settings(settings);
+                self.input.apply_to_settings(settings);
+                self.sql_discovery.apply_to_settings(settings);
+                self.execution.apply_to_settings(settings);
+            })?;
 
         // Smart defaults for SQL files: enable discovery and in-place updates
         let sql_extensions = ["sql", "pg", "psql", "ddl", "pgsql"];
@@ -117,15 +115,7 @@ impl UpdateArgs {
         }
 
         // Validate settings
-        settings.validate().map_err(TopCatError::ConfigError)?;
-
-        // Ensure required fields are set
-        if settings.input_dirs.is_empty() {
-            return Err(TopCatError::ConfigError(
-                "At least one input directory must be specified via -i/--input-dirs or config file"
-                    .to_string(),
-            ));
-        }
+        cmd_common::validate_settings(&settings, true)?;
 
         // For update command, we need either update-headers or generate-headers to be set
         if settings.header_update_mode == sql_config::HeaderUpdateMode::Never {
@@ -137,10 +127,7 @@ impl UpdateArgs {
         // Note: rename_files validation is now handled by Settings.validate()
 
         // Initialize logging
-        let quiet = settings.behavior.quiet;
-        let verbose = settings.behavior.verbose;
-        init_logging(verbose, quiet);
-        let logger = Logger::new(quiet, verbose);
+        let logger = cmd_common::init_logger_from_settings(&settings);
 
         // Show what we're doing
         let dry_run = self.execution.mode.is_dry_run();
@@ -161,42 +148,24 @@ impl UpdateArgs {
         // Create Config struct with borrowed slices from Settings
         let config = config::Config {
             input_dirs: settings.input_dirs.clone(),
-            include_globs: if settings.filters.include_globs.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.include_globs)
-            },
-            exclude_globs: if settings.filters.exclude_globs.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.exclude_globs)
-            },
-            include_extensions: if settings.filters.include_extensions.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.include_extensions)
-            },
-            exclude_extensions: if settings.filters.exclude_extensions.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.exclude_extensions)
-            },
+            include_globs: (!settings.filters.include_globs.is_empty())
+                .then_some(settings.filters.include_globs.as_slice()),
+            exclude_globs: (!settings.filters.exclude_globs.is_empty())
+                .then_some(settings.filters.exclude_globs.as_slice()),
+            include_extensions: (!settings.filters.include_extensions.is_empty())
+                .then_some(settings.filters.include_extensions.as_slice()),
+            exclude_extensions: (!settings.filters.exclude_extensions.is_empty())
+                .then_some(settings.filters.exclude_extensions.as_slice()),
             output: dummy_output,
             comment_str: settings.formatting.comment_str.clone(),
             file_separator_str: settings.formatting.file_separator_str.clone(),
             file_end_str: settings.formatting.file_end_str.clone(),
             verbose: settings.behavior.verbose,
             dry_run,
-            include_node_prefixes: if settings.node_filtering.include_prefixes.is_empty() {
-                None
-            } else {
-                Some(&settings.node_filtering.include_prefixes)
-            },
-            exclude_node_prefixes: if settings.node_filtering.exclude_prefixes.is_empty() {
-                None
-            } else {
-                Some(&settings.node_filtering.exclude_prefixes)
-            },
+            include_node_prefixes: (!settings.node_filtering.include_prefixes.is_empty())
+                .then_some(settings.node_filtering.include_prefixes.as_slice()),
+            exclude_node_prefixes: (!settings.node_filtering.exclude_prefixes.is_empty())
+                .then_some(settings.node_filtering.exclude_prefixes.as_slice()),
             include_hidden: settings.filters.include_hidden,
             subdir_filter: settings.node_filtering.subdir_filter.clone(),
             layers: settings.layers.names.clone(),
@@ -250,8 +219,9 @@ impl UpdateArgs {
             .filters
             .include_extensions
             .first()
-            .map(|s| s.as_str())
-            .unwrap_or("sql");
+            .map(|s| s.to_lowercase())
+            .unwrap_or_else(|| "sql".to_string());
+        let default_extension = default_extension.as_str();
 
         // Preview or execute header updates
         if dry_run {
@@ -295,82 +265,6 @@ impl UpdateArgs {
     }
 }
 
-/// Collect and filter files from input directories
-fn collect_and_filter_files(config: &config::Config) -> Result<HashSet<PathBuf>, TopCatError> {
-    // Collect all files from input directories
-    let mut all_files = HashSet::new();
-    for dir in &config.input_dirs {
-        let dir_files = io_utils::walk_dir(dir, config.include_hidden).map_err(|e| {
-            TopCatError::config_error(format!("Failed to walk directory {}: {}", dir.display(), e))
-        })?;
-        all_files.extend(dir_files);
-    }
-
-    // Apply include/exclude glob filters
-    let include_globs: Option<HashSet<PathBuf>> = config
-        .include_globs
-        .map(io_utils::glob_files)
-        .transpose()
-        .map_err(|e| TopCatError::config_error(format!("Failed to apply include globs: {e}")))?;
-
-    let exclude_globs: Option<HashSet<PathBuf>> = config
-        .exclude_globs
-        .map(io_utils::glob_files)
-        .transpose()
-        .map_err(|e| TopCatError::config_error(format!("Failed to apply exclude globs: {e}")))?;
-
-    // Filter files
-    let include_extensions: Option<HashSet<String>> = config
-        .include_extensions
-        .map(|ext| ext.iter().cloned().collect());
-    let exclude_extensions: Option<HashSet<String>> = config
-        .exclude_extensions
-        .map(|ext| ext.iter().cloned().collect());
-
-    let filtered: HashSet<PathBuf> = all_files
-        .into_iter()
-        .filter(|file| {
-            // Include glob filter
-            if let Some(ref include) = include_globs
-                && !include.contains(file)
-            {
-                return false;
-            }
-
-            // Exclude glob filter
-            if let Some(ref exclude) = exclude_globs
-                && exclude.contains(file)
-            {
-                return false;
-            }
-
-            // Extension filters
-            if let Some(extension) = file.extension().and_then(|e| e.to_str()) {
-                // Include extensions
-                if let Some(ref include_ext) = include_extensions
-                    && !include_ext.contains(extension)
-                {
-                    return false;
-                }
-
-                // Exclude extensions
-                if let Some(ref exclude_ext) = exclude_extensions
-                    && exclude_ext.contains(extension)
-                {
-                    return false;
-                }
-            } else if include_extensions.is_some() {
-                // No extension but we have include filter - exclude this file
-                return false;
-            }
-
-            true
-        })
-        .collect();
-
-    Ok(filtered)
-}
-
 /// Discover files and perform SQL analysis without building a dependency graph
 ///
 /// This function walks through input directories, performs SQL discovery on each file,
@@ -409,8 +303,12 @@ fn discover_files_without_graph(config: &config::Config) -> Result<Vec<FileNode>
         None
     };
 
-    // Collect and filter files
-    let files = collect_and_filter_files(config)?;
+    // Collect and filter files using the same graph file-selection logic
+    let mut files: Vec<_> = TCGraph::new(config)
+        .collect_filtered_files()?
+        .into_iter()
+        .collect();
+    files.sort();
 
     for file_path in files {
         // Parse file headers using FileNode::from_file

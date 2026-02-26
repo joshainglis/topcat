@@ -17,7 +17,6 @@
 //! topcat concat -i sql/ -e sql --schema auth auth-migrations.sql
 //! ```
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use clap::Args;
@@ -27,11 +26,10 @@ use topcat::{
     config,
     exceptions::TopCatError,
     file_dag::TCGraph,
-    fs,
-    logging::{Logger, init_logging},
-    output,
-    settings::Settings,
+    fs, output,
 };
+
+use super::common as cmd_common;
 
 /// Command-line arguments for the concat subcommand.
 ///
@@ -61,36 +59,21 @@ pub struct ConcatArgs {
 
 impl ConcatArgs {
     pub fn execute(&self) -> Result<(), TopCatError> {
-        // Load settings from config files and environment variables
-        let config_path = self.global.config_path();
-        let mut settings = Settings::load(config_path)
-            .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
-
-        // Apply CLI overrides
-        self.global.apply_to_settings(&mut settings);
-        self.input.apply_to_settings(&mut settings);
-        self.filter.apply_to_settings(&mut settings);
-        self.formatting.apply_to_settings(&mut settings);
-
-        // Set output from positional argument
-        settings.output = Some(self.output.clone());
+        // Load settings and apply CLI overrides
+        let settings =
+            cmd_common::load_settings_with_overrides(self.global.config_path(), |settings| {
+                self.global.apply_to_settings(settings);
+                self.input.apply_to_settings(settings);
+                self.filter.apply_to_settings(settings);
+                self.formatting.apply_to_settings(settings);
+                settings.output = Some(self.output.clone());
+            })?;
 
         // Validate settings
-        settings.validate().map_err(TopCatError::ConfigError)?;
-
-        // Ensure required fields are set
-        if settings.input_dirs.is_empty() {
-            return Err(TopCatError::ConfigError(
-                "At least one input directory must be specified via -i/--input-dirs or config file"
-                    .to_string(),
-            ));
-        }
+        cmd_common::validate_settings(&settings, true)?;
 
         // Initialize logging
-        let quiet = settings.behavior.quiet;
-        let verbose = settings.behavior.verbose;
-        init_logging(verbose, quiet);
-        let logger = Logger::new(quiet, verbose);
+        let logger = cmd_common::init_logger_from_settings(&settings);
 
         // Create Config directly from Settings
         let fallback_layer = settings.layers.fallback.clone();
@@ -98,42 +81,24 @@ impl ConcatArgs {
         // Create Config struct with borrowed slices from Settings
         let config = config::Config {
             input_dirs: settings.input_dirs.clone(),
-            include_globs: if settings.filters.include_globs.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.include_globs)
-            },
-            exclude_globs: if settings.filters.exclude_globs.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.exclude_globs)
-            },
-            include_extensions: if settings.filters.include_extensions.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.include_extensions)
-            },
-            exclude_extensions: if settings.filters.exclude_extensions.is_empty() {
-                None
-            } else {
-                Some(&settings.filters.exclude_extensions)
-            },
+            include_globs: (!settings.filters.include_globs.is_empty())
+                .then_some(settings.filters.include_globs.as_slice()),
+            exclude_globs: (!settings.filters.exclude_globs.is_empty())
+                .then_some(settings.filters.exclude_globs.as_slice()),
+            include_extensions: (!settings.filters.include_extensions.is_empty())
+                .then_some(settings.filters.include_extensions.as_slice()),
+            exclude_extensions: (!settings.filters.exclude_extensions.is_empty())
+                .then_some(settings.filters.exclude_extensions.as_slice()),
             output: self.output.clone(),
             comment_str: settings.formatting.comment_str.clone(),
             file_separator_str: settings.formatting.file_separator_str.clone(),
             file_end_str: settings.formatting.file_end_str.clone(),
             verbose: settings.behavior.verbose,
             dry_run: settings.behavior.dry_run,
-            include_node_prefixes: if settings.node_filtering.include_prefixes.is_empty() {
-                None
-            } else {
-                Some(&settings.node_filtering.include_prefixes)
-            },
-            exclude_node_prefixes: if settings.node_filtering.exclude_prefixes.is_empty() {
-                None
-            } else {
-                Some(&settings.node_filtering.exclude_prefixes)
-            },
+            include_node_prefixes: (!settings.node_filtering.include_prefixes.is_empty())
+                .then_some(settings.node_filtering.include_prefixes.as_slice()),
+            exclude_node_prefixes: (!settings.node_filtering.exclude_prefixes.is_empty())
+                .then_some(settings.node_filtering.exclude_prefixes.as_slice()),
             include_hidden: settings.filters.include_hidden,
             subdir_filter: settings.node_filtering.subdir_filter.clone(),
             layers: settings.layers.names.clone(),
@@ -146,16 +111,8 @@ impl ConcatArgs {
 
         // Build the dependency graph
         let mut filedag = TCGraph::new(&config);
-        let res = filedag.build_graph();
-        match res {
-            Ok(_) => {
-                logger.info("Graph built successfully!");
-            }
-            Err(e) => {
-                logger.error(&format!("Error Encountered:\n{e}\n\nExiting."));
-                std::process::exit(1);
-            }
-        }
+        filedag.build_graph()?;
+        logger.info("Graph built successfully!");
 
         if settings.behavior.verbose {
             for layer in &settings.layers.names {
@@ -168,20 +125,28 @@ impl ConcatArgs {
         }
 
         // Generate output
-        let result = output::generate(filedag, config, &mut fs::RealFileSystem);
-
-        match result {
-            Ok(()) => {
-                logger.success("Generation Successful!");
-            }
-            Err(e) => {
-                let mut map = HashMap::new();
-                map.insert(1, e);
-                logger.error(&format!("Initialization Failure:\n{map:#?}\n\nExiting."));
-                std::process::exit(1);
-            }
-        }
+        output::generate(filedag, config, &mut fs::RealFileSystem)?;
+        logger.success("Generation Successful!");
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_concat_execute_returns_error_for_invalid_setup() {
+        let args = ConcatArgs {
+            global: GlobalArgs::default(),
+            input: GraphInputArgs::default(),
+            filter: FilterArgs::default(),
+            formatting: FormattingArgs::default(),
+            output: PathBuf::from("out.sql"),
+        };
+
+        let result = args.execute();
+        assert!(matches!(result, Err(TopCatError::ConfigError(_))));
     }
 }

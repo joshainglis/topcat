@@ -37,7 +37,6 @@ use std::path::PathBuf;
 use topcat::cli::{FilterArgs, GlobalArgs, GraphInputArgs};
 use topcat::exceptions::TopCatError;
 use topcat::file_dag::TCGraph;
-use topcat::logging::{Logger, init_logging};
 use topcat::settings::Settings;
 
 use super::common as cmd_common;
@@ -125,32 +124,19 @@ impl ExportArgs {
     /// - File writing fails (I/O errors, permission issues, etc.)
     /// - Serialization fails (JSON or XML generation errors)
     pub fn execute(&self) -> Result<(), TopCatError> {
-        // 1. Load settings from all sources (config files, env vars)
-        let config_path = self.global.config_path();
-        let mut settings = Settings::load(config_path)
-            .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
+        // 1-2. Load settings and apply CLI overrides
+        let settings =
+            cmd_common::load_settings_with_overrides(self.global.config_path(), |settings| {
+                self.global.apply_to_settings(settings);
+                self.input.apply_to_settings(settings);
+                self.filter.apply_to_settings(settings);
+            })?;
 
-        // 2. Apply CLI overrides
-        self.global.apply_to_settings(&mut settings);
-        self.input.apply_to_settings(&mut settings);
-        self.filter.apply_to_settings(&mut settings);
-
-        // 3. Validate settings
-        settings.validate().map_err(TopCatError::ConfigError)?;
-
-        // 4. Ensure required fields are set
-        if settings.input_dirs.is_empty() {
-            return Err(TopCatError::ConfigError(
-                "At least one input directory must be specified via -i/--input-dirs or config file"
-                    .to_string(),
-            ));
-        }
+        // 3-4. Validate settings
+        cmd_common::validate_settings(&settings, true)?;
 
         // 5. Initialize logging
-        let quiet = settings.behavior.quiet;
-        let verbose = settings.behavior.verbose;
-        init_logging(verbose, quiet);
-        let logger = Logger::new(quiet, verbose);
+        let logger = cmd_common::init_logger_from_settings(&settings);
 
         // 6. Extract schema filter
         let schema_filter = self.filter.get_schemas(&settings);

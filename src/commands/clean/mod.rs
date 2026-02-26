@@ -58,7 +58,6 @@ use topcat::cli::{
     AnalysisArgs as AnalysisCliArgs, ExecutionArgs, FilterArgs, GlobalArgs, GraphInputArgs,
 };
 use topcat::exceptions::TopCatError;
-use topcat::logging::{Logger, init_logging};
 use topcat::settings::Settings;
 
 use super::common as cmd_common;
@@ -127,36 +126,21 @@ impl CleanArgs {
     /// - External checker setup fails
     /// - Deletion fails
     pub fn execute(&self) -> Result<(), TopCatError> {
-        // 1. Load settings from all sources (config files, env vars)
-        let config_path = self.global.config_path();
-        let mut settings = Settings::load(config_path)
-            .map_err(|e| TopCatError::ConfigError(format!("Failed to load configuration: {e}")))?;
+        // 1-2. Load settings and apply CLI overrides
+        let settings =
+            cmd_common::load_settings_with_overrides(self.global.config_path(), |settings| {
+                self.global.apply_to_settings(settings);
+                self.input.apply_to_settings(settings);
+                self.filter.apply_to_settings(settings);
+                self.analysis.apply_to_settings(settings);
+                self.execution.apply_to_settings(settings);
+            })?;
 
-        // 2. Apply CLI overrides
-        self.global.apply_to_settings(&mut settings);
-        self.input.apply_to_settings(&mut settings);
-        self.filter.apply_to_settings(&mut settings);
-        self.analysis.apply_to_settings(&mut settings);
-        self.execution.apply_to_settings(&mut settings);
+        // 3-4. Validate settings
+        cmd_common::validate_settings(&settings, true)?;
 
-        // 3. Validate settings
-        settings.validate().map_err(TopCatError::ConfigError)?;
-
-        // 4. Ensure required fields are set
-        if settings.input_dirs.is_empty() {
-            return Err(TopCatError::ConfigError(
-                "At least one input directory must be specified via -i/--input-dirs or config file"
-                    .to_string(),
-            ));
-        }
-
-        // 5. Initialize logging
-        let quiet = settings.behavior.quiet;
-        let verbose = settings.behavior.verbose;
-        init_logging(verbose, quiet);
-
-        // 6. Create logger instance
-        let logger = Logger::new(quiet, verbose);
+        // 5-6. Initialize logging and create logger
+        let logger = cmd_common::init_logger_from_settings(&settings);
 
         // 7. Determine if we're actually deleting or just previewing
         let actually_delete = self.execution.mode.should_execute();
@@ -224,11 +208,7 @@ impl CleanArgs {
     /// Delegates to the common implementation for graph building from Settings.
     fn build_graph(&self, settings: &Settings) -> Result<topcat::file_dag::TCGraph, TopCatError> {
         let schema_filter = self.filter.get_schemas(settings);
-        let schema_filter_opt = if schema_filter.is_empty() {
-            None
-        } else {
-            Some(schema_filter)
-        };
+        let schema_filter_opt = cmd_common::vec_to_option(&schema_filter);
         cmd_common::build_graph_from_settings(&schema_filter_opt, settings)
     }
 

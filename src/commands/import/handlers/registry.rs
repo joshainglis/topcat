@@ -150,55 +150,7 @@ impl HandlerRegistry {
     /// This registers handlers for all known object types using the
     /// default behavior from ObjectType methods.
     fn register_default_handlers(&mut self) {
-        let all_types = [
-            ObjectType::Schema,
-            ObjectType::Extension,
-            ObjectType::Table,
-            ObjectType::View,
-            ObjectType::MaterializedView,
-            ObjectType::ForeignTable,
-            ObjectType::Sequence,
-            ObjectType::Type,
-            ObjectType::Domain,
-            ObjectType::Collation,
-            ObjectType::Function,
-            ObjectType::Procedure,
-            ObjectType::Aggregate,
-            ObjectType::Index,
-            ObjectType::Constraint,
-            ObjectType::FkConstraint,
-            ObjectType::Trigger,
-            ObjectType::Policy,
-            ObjectType::RowSecurity,
-            ObjectType::Default,
-            ObjectType::Statistics,
-            ObjectType::Rule,
-            ObjectType::TextSearchConfiguration,
-            ObjectType::TextSearchDictionary,
-            ObjectType::TextSearchParser,
-            ObjectType::TextSearchTemplate,
-            ObjectType::ForeignDataWrapper,
-            ObjectType::Server,
-            ObjectType::UserMapping,
-            ObjectType::Operator,
-            ObjectType::OperatorClass,
-            ObjectType::OperatorFamily,
-            ObjectType::AccessMethod,
-            ObjectType::Cast,
-            ObjectType::Publication,
-            ObjectType::Subscription,
-            ObjectType::EventTrigger,
-            ObjectType::Language,
-            ObjectType::Transform,
-            ObjectType::Conversion,
-            ObjectType::Acl,
-            ObjectType::DefaultAcl,
-            ObjectType::SecurityLabel,
-            ObjectType::Comment,
-            ObjectType::Unknown,
-        ];
-
-        for obj_type in all_types {
+        for obj_type in ObjectType::all() {
             self.register(RegisteredHandler::new(obj_type));
         }
 
@@ -422,7 +374,7 @@ mod tests {
         let types = registry.registered_types();
         assert!(types.contains(&ObjectType::Table));
         assert!(types.contains(&ObjectType::Function));
-        assert!(types.len() >= 40); // We have 40+ types
+        assert_eq!(types.len(), ObjectType::all().len());
     }
 
     #[test]
