@@ -44,7 +44,7 @@ pub fn clean(
     let dead_branches = graph.find_dead_branches(root_matcher, protect_implicit);
 
     // Filter out externally used files
-    let dead_branches = common::apply_external_filter(dead_branches, external_checker);
+    let dead_branches = common::apply_external_filter(logger, dead_branches, external_checker);
 
     if dead_branches.is_empty() {
         logger.success("✅ No dead branches found! Your codebase is clean.");

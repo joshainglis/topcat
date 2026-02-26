@@ -49,10 +49,10 @@ pub fn clean(
     }
 
     // Filter out root nodes if specified
-    unrequired = common::filter_by_root_matcher(unrequired, graph, root_matcher);
+    unrequired = common::filter_by_root_matcher(logger, unrequired, graph, root_matcher);
 
     // Filter out externally used files
-    unrequired = common::apply_external_filter(unrequired, external_checker);
+    unrequired = common::apply_external_filter(logger, unrequired, external_checker);
 
     if unrequired.is_empty() {
         logger.success("✅ No unrequired files found!");

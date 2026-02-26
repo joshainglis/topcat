@@ -208,6 +208,12 @@ struct GlobalObject {
     acl: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SecurityStatementKind {
+    Acl,
+    Owner,
+}
+
 /// Orchestrator for processing and writing imported objects.
 pub struct ImportOrchestrator {
     config: OrchestratorConfig,
@@ -401,14 +407,17 @@ impl ImportOrchestrator {
     fn register_object(&mut self, schema: &str, category: &str, name: &str, obj: RawObject) {
         // Store key reference
         let key = (obj.obj_type, schema.to_string(), name.to_string());
-        self.schemas
+        let key_list = self
+            .schemas
             .entry(schema.to_string())
             .or_default()
             .entry(category.to_string())
             .or_default()
             .entry(name.to_string())
-            .or_default()
-            .push(key.clone());
+            .or_default();
+        if !key_list.contains(&key) {
+            key_list.push(key.clone());
+        }
 
         // Add to collected object
         let collected = self.get_or_create_collected(obj.obj_type, schema, name);
@@ -519,42 +528,16 @@ impl ImportOrchestrator {
             None => vec!["public"],
         };
 
-        let types_to_try = match target_type {
-            Some(ObjectType::Table) => vec![ObjectType::Table],
-            Some(ObjectType::Sequence) => vec![ObjectType::Sequence],
-            Some(ObjectType::Function) => vec![ObjectType::Function],
-            Some(ObjectType::Procedure) => vec![ObjectType::Procedure],
-            Some(ObjectType::Schema) => vec![ObjectType::Schema],
-            Some(ObjectType::Type | ObjectType::Domain) => {
-                vec![ObjectType::Type, ObjectType::Domain]
-            }
-            _ => vec![
-                ObjectType::Table,
-                ObjectType::View,
-                ObjectType::MaterializedView,
-                ObjectType::Function,
-                ObjectType::Sequence,
-            ],
-        };
+        let types_to_try =
+            self.candidate_types_for_statement(SecurityStatementKind::Acl, target_type);
 
-        for candidate_schema in candidate_schemas {
-            for try_type in &types_to_try {
-                if let Some(schema_map) = self.objects.get_mut(try_type)
-                    && let Some(name_map) = schema_map.get_mut(candidate_schema)
-                    && let Some(collected) = name_map.get_mut(name)
-                {
-                    // Skip if the object is empty (has no primary content)
-                    if !collected.is_empty() {
-                        if !collected.statement_in_primary_or_attachments(content)
-                            && !collected.has_acl_statement(content)
-                        {
-                            collected.acl.push(content.to_string());
-                        }
-                        return;
-                    }
-                }
-            }
-        }
+        let _ = self.attach_statement_to_schema_object(
+            SecurityStatementKind::Acl,
+            &candidate_schemas,
+            &types_to_try,
+            name,
+            content,
+        );
     }
 
     /// Attach an owner statement to an object.
@@ -574,31 +557,121 @@ impl ImportOrchestrator {
             None => vec!["public"],
         };
 
-        let types_to_try = match target_type {
-            Some(ObjectType::Table) => vec![ObjectType::Table],
-            Some(ObjectType::View) => vec![ObjectType::View],
-            Some(ObjectType::MaterializedView) => vec![ObjectType::MaterializedView],
-            Some(ObjectType::Function) => vec![ObjectType::Function],
-            Some(ObjectType::Procedure) => vec![ObjectType::Procedure],
-            _ => vec![ObjectType::Table, ObjectType::View, ObjectType::Function],
+        let types_to_try =
+            self.candidate_types_for_statement(SecurityStatementKind::Owner, target_type);
+
+        let _ = self.attach_statement_to_schema_object(
+            SecurityStatementKind::Owner,
+            &candidate_schemas,
+            &types_to_try,
+            name,
+            content,
+        );
+    }
+
+    fn candidate_types_for_statement(
+        &self,
+        statement_kind: SecurityStatementKind,
+        target_type: &Option<ObjectType>,
+    ) -> Vec<ObjectType> {
+        let mut types = match target_type {
+            Some(ObjectType::Type) => vec![ObjectType::Type, ObjectType::Domain],
+            Some(ObjectType::Domain) => vec![ObjectType::Domain, ObjectType::Type],
+            Some(t) => vec![*t],
+            None => match statement_kind {
+                SecurityStatementKind::Acl => vec![
+                    ObjectType::Table,
+                    ObjectType::View,
+                    ObjectType::MaterializedView,
+                    ObjectType::Function,
+                    ObjectType::Procedure,
+                    ObjectType::Sequence,
+                    ObjectType::Schema,
+                    ObjectType::Type,
+                    ObjectType::Domain,
+                ],
+                SecurityStatementKind::Owner => vec![
+                    ObjectType::Table,
+                    ObjectType::View,
+                    ObjectType::MaterializedView,
+                    ObjectType::Sequence,
+                    ObjectType::Function,
+                    ObjectType::Procedure,
+                    ObjectType::Schema,
+                    ObjectType::Type,
+                    ObjectType::Domain,
+                    ObjectType::Aggregate,
+                    ObjectType::ForeignTable,
+                    ObjectType::TextSearchConfiguration,
+                    ObjectType::TextSearchDictionary,
+                    ObjectType::TextSearchParser,
+                    ObjectType::TextSearchTemplate,
+                    ObjectType::Operator,
+                    ObjectType::OperatorClass,
+                    ObjectType::OperatorFamily,
+                    ObjectType::Collation,
+                    ObjectType::Conversion,
+                ],
+            },
         };
 
+        if matches!(statement_kind, SecurityStatementKind::Owner) {
+            let owner_aliases = match target_type {
+                Some(ObjectType::Type) => vec![ObjectType::Domain],
+                Some(ObjectType::Domain) => vec![ObjectType::Type],
+                _ => vec![],
+            };
+            types.extend(owner_aliases);
+        }
+
+        let mut unique_types = Vec::new();
+        for obj_type in types {
+            if !unique_types.contains(&obj_type) {
+                unique_types.push(obj_type);
+            }
+        }
+        unique_types
+    }
+
+    fn attach_statement_to_schema_object(
+        &mut self,
+        statement_kind: SecurityStatementKind,
+        candidate_schemas: &[&str],
+        candidate_types: &[ObjectType],
+        name: &str,
+        content: &str,
+    ) -> bool {
         for candidate_schema in candidate_schemas {
-            for try_type in &types_to_try {
-                if let Some(schema_map) = self.objects.get_mut(try_type)
-                    && let Some(name_map) = schema_map.get_mut(candidate_schema)
+            for candidate_type in candidate_types {
+                if let Some(schema_map) = self.objects.get_mut(candidate_type)
+                    && let Some(name_map) = schema_map.get_mut(*candidate_schema)
                     && let Some(collected) = name_map.get_mut(name)
                 {
-                    if collected.statement_in_primary_or_attachments(content)
-                        || collected.owner_matches(content)
-                    {
-                        return;
+                    match statement_kind {
+                        SecurityStatementKind::Acl => {
+                            if !collected.is_empty() {
+                                if !collected.statement_in_primary_or_attachments(content)
+                                    && !collected.has_acl_statement(content)
+                                {
+                                    collected.acl.push(content.to_string());
+                                }
+                                return true;
+                            }
+                        }
+                        SecurityStatementKind::Owner => {
+                            if collected.statement_in_primary_or_attachments(content)
+                                || collected.owner_matches(content)
+                            {
+                                return true;
+                            }
+                            collected.owner = Some(content.to_string());
+                            return true;
+                        }
                     }
-                    collected.owner = Some(content.to_string());
-                    return;
                 }
             }
         }
+        false
     }
 
     /// Try attaching ACL content to a global object.
@@ -711,6 +784,12 @@ impl ImportOrchestrator {
 
                 for (name, key_list) in items {
                     let file_path = category_dir.join(format!("{name}.sql"));
+                    let mut unique_keys = Vec::new();
+                    for key in key_list {
+                        if !unique_keys.contains(key) {
+                            unique_keys.push(key.clone());
+                        }
+                    }
 
                     if output_config.dry_run {
                         self.logger
@@ -725,7 +804,7 @@ impl ImportOrchestrator {
                         // Collect content from objects
                         let mut layer: Option<Layer> = None;
                         let mut identities: Vec<String> = Vec::new();
-                        let content: Vec<String> = key_list
+                        let content: Vec<String> = unique_keys
                             .iter()
                             .filter_map(|(obj_type, schema, obj_name)| {
                                 self.objects
@@ -818,7 +897,7 @@ impl ImportOrchestrator {
                         let rendered_content = content.join("\n\n");
 
                         // Analyze dependencies
-                        let primary_type = key_list.first().map(|(t, _, _)| *t);
+                        let primary_type = unique_keys.first().map(|(t, _, _)| *t);
                         let requires = if self.config.generate_deps {
                             let mut deps = self
                                 .dep_analyzer
@@ -837,7 +916,7 @@ impl ImportOrchestrator {
 
                             // Use source-populated extracted dependencies as the
                             // canonical structural dependency source.
-                            for (obj_type, schema, obj_name) in key_list {
+                            for (obj_type, schema, obj_name) in &unique_keys {
                                 if let Some(collected) = self
                                     .objects
                                     .get(obj_type)
@@ -1283,6 +1362,113 @@ mod tests {
         let content = fs::read_to_string(file).unwrap();
         assert!(content.contains("-- requires:"));
         assert!(content.contains("remote_server"));
+    }
+
+    #[test]
+    fn test_process_renders_overloaded_function_once_per_signature() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().join("output");
+
+        let function_integer = RawObject::new(
+            ObjectType::Function,
+            Some("public".to_string()),
+            "do_work".to_string(),
+            r#"CREATE FUNCTION "public"."do_work"(a integer) RETURNS integer LANGUAGE sql AS $$ SELECT a $$;"#
+                .to_string(),
+        )
+        .with_identity("do_work(integer)");
+
+        let function_text = RawObject::new(
+            ObjectType::Function,
+            Some("public".to_string()),
+            "do_work".to_string(),
+            r#"CREATE FUNCTION "public"."do_work"(a text) RETURNS text LANGUAGE sql AS $$ SELECT a $$;"#
+                .to_string(),
+        )
+        .with_identity("do_work(text)");
+
+        let mut orchestrator =
+            ImportOrchestrator::new(OrchestratorConfig::new(output_dir.clone()), quiet_logger());
+
+        orchestrator
+            .process(vec![function_integer, function_text], vec![], vec![])
+            .unwrap();
+
+        let function_file = output_dir.join("public/functions/do_work.sql");
+        assert!(
+            function_file.exists(),
+            "expected function file at {function_file:?}"
+        );
+
+        let content = fs::read_to_string(function_file).unwrap();
+        assert_eq!(
+            content
+                .matches(r#"CREATE FUNCTION "public"."do_work"(a integer)"#)
+                .count(),
+            1
+        );
+        assert_eq!(
+            content
+                .matches(r#"CREATE FUNCTION "public"."do_work"(a text)"#)
+                .count(),
+            1
+        );
+        assert_eq!(content.matches("-- overloads:").count(), 1);
+        assert_eq!(content.matches("--   do_work(integer)").count(), 1);
+        assert_eq!(content.matches("--   do_work(text)").count(), 1);
+    }
+
+    #[test]
+    fn test_process_attaches_owner_to_sequence_and_domain_alias_type() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().join("output");
+
+        let sequence = RawObject::new(
+            ObjectType::Sequence,
+            Some("public".to_string()),
+            "order_id_seq".to_string(),
+            r#"CREATE SEQUENCE "public"."order_id_seq";"#.to_string(),
+        );
+        let domain = RawObject::new(
+            ObjectType::Domain,
+            Some("public".to_string()),
+            "email_domain".to_string(),
+            r#"CREATE DOMAIN "public"."email_domain" AS text;"#.to_string(),
+        );
+
+        let sequence_owner =
+            r#"ALTER SEQUENCE "public"."order_id_seq" OWNER TO "admin";"#.to_string();
+        let domain_owner = r#"ALTER DOMAIN "public"."email_domain" OWNER TO "admin";"#.to_string();
+
+        let security = vec![
+            SecurityStatement::owner(
+                Some("public".to_string()),
+                "order_id_seq".to_string(),
+                Some(ObjectType::Sequence),
+                sequence_owner.clone(),
+            ),
+            SecurityStatement::owner(
+                Some("public".to_string()),
+                "email_domain".to_string(),
+                Some(ObjectType::Type),
+                domain_owner.clone(),
+            ),
+        ];
+
+        let mut orchestrator =
+            ImportOrchestrator::new(OrchestratorConfig::new(output_dir.clone()), quiet_logger());
+
+        orchestrator
+            .process(vec![sequence, domain], security, vec![])
+            .unwrap();
+
+        let sequence_file = output_dir.join("public/sequence/order_id_seq.sql");
+        let sequence_content = fs::read_to_string(sequence_file).unwrap();
+        assert!(sequence_content.contains(&sequence_owner));
+
+        let domain_file = output_dir.join("public/type/domain/email_domain.sql");
+        let domain_content = fs::read_to_string(domain_file).unwrap();
+        assert!(domain_content.contains(&domain_owner));
     }
 
     #[test]

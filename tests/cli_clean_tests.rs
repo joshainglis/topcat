@@ -210,3 +210,49 @@ fn test_clean_targets_matches_exact_node_name() {
         .stdout(predicate::str::contains("foo"))
         .stdout(predicate::str::contains("foobar").not());
 }
+
+#[test]
+fn test_clean_orphans_quiet_hides_root_and_external_filter_messages() {
+    let temp_dir = TempDir::new().unwrap();
+    let sql_dir = temp_dir.path().join("sql");
+    let external_dir = temp_dir.path().join("external");
+    fs::create_dir_all(&sql_dir).unwrap();
+    fs::create_dir_all(&external_dir).unwrap();
+
+    fs::write(
+        sql_dir.join("protected.sql"),
+        "-- name: protected_node\nSELECT 1;\n",
+    )
+    .unwrap();
+    fs::write(
+        sql_dir.join("external.sql"),
+        "-- name: external_node\nSELECT 1;\n",
+    )
+    .unwrap();
+    fs::write(
+        external_dir.join("usage.py"),
+        "print('external_node is referenced externally')\n",
+    )
+    .unwrap();
+
+    topcat_cmd()
+        .args([
+            "clean",
+            "--quiet",
+            "-i",
+            sql_dir.to_str().unwrap(),
+            "-e",
+            "sql",
+            "--root-nodes",
+            "protected_node",
+            "--external-check-dir",
+            external_dir.to_str().unwrap(),
+            "--external-check-pattern",
+            "*.py",
+            "orphans",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Protected").not())
+        .stdout(predicate::str::contains("Filtered out").not());
+}

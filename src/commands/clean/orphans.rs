@@ -49,10 +49,10 @@ pub fn clean(
     }
 
     // Filter out root nodes if specified
-    orphans = common::filter_by_root_matcher(orphans, graph, root_matcher);
+    orphans = common::filter_by_root_matcher(logger, orphans, graph, root_matcher);
 
     // Filter out externally used files
-    orphans = common::apply_external_filter(orphans, external_checker);
+    orphans = common::apply_external_filter(logger, orphans, external_checker);
 
     if orphans.is_empty() {
         logger.success("✅ No orphan files found!");

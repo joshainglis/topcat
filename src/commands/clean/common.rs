@@ -155,6 +155,7 @@ pub fn perform_deletion(
 ///
 /// # Arguments
 ///
+/// * `logger` - Logger instance for output
 /// * `nodes` - Set of node names to filter
 /// * `graph` - The dependency graph
 /// * `root_matcher` - Optional root matcher to apply
@@ -163,6 +164,7 @@ pub fn perform_deletion(
 ///
 /// The filtered set with root nodes removed
 pub fn filter_by_root_matcher(
+    logger: &Logger,
     mut nodes: HashSet<String>,
     graph: &TCGraph,
     root_matcher: Option<&RootNodeMatcher>,
@@ -179,7 +181,9 @@ pub fn filter_by_root_matcher(
         });
         let filtered_count = before_count - nodes.len();
         if filtered_count > 0 {
-            println!("🔒 Protected {filtered_count} root node(s) from deletion");
+            logger.info(&format!(
+                "🔒 Protected {filtered_count} root node(s) from deletion"
+            ));
         }
     }
     nodes
@@ -192,6 +196,7 @@ pub fn filter_by_root_matcher(
 ///
 /// # Arguments
 ///
+/// * `logger` - Logger instance for output
 /// * `nodes` - Set of node names to filter
 /// * `checker` - Optional external usage checker
 ///
@@ -199,6 +204,7 @@ pub fn filter_by_root_matcher(
 ///
 /// The filtered set with externally-used nodes removed
 pub fn apply_external_filter(
+    logger: &Logger,
     mut nodes: HashSet<String>,
     checker: Option<&ExternalUsageChecker>,
 ) -> HashSet<String> {
@@ -207,7 +213,9 @@ pub fn apply_external_filter(
         nodes = checker.filter_unused(&nodes);
         let filtered_count = before_count - nodes.len();
         if filtered_count > 0 {
-            println!("✅ Filtered out {filtered_count} file(s) with external usage\n");
+            logger.info(&format!(
+                "✅ Filtered out {filtered_count} file(s) with external usage"
+            ));
         }
     }
     nodes

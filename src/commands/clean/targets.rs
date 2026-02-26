@@ -95,7 +95,8 @@ pub fn clean(
     }
 
     // Filter out root nodes if specified
-    targets_to_delete = common::filter_by_root_matcher(targets_to_delete, graph, root_matcher);
+    targets_to_delete =
+        common::filter_by_root_matcher(logger, targets_to_delete, graph, root_matcher);
 
     // Check for dependents that would break
     let dependents_map = graph.build_dependents_map();
