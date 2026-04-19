@@ -1,83 +1,16 @@
 # Topcat development guide
 
-## Critical Thinking and Feedback
-
-**IMPORTANT: Always critically evaluate and challenge user suggestions, even when they seem reasonable.**
-
-**USE BRUTAL HONESTY**: Don't try to be polite or agreeable. Be direct, challenge assumptions, and point out flaws immediately.
-
-- **Question assumptions**: Don't just agree - analyze if there are better approaches
-- **Offer alternative perspectives**: Suggest different solutions or point out potential issues
-- **Challenge organization decisions**: If something doesn't fit logically, speak up
-- **Point out inconsistencies**: Help catch logical errors or misplaced components
-- **Research thoroughly**: Never skim documentation or issues - read them completely before responding
-- **Use proper tools**: For GitHub issues, always use `gh` cli instead of WebFetch (WebFetch may miss critical content)
-- **Use proper skills**: Be aware of the skills you have available and use them whenever possible
-- **Admit ignorance**: Say "I don't know" instead of guessing or agreeing without understanding
-
-This critical feedback helps improve decision-making and ensures robust solutions. Being agreeable is less valuable than being thoughtful and analytical.
-
-### Example Behaviors
-
-- ✅ "I disagree - that component belongs in a different file because..."
-- ✅ "Have you considered this alternative approach?"
-- ✅ "This seems inconsistent with the pattern we established..."
-- ❌ Just implementing suggestions without evaluation
-
 ## Project Overview
 
 **Topcat** is a Rust CLI tool for **topological concatenation of files** with comprehensive dependency analysis. It reads files with dependency metadata, builds a directed acyclic graph (DAG), performs topological sorting respecting layer constraints, and provides analysis, cleanup, schema management, and export capabilities.
 
-Primary use case: Ordering SQL migration files where execution order matters based on dependencies. Also analyzes dependency health, detects dead code, and safely cleans up unused files.
-
-## Quick Start
-
-```bash
-# Build and run
-cargo build --release
-cargo run -- concat -i input_dir/ output.sql
-
-# Update file headers (SQL discovery, header updates, and renaming enabled by default)
-topcat update -i sql/ -e sql                           # Preview changes (dry-run)
-topcat update -i sql/ -e sql --mode execute            # Apply changes
-
-# Concatenation
-topcat concat -i sql/ -e sql migrations.sql         # Concatenate files
-
-# Analysis
-topcat analyze -i sql/ -e sql dead-branches         # Find dead code
-topcat analyze -i sql/ -e sql cycles                # Detect circular deps
-topcat analyze -i sql/ -e sql orphans               # Find isolated files
-
-# Cleanup (dry-run by default)
-topcat clean -i sql/ -e sql dead-branches           # Preview deletion
-topcat clean -i sql/ -e sql orphans --mode execute  # Actually delete
-
-# Schema operations
-topcat schema -i sql/ -e sql list                   # View all schemas
-topcat schema -i sql/ -e sql analyze my_schema      # Detailed schema view
-
-# Export
-topcat export -i sql/ -e sql graph.json json        # Export to JSON
-topcat export -i sql/ -e sql graph.dot dot          # Export to GraphViz
-
-# Import (split pg_dump into per-object files)
-topcat import pg-dump database.sql ./output/        # Split dump file
-topcat import pg-dump database.sql ./output/ --dry-run  # Preview
-
-# Configuration management
-topcat config show                                  # View effective config
-topcat config validate                              # Validate config file
-topcat config generate                              # Generate example config
-```
+Primary use case: ordering SQL migration files where execution order matters based on dependencies. Also analyzes dependency health, detects dead code, and safely cleans up unused files.
 
 ## Development Commands
 
 ```bash
-# Development environment (Nix)
 nix develop                      # Enter dev shell with all dependencies
 
-# Build & Test
 cargo build                      # Debug build
 cargo build --release            # Release build
 cargo test                       # Run all tests
@@ -85,7 +18,6 @@ cargo test test_name             # Run specific test
 cargo clippy                     # Lint code
 cargo fmt                        # Format code
 
-# Run with test data
 cargo run -- concat -i tests/input/sql /tmp/output.sql
 ```
 
@@ -117,20 +49,20 @@ cargo run -- concat -i tests/input/sql /tmp/output.sql
 
 ### Modularized Commands
 
-**Analyze Command** (`commands/analyze/`): Broken down from 1,329 lines into 10 focused modules
+**Analyze Command** (`commands/analyze/`): 10 focused modules
 - `mod.rs` - CLI routing and dispatch
 - `common.rs` - Generic display utilities, shared analysis logic
 - `cycles.rs`, `dead_branches.rs`, `file.rs`, `missing.rs` - Analysis implementations
 - `leaf_nodes.rs`, `orphans.rs`, `root_nodes.rs`, `unrequired.rs` - Node categorization
 
-**Clean Command** (`commands/clean/`): Broken down from 772 lines into 6 focused modules
+**Clean Command** (`commands/clean/`): 6 focused modules
 - `mod.rs` - CLI routing and dispatch
 - `common.rs` - DeletionContext, confirmation logic
 - `dead_branches.rs`, `orphans.rs`, `targets.rs`, `unrequired.rs` - Cleanup implementations
 
-### Key Concepts
+## Key Concepts
 
-#### File Metadata
+### File Metadata
 
 Files include dependency metadata in header comments:
 
@@ -143,14 +75,14 @@ Files include dependency metadata in header comments:
 CREATE TABLE users (...);
 ```
 
-#### Layers
+### Layers
 
 Layers enforce ordering between groups of files:
 - Default: `prepend` → `normal` → `append`
 - Custom: `--layers first,second,third`
 - Files in earlier layers always precede later layers
 
-#### Dependencies
+### Dependencies
 
 - **Hard** (`requires`, `dropped_by`): Enforce ordering
 - **Soft** (`exists`): Ensure inclusion without ordering
@@ -161,47 +93,26 @@ Layers enforce ordering between groups of files:
 ### Concatenation
 
 ```bash
-topcat concat -i sql/ -e sql output.sql                  # Basic concat
+topcat concat -i sql/ -e sql output.sql
 # See 'discovering-sql-dependencies' skill for detailed workflows
 ```
 
-### Update Commands
+### Update
 
-The `update` command discovers dependencies from SQL content and updates file headers accordingly. It can also rename files based on discovered node names.
+Discovers dependencies from SQL content and updates file headers. Can also rename files based on discovered node names.
 
-**Smart defaults:** When using SQL extensions (`-e sql`, `-e pg`, etc.), SQL discovery, header updates, and file renaming are all enabled by default.
+**Smart defaults:** With SQL extensions (`-e sql`, `-e pg`, etc.), SQL discovery, header updates, and file renaming are all enabled by default.
 
 ```bash
-# Preview changes (dry-run by default)
-topcat update -i sql/ -e sql
-
-# Apply changes
-topcat update -i sql/ -e sql --mode execute
-
-# Generate updated files to a separate directory (instead of in-place)
-topcat update -i sql/ -e sql --generate-headers ./updated/
-
-# With custom schema pattern
-topcat update -i sql/ -e sql --schema-pattern "myapp_\\w+"
-
-# Disable specific defaults
-topcat update -i sql/ -e sql --no-rename-files         # Keep original filenames
-topcat update -i sql/ -e sql --no-sql-discovery        # Use header-only parsing
+topcat update -i sql/ -e sql                           # Preview (dry-run default)
+topcat update -i sql/ -e sql --mode execute            # Apply changes
+topcat update -i sql/ -e sql --generate-headers ./updated/   # Emit to separate dir
+topcat update -i sql/ -e sql --schema-pattern "myapp_\\w+"   # Custom schema pattern
+topcat update -i sql/ -e sql --no-rename-files         # Disable rename
+topcat update -i sql/ -e sql --no-sql-discovery        # Header-only parsing
 ```
 
-**Typical workflow:**
-```bash
-# Step 1: Preview changes
-topcat update -i sql/ -e sql
-
-# Step 2: Apply changes
-topcat update -i sql/ -e sql --mode execute
-
-# Step 3: Concatenate the properly annotated files
-topcat concat -i sql/ -e sql migrations.sql
-```
-
-### Analysis Commands
+### Analysis
 
 | Command | Purpose |
 |---------|---------|
@@ -214,100 +125,72 @@ topcat concat -i sql/ -e sql migrations.sql
 | `analyze file <path>` | Deep analysis of single file |
 
 ```bash
-# With protection patterns
 topcat analyze -i sql/ -e sql --root-pattern "**/api/*.sql" dead-branches
-
-# With external usage checking
 topcat analyze -i sql/ -e sql --external-check-dir src/ --external-check-pattern "*.py" dead-branches
-
-# CI/CD quiet mode
-topcat analyze -i sql/ -e sql --quiet cycles  # Exit code 0/1
+topcat analyze -i sql/ -e sql --quiet cycles           # CI mode — exit code 0/1
 ```
 
-### Cleanup Commands
+### Cleanup (dry-run by default)
 
-| Command | Default | Purpose |
-|---------|---------|---------|
-| `clean dead-branches` | Dry-run | Remove dead subtrees |
-| `clean orphans` | Dry-run | Remove isolated files |
-| `clean unrequired` | Dry-run | Remove unrequired files |
+| Command | Purpose |
+|---------|---------|
+| `clean dead-branches` | Remove dead subtrees |
+| `clean orphans` | Remove isolated files |
+| `clean unrequired` | Remove unrequired files |
 
 ```bash
-topcat clean -i sql/ -e sql dead-branches                   # Preview (dry-run default)
+topcat clean -i sql/ -e sql dead-branches                   # Preview
 topcat clean -i sql/ -e sql dead-branches --mode execute    # Execute with confirmation
-topcat clean -i sql/ -e sql orphans --mode execute --force  # Force mode (no confirmation)
+topcat clean -i sql/ -e sql orphans --mode execute --force  # No confirmation
 ```
 
-### Schema Commands
+### Schema
 
 ```bash
-topcat schema -i sql/ -e sql list                 # View all schemas with stats
+topcat schema -i sql/ -e sql list                 # All schemas with stats
 topcat schema -i sql/ -e sql analyze my_schema    # Detailed schema view
 topcat schema -i sql/ -e sql dependencies         # Cross-schema dependencies
-
-# Schema filtering
-topcat analyze -i sql/ -e sql --schema auth dead-branches
-topcat clean -i sql/ -e sql --schema billing orphans --mode execute
+topcat analyze -i sql/ -e sql --schema auth dead-branches   # Filter analysis by schema
 ```
 
-### Export Commands
+### Export
 
-| Format | Use Case |
-|--------|----------|
-| `json` | API integration, programmatic access |
-| `dot` | GraphViz visualization |
-| `graphml` | Gephi/yEd import |
-| `mermaid` | Markdown diagrams |
+Formats: `json` (API/programmatic), `dot` (GraphViz), `graphml` (Gephi/yEd), `mermaid` (Markdown).
 
 ```bash
-topcat export -i sql/ -e sql graph.json json              # Full graph
-topcat export -i sql/ -e sql deps.json json --mode deps --node my_node  # Dependencies
-topcat export -i sql/ -e sql auth.dot dot --schema auth   # Schema-filtered
+topcat export -i sql/ -e sql graph.json json
+topcat export -i sql/ -e sql deps.json json --mode deps --node my_node
+topcat export -i sql/ -e sql auth.dot dot --schema auth
 ```
 
-### Import Commands
+### Import
 
-Import pg_dump files and split into organized per-object SQL files with topcat headers:
+Split a pg_dump into per-object SQL files with topcat headers. See the README for the full list of supported PostgreSQL object types and output directory structure.
 
 ```bash
-topcat import pg-dump database.sql ./output/              # Split dump file
-topcat import pg-dump database.sql ./output/ --dry-run    # Preview changes
+topcat import pg-dump database.sql ./output/              # Split dump
+topcat import pg-dump database.sql ./output/ --dry-run    # Preview
 topcat import pg-dump database.sql ./output/ --schema-pattern "app_\\w+"
 
-# Control optional features (all enabled by default)
 topcat import pg-dump database.sql ./output/ --generate-layers false  # No layer headers
 topcat import pg-dump database.sql ./output/ --generate-deps false    # No requires headers
-topcat import pg-dump database.sql ./output/ --include-acl false      # Skip ACL statements
-topcat import pg-dump database.sql ./output/ --include-owner false    # Skip OWNER statements
+topcat import pg-dump database.sql ./output/ --include-acl false      # Skip ACL
+topcat import pg-dump database.sql ./output/ --include-owner false    # Skip OWNER
 ```
 
-**Supported PostgreSQL object types:** Schemas, extensions, tables, views, materialized views, foreign tables, sequences, types (enum/composite/range/domain), collations, functions, procedures, aggregates, indexes, constraints, FK constraints, triggers, policies, row security, defaults, statistics, rules, text search (configs/dictionaries/parsers/templates), foreign data wrappers, servers, user mappings, operators, operator classes/families, access methods, casts, publications, subscriptions, event triggers, languages, transforms, conversions, ACLs, default ACLs, security labels, comments.
+### Config
 
-**Output structure:**
-- `schema/table/` - Tables with attached indexes, constraints, triggers, policies
-- `schema/view/`, `schema/materialized_view/` - Views
-- `schema/functions/` - Functions, procedures, aggregates
-- `schema/type/{enum,composite,range,domain}/` - Types by category
-- `schema/sequence/`, `schema/collation/` - Other schema objects
-- `schema/text_search/{config,dictionary,parser,template}/` - FTS objects
-- `_global/fdw/`, `_global/server/` - Global objects without schema
+```bash
+topcat config show                 # Effective configuration
+topcat config validate             # Validate config file
+topcat config generate             # Generate example config
+```
 
 ## Configuration
 
-Topcat uses a unified configuration system with multiple sources and clear precedence.
+Precedence (highest → lowest): CLI args → `TOPCAT_*` env vars → `./topcat.toml` → `~/.config/topcat/config.toml` → `/etc/topcat/config.toml` → defaults.
 
-### Configuration Precedence (Highest to Lowest)
-
-1. **CLI arguments** - Command-line flags and options
-2. **Environment variables** - `TOPCAT_*` variables
-3. **Project config** - `./topcat.toml` or `./.topcat.toml`
-4. **User config** - `~/.config/topcat/config.toml`
-5. **System config** - `/etc/topcat/config.toml`
-6. **Default values** - Built-in defaults
-
-### Configuration Files
-
-Create `topcat.toml` in your project root for persistent settings:
+Example `topcat.toml`:
 
 ```toml
 [sql_discovery]
@@ -326,108 +209,35 @@ names = ["prepend", "normal", "append"]
 fallback = "normal"
 ```
 
-Generate example config: `topcat config generate > topcat.toml`
-
-### Environment Variables
-
-All settings can be configured via `TOPCAT_*` environment variables:
-
-```bash
-# Basic settings
-export TOPCAT_VERBOSE=true
-export TOPCAT_INPUT_DIRS="/path/one,/path/two"
-
-# Nested settings (use double underscore)
-export TOPCAT_SQL_DISCOVERY__ENABLED=true
-export TOPCAT_SQL_DISCOVERY__SCHEMA_PATTERN="myapp_\\w+"
-
-# Arrays (comma-separated)
-export TOPCAT_FILTERS__INCLUDE_EXTENSIONS="sql,ddl"
-export TOPCAT_ANALYSIS__ROOT_PATTERNS="**/api/*.sql,**/*_init.sql"
-```
-
-### Configuration Commands
-
-```bash
-topcat config show                 # View effective configuration from all sources
-topcat config validate             # Validate config file syntax and values
-topcat config generate             # Generate example configuration file
-```
-
-See README.md for comprehensive environment variable reference and `discovering-sql-dependencies` skill for SQL discovery configuration.
+Environment variables use `TOPCAT_*`, double-underscore for nesting (`TOPCAT_SQL_DISCOVERY__ENABLED`), comma-separated for arrays. Full reference in README.
 
 ## Error Resolution
 
 | Error | Solution |
 |-------|----------|
-| Cycle detected | Use `analyze cycles` to identify, break with layers or soft deps |
-| Missing dependency | Use `analyze missing` to find, then fix or add files |
+| Cycle detected | `analyze cycles` to identify; break with layers or soft deps |
+| Missing dependency | `analyze missing` to find; fix or add files |
 | Cross-layer violation | Move file to appropriate layer |
 | Duplicate names | Ensure unique `name` metadata across files |
 | False positives in dead branches | Add `--root-pattern` or `--external-check-dir` |
 
-## Best Practices
+## Project-specific gotchas
 
-1. **Use meaningful names** in metadata that reflect the file's purpose
-2. **Leverage layers** for high-level ordering (DDL before DML)
-3. **Start with discovery** for SQL projects to avoid manual maintenance
-4. **Analyze before cleaning** - use `analyze dead-branches` before `clean`
-5. **Protect entry points** - use `--root-pattern` to prevent accidental deletion
-6. **Use dry-run mode** - cleanup defaults to dry-run for safety
-7. **Check health regularly** - run `analyze cycles` and `analyze missing` in CI
-8. **Version control** your `topcat.toml` configuration
+- **Cleanup defaults to dry-run.** `--mode execute` is required to actually delete; `--force` skips confirmation.
+- **`--root-pattern` protects entry points** from being flagged as dead — use for API/migration roots before running `clean`.
+- **Run `analyze cycles` and `analyze missing` in CI** (both support `--quiet` with exit 0/1).
 
-## Skill Maintenance Workflow
+## Skills
 
-**IMPORTANT**: Skills should evolve with the codebase to capture learnings and new capabilities.
+After completing features, bug fixes, or discovering better approaches, consider whether the relevant skill needs updating. Use `updating-skills` for holistic refactoring (not just appending). Use `writing-skills` to create new skills.
 
-### When to Check Skills
-
-After completing any of the following, **proactively ask the user** if skills should be updated:
-
-1. **Feature Implementation**: "I've completed the new feature. Should I check if any skills need updating to reflect this new capability?"
-
-2. **Bug Fix**: "I've fixed the bug. Should I update the relevant skill to document this issue and its solution?"
-
-3. **Better Approach Found**: "I discovered a better way to do this. Should I update the skill to reflect the improved approach?"
-
-4. **Complex Task Completed**: "This was a complex process. Should I create a skill to capture this workflow for future use?"
-
-5. **Repeated Questions**: "You've asked about this several times. Should I create a skill to document this pattern?"
-
-### During Planning
-
-When planning complex tasks, consider:
-- "Are there existing skills that could help with this task?"
-- "Will this work create new patterns worth capturing in a skill?"
-- "Should I plan to update skills as part of this task?"
-
-### Skill Update Guidelines
-
-When updating skills:
-- **Use the `updating-skills` skill** for proper refactoring approach
-- **Don't just append** - refactor holistically to maintain quality
-- **Test updates** with a fresh context to ensure effectiveness
-- **Keep skills focused** - consider creating new skills rather than expanding scope
-
-### Available Meta-Skills
-
-- **writing-skills**: For creating new skills from scratch
-- **updating-skills**: For holistically refactoring existing skills
-- **updating-claude-md**: For maintaining CLAUDE.md conciseness and quality
-
-## Need More Details?
-
-Load the appropriate skill for in-depth information:
+Load a skill for deeper info:
 - **analyzing-dependencies**: Analysis commands, safe cleanup, CI/CD integration
 - **managing-schemas**: Schema operations, filtering, cross-schema dependencies
 - **exporting-graphs**: Graph export formats, visualization workflows
 - **discovering-sql-dependencies**: Automatic dependency extraction
 - **understanding-architecture**: Implementation details and internals
-- **testing-topcat**: Comprehensive testing and debugging guide
-- **writing-skills**: Creating new skills from scratch
-- **updating-skills**: Refactoring existing skills
-- **updating-claude-md**: Maintaining CLAUDE.md quality
+- **testing-topcat**, **creating-tests-topcat**: Testing and debugging
 - **writing-rust-topcat**: Rust conventions for Topcat
 - **clippy-fixing**: Systematic linting workflow
-- **creating-tests-topcat**: Writing tests following project patterns
+- **writing-skills**, **updating-skills**, **updating-claude-md**: Meta-skills
