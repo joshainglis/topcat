@@ -81,7 +81,20 @@ flowchart TD
 | M19 | [m19-codegen-plugins.md](m19-codegen-plugins.md) | codegen plugins |
 | M20 | [m20-perf-observability.md](m20-perf-observability.md) | perf + observability hardening |
 
+## Running a milestone
+
+Each plan lists a recommended Claude model in [MODEL-ASSIGNMENTS.md](MODEL-ASSIGNMENTS.md)
+(machine copy in [milestones.toml](milestones.toml)). Launch an interactive
+session preconfigured with the right model via:
+
+```bash
+scripts/pg-dev-buddy/list-milestones.sh         # print the assignment table
+scripts/pg-dev-buddy/run-milestone.sh m07       # start m07 on the recommended model
+scripts/pg-dev-buddy/run-milestone.sh m07 --resume   # extra args pass through to claude
+```
+
 ## Also see
 
 - `../pg-dev-buddy-roadmap.md` — the full roadmap this directory decomposes.
 - `../pg-dev-buddy-architecture.md` — the architecture spec referenced from every plan.
+- [MODEL-ASSIGNMENTS.md](MODEL-ASSIGNMENTS.md) — per-milestone model recommendation and rationale.

@@ -1,0 +1,139 @@
+# pg-dev-buddy milestone manifest.
+#
+# Single source of truth for the runner script (scripts/pg-dev-buddy/run-milestone.sh)
+# and the human-readable assignment doc (MODEL-ASSIGNMENTS.md). If you change
+# `model` or `prereqs` here, mirror it in MODEL-ASSIGNMENTS.md.
+#
+# Models:
+#   "haiku"  — extremely simple, mechanical, low correctness risk
+#   "sonnet" — bounded contract, mainly orchestration / extending existing patterns
+#   "opus"   — novel algorithms, multi-source reconciliation, identity primitives,
+#              correctness-load-bearing invariants, tricky transactional semantics
+#
+# Prereqs are milestone ids that must be merged before this one starts.
+
+[milestone.m00]
+title    = "Config and command scaffolding"
+file     = "m00-scaffolding.md"
+model    = "sonnet"
+prereqs  = []
+
+[milestone.m01]
+title    = "pg/client + meta-schema versioning"
+file     = "m01-pg-client-meta-schema.md"
+model    = "sonnet"
+prereqs  = ["m00"]
+
+[milestone.m02]
+title    = "schema_model + catalog_reader"
+file     = "m02-schema-model-catalog-reader.md"
+model    = "opus"
+prereqs  = ["m01"]
+
+[milestone.m03]
+title    = "ddl_emitter + round-trip property tests"
+file     = "m03-ddl-emitter-round-trip.md"
+model    = "opus"
+prereqs  = ["m02"]
+
+[milestone.m04]
+title    = "body_parser (libpg_query plpgsql)"
+file     = "m04-body-parser.md"
+model    = "opus"
+prereqs  = ["m02"]
+
+[milestone.m05]
+title    = "event_trigger + node_registry"
+file     = "m05-event-trigger-node-registry.md"
+model    = "opus"
+prereqs  = ["m03"]
+
+[milestone.m06]
+title    = "shadow_db lifecycle"
+file     = "m06-shadow-db-lifecycle.md"
+model    = "sonnet"
+prereqs  = ["m05"]
+
+[milestone.m07]
+title    = "object_dag"
+file     = "m07-object-dag.md"
+model    = "opus"
+prereqs  = ["m04", "m06"]
+
+[milestone.m08]
+title    = "differ"
+file     = "m08-differ.md"
+model    = "opus"
+prereqs  = ["m07"]
+
+[milestone.m09]
+title    = "migration_generator (forward only)"
+file     = "m09-migration-generator-forward.md"
+model    = "opus"
+prereqs  = ["m08"]
+
+[milestone.m10]
+title    = "migration_verifier"
+file     = "m10-migration-verifier.md"
+model    = "sonnet"
+prereqs  = ["m09"]
+
+[milestone.m11]
+title    = "node_id identity + conflict scan + three-way resolution"
+file     = "m11-node-id-identity.md"
+model    = "opus"
+prereqs  = ["m10"]
+
+[milestone.m12]
+title    = "sync (dev loop) — MVP milestone"
+file     = "m12-sync-mvp.md"
+model    = "opus"
+prereqs  = ["m11"]
+
+[milestone.m13]
+title    = "reverse migrations + registry + data_restore bounces"
+file     = "m13-reverse-migrations.md"
+model    = "opus"
+prereqs  = ["m12"]
+
+[milestone.m14]
+title    = "general bounce markers + ack workflow"
+file     = "m14-general-bounces-ack.md"
+model    = "sonnet"
+prereqs  = ["m13"]
+
+[milestone.m15]
+title    = "split/merge annotations"
+file     = "m15-split-merge-annotations.md"
+model    = "sonnet"
+prereqs  = ["m14"]
+
+[milestone.m16]
+title    = "reconcile + drift detection"
+file     = "m16-reconcile-drift.md"
+model    = "opus"
+prereqs  = ["m14"]
+
+[milestone.m17]
+title    = "bootstrap entry paths"
+file     = "m17-bootstrap-entry-paths.md"
+model    = "sonnet"
+prereqs  = ["m14"]
+
+[milestone.m18]
+title    = "uninstall"
+file     = "m18-uninstall.md"
+model    = "sonnet"
+prereqs  = ["m14"]
+
+[milestone.m19]
+title    = "codegen plugins"
+file     = "m19-codegen-plugins.md"
+model    = "sonnet"
+prereqs  = ["m02"]
+
+[milestone.m20]
+title    = "perf + observability hardening"
+file     = "m20-perf-observability.md"
+model    = "opus"
+prereqs  = ["m12"]
